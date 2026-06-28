@@ -73,8 +73,13 @@ local WATCH_ADDRS = {
   0x6760, 0x6763, 0x6765,  -- barrel 3
   0x6780, 0x6783, 0x6785,  -- barrel 4
   0x67A0, 0x67A3, 0x67A5,  -- barrel 5
-  -- Fireball/flame enemy: slot 0 at 0x6400. +0=status, +3=x, +5=y.
+  -- Fireball/flame enemies: 5 slots at 0x6400, stride 0x20.
+  -- +0=status (0=inactive,1=active), +3=x, +5=y.
   0x6400, 0x6403, 0x6405,  -- fireball 0
+  0x6420, 0x6423, 0x6425,  -- fireball 1
+  0x6440, 0x6443, 0x6445,  -- fireball 2
+  0x6460, 0x6463, 0x6465,  -- fireball 3
+  0x6480, 0x6483, 0x6485,  -- fireball 4
   -- Hammer sprite (#6A1C-#6A1F): +0=X, +3=Y. has_hammer at 0x6217.
   0x6A1C, 0x6A1F, 0x6217,  -- hammer x, hammer y, has_hammer
 }
@@ -84,7 +89,8 @@ local WATCH_ADDRS = {
 -- The flag persists until explicitly cleared, so Python must send one or the other
 -- at the start of every episode.
 local freeze_barrels = false
-local FREEZE_STATUS_ADDRS = {0x6700,0x6720,0x6740,0x6760,0x6780,0x67A0, 0x6400}
+local FREEZE_STATUS_ADDRS = {0x6700,0x6720,0x6740,0x6760,0x6780,0x67A0,
+                              0x6400,0x6420,0x6440,0x6460,0x6480}
 
 -- Optional RAM-dump mode for address discovery: DK_RAMDUMP="0x6000:0x7000"
 -- appends that [start,end) byte range to every observation.

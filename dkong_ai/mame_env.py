@@ -419,7 +419,7 @@ class DonkeyKongEnv(gym.Env):
     WAYPOINTS = (
         (36,  True,  140,  5.0),  # WP0: 2nd girder, heading left (x < 140)
         (45,  True,   75, 10.0),  # WP1a: approaching ladder (x < 75)
-        (45,  True,   58, 30.0),  # WP1b: AT the ladder entrance (x < 58)
+        (45,  True,   58, 75.0),  # WP1b: AT the ladder entrance (x < 58)
         (65,  False, 100,  8.0),  # WP2: 3rd girder after traverse (x > 100)
         (100, True,   85,  8.0),  # WP3: 3rd-girder left traverse (x < 85)
         (150, False, 130,  8.0),  # WP4: near the top (x > 130)
@@ -474,6 +474,22 @@ class DonkeyKongEnv(gym.Env):
     # unlocks score so the agent is rewarded for jumping barrels en route — the
     # same mechanic it already knows but now applied during the traverse.
     SCORE_GATE_H, SCORE_GATE_X = 65, 115
+
+    # Episode height timeout: if Mario hasn't crossed height HEIGHT_TIMEOUT_H
+    # within HEIGHT_TIMEOUT_STEPS steps, force-terminate the episode with a
+    # large penalty. Prevents the hammer-farm-until-dead strategy because every
+    # episode now has a hard deadline for making crossing progress.
+    HEIGHT_TIMEOUT_STEPS   = 800
+    HEIGHT_TIMEOUT_H       = 60
+    HEIGHT_TIMEOUT_PENALTY = 15.0
+
+    # Hammer-at-left-wall penalty: per-step cost when Mario holds the hammer
+    # AND is parked at the left wall above ground-floor height. This directly
+    # penalises the observed failure mode: grab hammer → run left → stand at
+    # wall → wait for hammer to expire → die at x≈20.
+    HAMMER_WALL_X    = 45     # left of this = "parked at left wall"
+    HAMMER_WALL_H_LO = 25     # only above ground floor (farming zone)
+    HAMMER_WALL_COST = 0.05   # per-step penalty
 
     def _count_curriculum(self):
         d = os.path.join(os.path.dirname(self.bridge), "..", "artifacts",
@@ -601,6 +617,14 @@ class DonkeyKongEnv(gym.Env):
                            and s["mario_x"] >= p["mario_x"])
                 if 0 < gained <= 2000 and not in_gate:
                     r += gained * 0.003         # +0.3 per 100-pt barrel jump
+                # Hammer-at-left-wall penalty: penalise the exact failure we
+                # observed — grab hammer, run to left wall, stand waiting for
+                # it to expire. Only fires above ground-floor height so the
+                # ground-floor corner penalty isn't double-counted.
+                if (s.get("has_hammer", 0)
+                        and s["mario_x"] < self.HAMMER_WALL_X
+                        and height > self.HAMMER_WALL_H_LO):
+                    r -= self.HAMMER_WALL_COST
         if died:
             r -= 10.0
             # Extra penalty when the agent never left the farming zone this episode.
@@ -610,7 +634,15 @@ class DonkeyKongEnv(gym.Env):
                 r -= 5.0
         if cleared:
             r += 100.0                          # reaching Pauline is the goal
-        done = (died and s["lives"] == 0) or cleared
+        # Episode height timeout: force-terminate if Mario hasn't reached the
+        # ladder crossing zone within HEIGHT_TIMEOUT_STEPS steps. Removes the
+        # option of farming indefinitely; every episode now has a deadline.
+        self._episode_steps += 1
+        timed_out = (self._episode_steps >= self.HEIGHT_TIMEOUT_STEPS
+                     and self._reward_max_h < self.HEIGHT_TIMEOUT_H)
+        if timed_out:
+            r -= self.HEIGHT_TIMEOUT_PENALTY
+        done = (died and s["lives"] == 0) or cleared or timed_out
         return r, done
 
     # ---- gym API ---------------------------------------------------------
@@ -738,6 +770,7 @@ class DonkeyKongEnv(gym.Env):
         self._reward_max_h = max(0, self.BASE_Y - self._min_y)
         self._visited = set()                # novelty bonus: cells seen this episode
         self._wp_hit = set()                 # waypoint milestones fired this episode
+        self._episode_steps = 0              # for height-timeout termination
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)

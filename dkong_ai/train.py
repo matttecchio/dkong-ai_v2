@@ -105,11 +105,42 @@ def main():
     }
     if args.init_from:
         print(f"warm-starting from {args.init_from}")
-        model = PPO.load(args.init_from, env=venv, device="cuda",
-                         tensorboard_log=args.logdir)
-        model.verbose = 1
-        model.ent_coef = args.ent_coef
-        model.gamma = args.gamma
+        try:
+            model = PPO.load(args.init_from, env=venv, device="cuda",
+                             tensorboard_log=args.logdir)
+            model.verbose = 1
+            model.ent_coef = args.ent_coef
+            model.gamma = args.gamma
+        except ValueError as e:
+            if "Observation spaces do not match" not in str(e):
+                raise
+            # Obs space changed (e.g. RAM dim increased). Do a partial load:
+            # create a fresh model with the correct obs space, then copy all
+            # weights from the checkpoint that still have matching shapes.
+            # CNN backbone + policy/value heads transfer cleanly; only the RAM
+            # MLP first layer (wrong input dim) is skipped and stays random.
+            print(f"obs space mismatch — partial load (CNN+heads preserved, RAM MLP reinit)")
+            model = PPO(
+                "MultiInputPolicy", venv,
+                policy_kwargs=policy_kwargs,
+                n_steps=512, batch_size=256, n_epochs=4,
+                learning_rate=2.5e-4, gamma=args.gamma, gae_lambda=0.95,
+                clip_range=0.1, ent_coef=args.ent_coef,
+                tensorboard_log=args.logdir, verbose=1, device="cuda",
+            )
+            # Load checkpoint without env= so SB3 skips obs space validation.
+            old = PPO.load(args.init_from, device="cuda")
+            old_sd = old.policy.state_dict()
+            new_sd = model.policy.state_dict()
+            # strict=False still errors on shape mismatches — filter manually:
+            # only copy layers whose shapes match exactly (CNN, policy/value
+            # heads transfer; RAM MLP first layer is reinitialised randomly).
+            filtered = {k: v for k, v in old_sd.items()
+                        if k in new_sd and v.shape == new_sd[k].shape}
+            skipped = [k for k in old_sd if k not in filtered]
+            model.policy.load_state_dict(filtered, strict=False)
+            print(f"  partial load: {len(filtered)}/{len(old_sd)} layers copied; "
+                  f"skipped (shape mismatch): {skipped}")
     else:
         model = PPO(
             "MultiInputPolicy", venv,
