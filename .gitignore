@@ -22,6 +22,9 @@ logs/
 *.sta
 *Zone.Identifier
 
+# Claude Code local settings
+.claude/
+
 # Misc
 *.log
 *.out
