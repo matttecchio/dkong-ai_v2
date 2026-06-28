@@ -7,11 +7,13 @@ Train an agent to play arcade **Donkey Kong** (`dkong`) through MAME. First goal
 > full project state, what's been tried and why, the current training run, and
 > next steps. This README is the reference; HANDOFF is the story + status.
 
-- **Observation:** raw pixels → 84×84 grayscale, frame-stacked ×4, CNN policy.
-- **Reward (from RAM):** height-milestone (progress to the top) + exploration
-  novelty + expert-route corridor guidance + de-weighted score + death/clear.
+- **Observation:** Dict — `image`: 84×84 pixels + threat/ladder/fall-zone map,
+  frame-stacked ×8 (CNN); `ram`: 50 normalised features (barrel positions,
+  velocities, edge proximity, fireball, hammer) fed to a separate MLP.
+- **Reward (from RAM):** height-milestone + exploration novelty + expert-route
+  corridor + waypoint milestones + climb bonus + de-weighted score + death/clear.
   See `dkong_ai/mame_env.py:_reward` and HANDOFF for *why* it's shaped this way.
-- **Algorithm:** PPO (Stable-Baselines3), GPU.
+- **Algorithm:** PPO (Stable-Baselines3), GPU, 16 parallel envs.
 
 ## Architecture
 
@@ -34,17 +36,66 @@ control bytes: coin/start, soft-reset, **save/load state**, and clean quit.
 
 ## Confirmed RAM map (`dkong_ai/memory_map.py`)
 
+Source: Don Hodges 2008 Z80 disassembly, cross-verified empirically.
+
+**Mario / game state**
+
 | name | addr | notes |
 |---|---|---|
 | lives | 0x6228 | death = lives decrement (reliable) |
 | screen_id | 0x6227 | 1=barrels 2=pie 3=elevator 4=rivet; clear = increment |
+| level | 0x6229 | current level number |
 | mario_x | 0x6203 | +right |
 | mario_y | 0x6205 | smaller = higher; start row ~240 |
-| game_start | 0x622C | 1 once a game is underway |
-| score | 0x7721/41/61/81 | tile RAM digits (hundreds→100k); digit = low nibble |
+| is_jumping | 0x6216 | 1 while Mario is mid-jump |
+| jump_dir | 0x6211 | jump direction |
+| has_hammer | 0x6217 | 1 while Mario holds a hammer |
+| game_start | 0x622C | 1 once a real game is underway |
+| bonus | 0x62B1 | bonus timer |
+| eol_counter | 0x6388 | end-of-level counter |
+| bonus_item | 0x6343 | bonus item on board |
 
 ⚠️ **`0x6200` ("is_dead") is unreliable** — reads 1 while Mario is alive and
 controllable. Use `lives` for death, not this.
+
+**Score** (tile RAM, stride 0x20 — DK monitor is rotated)
+
+| name | addr | notes |
+|---|---|---|
+| score_100 | 0x7721 | hundreds digit; low nibble = digit value |
+| score_1k | 0x7741 | thousands digit |
+| score_10k | 0x7761 | ten-thousands digit |
+| score_100k | 0x7781 | hundred-thousands digit |
+
+Tens digit (0x7701) always 0 (scores are multiples of 100) and sits in a volatile
+timer region — excluded. `decode_score()` in `memory_map.py` handles the two valid
+tile encodings (`'0'=0x00` in live play, `'0'=0x10` in some HUD states).
+
+**Barrels** (6 slots at 0x6700, stride 0x20 per slot)
+
+| offset | meaning |
+|---|---|
+| +0x00 | status: 0=inactive, 1=rolling, 2=deploying |
+| +0x03 | x position (same coord system as mario_x) |
+| +0x05 | y position (same coord system as mario_y) |
+
+Slots: `barrel0` @ 0x6700, `barrel1` @ 0x6720, … `barrel5` @ 0x67A0.
+
+**Fireball** (flame enemy that chases Mario)
+
+| name | addr | notes |
+|---|---|---|
+| fireball_st | 0x6400 | 0=inactive, 1=active |
+| fireball_x | 0x6403 | x position |
+| fireball_y | 0x6405 | y position |
+
+**Hammer pickup**
+
+| name | addr | notes |
+|---|---|---|
+| hammer_x | 0x6A1C | x of the hammer sprite on the board |
+| hammer_y | 0x6A1F | y of the hammer sprite |
+| has_hammer | 0x6217 | 1 while Mario is wielding it |
 
 ## Run it
 
