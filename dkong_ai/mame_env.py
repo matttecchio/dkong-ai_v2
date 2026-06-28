@@ -1,0 +1,807 @@
+"""Gymnasium environment that drives MAME (dkong) over the bridge socket.
+
+MAME runs the Lua bridge as a listening server; this env connects as the client,
+parses the handshake (screen geometry + discovered input fields), then exchanges
+one action byte for one observation per step (lock-step).
+
+Observation: 84x84x2 uint8 — channel 0: grayscale game pixels (4-frame stacked
+  by VecFrameStack); channel 1: static ladder-position map (complete ladders only,
+  pre-computed from expert corridor — same every frame since barrel board is fixed).
+Action: Discrete index -> bitmask over the bridge's CONTROLLED_FIELDS.
+Reward: computed from the RAM bytes the bridge ships (see memory_map).
+
+One persistent MAME per env (socket lives for the whole run); episodes reset via
+an in-emulator soft-reset. MAME children get PR_SET_PDEATHSIG so they can never
+outlive the worker that spawned them.
+"""
+from __future__ import annotations
+
+import ctypes
+import json
+import os
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import time
+
+import cv2
+import numpy as np
+import gymnasium as gym
+from gymnasium import spaces
+
+from . import memory_map
+
+# Action set for the barrel stage: noop + the 5 primitive inputs.
+# Index -> bitmask bits matching scripts/bridge.lua CONTROLLED_FIELDS order
+# (left, right, up, down, jump).
+ACTIONS = [
+    0b00000,  # noop
+    0b00001,  # left
+    0b00010,  # right
+    0b00100,  # up
+    0b01000,  # down
+    0b10000,  # jump
+    0b10001,  # jump + left
+    0b10010,  # jump + right
+]
+
+
+def _die_with_parent():
+    """preexec_fn: ask the kernel to SIGKILL this child if its parent dies.
+
+    Backstop against orphaned MAME processes — if a worker is hard-killed or
+    crashes before env.close() can request a clean quit, the kernel reaps MAME."""
+    if sys.platform.startswith("linux"):
+        PR_SET_PDEATHSIG = 1
+        try:
+            ctypes.CDLL("libc.so.6", use_errno=True).prctl(
+                PR_SET_PDEATHSIG, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+class DonkeyKongEnv(gym.Env):
+    metadata = {"render_modes": []}
+
+    def __init__(self, rom_dir: str, port: int = 5000, frameskip: int = 4,
+                 headless: bool = True, mame_bin: str = "mame",
+                 bridge: str | None = None, record: bool = True):
+        super().__init__()
+        self.rom_dir = rom_dir
+        self.port = port
+        self.frameskip = frameskip
+        self.headless = headless
+        self.mame_bin = mame_bin
+        self.record = record
+        self.bridge = bridge or os.path.join(
+            os.path.dirname(__file__), "..", "scripts", "bridge.lua")
+        self._proc: subprocess.Popen | None = None
+        self._inp_path: str | None = None
+        self._has_state = False
+        self._rxbuf = b""
+        self._corridor = self._load_corridor()   # height-band -> expert target x
+        self._n_curric = self._count_curriculum()  # expert upper-board start states
+        self._p_curric = 0.15  # run 15: wall-zone curriculum (lowest 5 states only)
+        self._sock: socket.socket | None = None
+        self._geom: dict | None = None
+        self._prev: dict | None = None
+        self._no_barrels = False   # set per-episode by reset(); drives 0xF8/0xF7 cmd
+        self._ladder_map = self._build_ladder_map()  # static; barrel board never changes
+
+        # Dict obs: "image" = 84×84×2 (pixels + threat/ladder/fall-zone map, stacked ×8
+        # by DkFrameStackWrapper); "ram" = 50 normalised RAM features giving
+        # explicit barrel/fireball/hammer positions, velocities, and edge proximity.
+        self.observation_space = spaces.Dict({
+            "image": spaces.Box(0, 255, (84, 84, 2), dtype=np.uint8),
+            "ram":   spaces.Box(-1.0, 1.0, (self.RAM_FEATURE_DIM,), dtype=np.float32),
+        })
+        self.action_space = spaces.Discrete(len(ACTIONS))
+
+    # ---- process / socket lifecycle -------------------------------------
+    def _launch_mame(self):
+        logdir = os.path.join(os.path.dirname(self.bridge), "..", "logs")
+        os.makedirs(logdir, exist_ok=True)
+        bridge_log = os.path.join(logdir, f"bridge_{self.port}.log")
+        env = dict(os.environ, DK_BRIDGE_PORT=str(self.port),
+                   DK_FRAMESKIP=str(self.frameskip),
+                   DK_BRIDGE_LOG=bridge_log)
+        statedir = os.path.abspath(os.path.join(os.path.dirname(self.bridge),
+                                                "..", "artifacts", "states"))
+        os.makedirs(statedir, exist_ok=True)
+        args = [self.mame_bin, "dkong",
+                "-rompath", os.path.abspath(self.rom_dir),
+                "-state_directory", statedir,   # shared: per-port + curriculum states
+                "-autoboot_script", self.bridge,
+                "-autoboot_delay", "0",
+                "-skip_gameinfo", "-nothrottle"]
+        if self.headless:
+            args += ["-video", "none", "-sound", "none"]
+            # Sever ALL ties to an X/Wayland display: even with -video none, SDL
+            # otherwise opens an X connection to :0, and a display hiccup (WSLg
+            # restart, sleep) then kills MAME mid-training. Dummy SDL driver +
+            # no DISPLAY = truly headless, immune to display events.
+            env["SDL_VIDEODRIVER"] = "dummy"
+            env["SDL_AUDIODRIVER"] = "dummy"
+            env.pop("DISPLAY", None)
+            env.pop("WAYLAND_DISPLAY", None)
+        if self.record:
+            # Record this MAME session to a .inp for later playback. Finalized
+            # only on a clean exit -> close() sends ACT_QUIT. Files are tagged by
+            # port + launch time so parallel envs don't collide.
+            recdir = os.path.join(os.path.dirname(self.bridge), "..", "artifacts",
+                                  "recordings")
+            os.makedirs(recdir, exist_ok=True)
+            fname = f"dkong_p{self.port}_{int(time.time())}.inp"
+            self._inp_path = os.path.abspath(os.path.join(recdir, fname))
+            args += ["-input_directory", os.path.abspath(recdir),
+                     "-record", fname]
+        # Redirect MAME output to a per-port file. An unread PIPE here can fill
+        # and deadlock MAME before it serves the socket (esp. with many envs).
+        self._mame_out = open(os.path.join(logdir, f"mame_{self.port}.out"), "w")
+        self._proc = subprocess.Popen(args, env=env, stdout=self._mame_out,
+                                      stderr=subprocess.STDOUT,
+                                      preexec_fn=_die_with_parent)
+
+    def _connect(self, timeout=30.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                s = socket.create_connection(("127.0.0.1", self.port), timeout=2)
+                s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                s.settimeout(30.0)  # generous per-step timeout once connected
+                self._sock = s
+                self._rxbuf = b""   # leftover bytes (e.g. obs piggybacking handshake)
+                return
+            except OSError:
+                time.sleep(0.2)
+        raise TimeoutError("could not connect to MAME bridge")
+
+    def _recv_exact(self, n: int) -> bytes:
+        # Serve from the leftover buffer first, then the socket. Critical: the
+        # handshake read can over-read into the first obs frame; those bytes live
+        # in _rxbuf and must not be lost (else the binary stream desyncs).
+        buf = bytearray(self._rxbuf[:n])
+        self._rxbuf = self._rxbuf[n:]
+        while len(buf) < n:
+            chunk = self._sock.recv(n - len(buf))
+            if not chunk:
+                raise ConnectionError("bridge closed")
+            buf += chunk
+        return bytes(buf)
+
+    def _read_handshake(self):
+        # Client speaks first so MAME knows a peer is present, then reads the
+        # two newline-terminated text lines: HELLO ... and FIELDS=...
+        self._sock.sendall(b"H")
+        data = b""
+        while data.count(b"\n") < 2:
+            data += self._sock.recv(4096)
+        hello, fields, rest = data.split(b"\n", 2)
+        self._rxbuf = rest          # keep any obs bytes that piggybacked the handshake
+        kv = dict(tok.split(b"=", 1) for tok in hello.split()[1:])
+        self._geom = {
+            "w": int(kv[b"W"]), "h": int(kv[b"H"]),
+            "bpp": int(kv[b"BPP"]), "frameskip": int(kv[b"FRAMESKIP"]),
+            "fields": fields.decode().removeprefix("FIELDS=").split(";;"),
+        }
+
+    # ---- observation / reward -------------------------------------------
+    def _read_obs(self):
+        (length,) = struct.unpack(">I", self._recv_exact(4))
+        payload = self._recv_exact(length)
+        (ram_len,) = struct.unpack(">H", payload[:2])
+        ram = payload[2:2 + ram_len]
+        pix = payload[2 + ram_len:]
+        return ram, pix
+
+    def _decode_state(self, ram: bytes) -> dict:
+        # Every watched address is a single byte, in WATCH_ORDER.
+        state = {name: ram[i] for i, name in enumerate(memory_map.WATCH_ORDER)}
+        state["score"] = memory_map.decode_score(state)   # int or None
+        return state
+
+    def _preprocess(self, pix: bytes, state: dict | None = None) -> np.ndarray:
+        w, h = self._geom["w"], self._geom["h"]
+        arr = np.frombuffer(pix, dtype=np.uint8).reshape(h, w, 4)  # ARGB
+        gray = cv2.cvtColor(arr[..., 1:4], cv2.COLOR_RGB2GRAY)
+        small = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
+        # Second channel: static ladder map + dynamic barrel/fireball overlays.
+        # Ladders=255, active barrels=180, fireball=120. The CNN sees both
+        # fixed structure (where ladders are) and live threats simultaneously.
+        threat = self._ladder_map.copy()
+        if state:
+            sx, sy = 84.0 / 256.0, 84.0 / 224.0
+            for i in range(6):
+                st = state.get(f"barrel{i}_st", 0)
+                if st not in (1, 2):
+                    continue
+                bx, by = state.get(f"barrel{i}_x", 0), state.get(f"barrel{i}_y", 0)
+                if not bx or not by:
+                    continue
+                cx = int(round(bx * sx))
+                cy = int(round(by * sy))
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        threat[max(0, min(83, cy+dy)), max(0, min(83, cx+dx)), 0] = 180
+            if state.get("fireball_st", 0):
+                fx = state.get("fireball_x", 0)
+                fy = state.get("fireball_y", 0)
+                if fx and fy:
+                    cx = int(round(fx * sx))
+                    cy = int(round(fy * sy))
+                    for dy in (-1, 0, 1):
+                        for dx in (-1, 0, 1):
+                            threat[max(0, min(83, cy+dy)), max(0, min(83, cx+dx)), 0] = 120
+            # Hammer pickup: bright dot (80) when available on the board.
+            if not state.get("has_hammer", 0):
+                hx = state.get("hammer_x", 0)
+                hy = state.get("hammer_y", 0)
+                if hx and hy:
+                    cx = int(round(hx * sx))
+                    cy = int(round(hy * sy))
+                    for dy in (-1, 0, 1):
+                        for dx in (-1, 0, 1):
+                            threat[max(0, min(83, cy+dy)), max(0, min(83, cx+dx)), 0] = 80
+            # Fall-zone overlay (intensity 200): when a barrel is within EDGE_PROX
+            # pixels of the girder edge it's heading toward, mark the landing zone
+            # on the next girder below. Lets the agent see danger arriving from above
+            # before the barrel appears — critical for planning around edge falls.
+            prev = self._prev or {}
+            for i in range(6):
+                st = state.get(f"barrel{i}_st", 0)
+                if st not in (1, 2):
+                    continue
+                bx = state.get(f"barrel{i}_x", 0)
+                by = state.get(f"barrel{i}_y", 0)
+                pbx = prev.get(f"barrel{i}_x", bx)
+                pvx = bx - pbx      # positive = moving right
+                if not bx or not by or pvx == 0:
+                    continue
+                for (y_lo, y_hi, x_left, x_right, land_y) in self.GIRDER_EDGES:
+                    if not (y_lo <= by < y_hi):
+                        continue
+                    land_x = x_left if pvx < 0 else x_right
+                    dist = (bx - x_left) if pvx < 0 else (x_right - bx)
+                    if dist <= self.EDGE_PROX:
+                        lx84 = int(round(land_x * sx))
+                        ly84 = min(83, int(round(land_y * sy)))
+                        for fdy in range(-2, 3):
+                            for fdx in range(-4, 5):
+                                row = max(0, min(83, ly84 + fdy))
+                                col = max(0, min(83, lx84 + fdx))
+                                if threat[row, col, 0] < 200:
+                                    threat[row, col, 0] = 200
+                    break
+        image = np.concatenate([small[..., None], threat], axis=-1)  # (84,84,2)
+        ram = self._build_ram_features(state) if state else np.zeros(
+            self.RAM_FEATURE_DIM, dtype=np.float32)
+        return {"image": image, "ram": ram}
+
+    @staticmethod
+    def _build_ladder_map() -> np.ndarray:
+        """Static 84×84 channel marking ladder positions.
+
+        Complete ladders (spanning a full girder gap) → intensity 255.
+        Broken stubs (short segments that can't be climbed) → intensity 128.
+        Broken stubs are included so the CNN knows barrel-steering targets:
+        a barrel rolling over a broken stub falls through harmlessly.
+
+        Positions: (x_game, y_top_game, y_bot_game) in game pixel coords.
+        mario_x ≈ screen_x (0–224); mario_y ≈ screen_y (48=top, 240=floor).
+        Derived from live tilemap analysis (0x7400-0x7800) — core ladder tile
+        codes C0-C7 / D0-D7 in contiguous column runs identify each segment."""
+        m = np.zeros((84, 84), dtype=np.uint8)
+        COMPLETE_LADDERS = [
+            (143, 175, 224),  # floor → 2nd girder, right side
+            ( 53, 155, 196),  # 2nd → 3rd girder, FAR LEFT (critical)
+            (131, 118, 158),  # 3rd → 4th girder, right-ish
+            ( 67,  85, 125),  # 4th → 5th girder, left
+            (147,  48, 100),  # top section to Pauline
+        ]
+        # Short stubs that hang from a girder but don't connect below.
+        # Barrels can fall through these; Mario cannot climb them.
+        # Positions from tilemap core-code run analysis (col*8 ≈ x, row*8 ≈ y).
+        BROKEN_STUBS = [
+            ( 64, 144, 152),  # 4th→3rd gap at x≈64
+            (104,  56,  72),  # top area stub at x≈104
+            (120, 160, 184),  # 3rd→2nd partial at x≈120
+            (144, 104, 120),  # 5th→4th gap at x≈144
+            (160, 112, 136),  # through 4th girder at x≈160
+            (168, 176, 192),  # 3rd→2nd partial at x≈168
+            (200, 120, 152),  # through 4th girder at x≈200
+        ]
+        sx, sy = 84.0 / 256.0, 84.0 / 224.0
+        for x_g, yt_g, yb_g in COMPLETE_LADDERS:
+            x84 = int(round(x_g * sx))
+            y_top = int(round(yt_g * sy))
+            y_bot = min(83, int(round(yb_g * sy)))
+            for dx in (-1, 0, 1):  # 3px wide so stripes survive bilinear upscaling
+                col = min(83, max(0, x84 + dx))
+                m[y_top:y_bot + 1, col] = 255
+        for x_g, yt_g, yb_g in BROKEN_STUBS:
+            x84 = int(round(x_g * sx))
+            y_top = int(round(yt_g * sy))
+            y_bot = min(83, int(round(yb_g * sy)))
+            for dx in (-1, 0, 1):
+                col = min(83, max(0, x84 + dx))
+                # Don't overwrite complete-ladder pixels already drawn at 255
+                for row in range(y_top, y_bot + 1):
+                    if m[row, col] == 0:
+                        m[row, col] = 128
+        return m[..., None]  # (84, 84, 1)
+
+    # RAM feature layout (50 values, all in [-1, 1]):
+    #   [mario_x/255, mario_y/240]                                              —  2
+    #   [Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active] × 6        — 42
+    #   [Δx/128, Δy/120, active]                × 1 fireball                   —  3
+    #   [Δx/128, Δy/120, has_hammer]            × 1 hammer pickup              —  3
+    # vx/vy: per-step velocity (frameskip=4). Horiz max ~2px/frame → norm by 8;
+    # vertical ~5px/frame falling → norm by 20.
+    # lad53: barrel x-distance to the critical left ladder at x=53, norm by 64.
+    # edge_dist: normalised [0,1] distance to the girder edge the barrel is heading
+    # toward (0 = at edge / about to fall, 1 = far away). Paired with the fall-zone
+    # image overlay so the agent can anticipate barrels appearing from above.
+    RAM_FEATURE_DIM = 50
+    LAD53_X = 53    # x of the critical left ladder (2nd→3rd girder)
+
+    # Girder edge lookup: (barrel_y_lo, barrel_y_hi, x_left, x_right, landing_y).
+    # barrel_y in same coord system as mario_y (0=top, 240=floor).
+    # landing_y is the y of the next girder below where the barrel lands.
+    GIRDER_EDGES = (
+        ( 50,  90, 16, 224,  96),   # near-top area → 5th girder
+        ( 88, 122, 16, 224, 128),   # 5th → 4th girder
+        (120, 155, 16, 224, 162),   # 4th → 3rd girder
+        (152, 186, 16, 224, 196),   # 3rd → 2nd girder
+        (184, 225, 16, 224, 240),   # 2nd → floor
+    )
+    EDGE_PROX = 40   # game-pixel radius within which barrel is "approaching edge"
+
+    def _build_ram_features(self, state: dict) -> np.ndarray:
+        """Normalised RAM threat features relative to Mario's position."""
+        mx = state.get("mario_x", 0) or 0
+        my = state.get("mario_y", 0) or 0
+        feats: list[float] = [mx / 255.0, my / 240.0]
+        prev = self._prev or {}
+        for i in range(6):
+            st = state.get(f"barrel{i}_st", 0)
+            if st in (1, 2):
+                bx = state.get(f"barrel{i}_x", 0)
+                by = state.get(f"barrel{i}_y", 0)
+                dx    = float(np.clip((bx - mx)           / 128.0, -1, 1))
+                dy    = float(np.clip((by - my)           / 120.0, -1, 1))
+                pbx   = prev.get(f"barrel{i}_x", bx)
+                pby   = prev.get(f"barrel{i}_y", by)
+                vx    = float(np.clip((bx - pbx)          /   8.0, -1, 1))
+                vy    = float(np.clip((by - pby)          /  20.0, -1, 1))
+                lad53 = float(np.clip((bx - self.LAD53_X) /  64.0, -1, 1))
+                pvx_sign = bx - pbx
+                edge_dist = 1.0
+                for (y_lo, y_hi, x_left, x_right, _) in self.GIRDER_EDGES:
+                    if y_lo <= by < y_hi:
+                        if pvx_sign < 0:
+                            edge_dist = float(np.clip(
+                                (bx - x_left) / self.EDGE_PROX, 0.0, 1.0))
+                        elif pvx_sign > 0:
+                            edge_dist = float(np.clip(
+                                (x_right - bx) / self.EDGE_PROX, 0.0, 1.0))
+                        break
+            else:
+                dx = dy = vx = vy = lad53 = edge_dist = 0.0
+            feats.extend([dx, dy, vx, vy, lad53, edge_dist, float(st > 0)])
+        fst = state.get("fireball_st", 0)
+        if fst:
+            dx = float(np.clip((state.get("fireball_x", 0) - mx) / 128.0, -1, 1))
+            dy = float(np.clip((state.get("fireball_y", 0) - my) / 120.0, -1, 1))
+        else:
+            dx = dy = 0.0
+        feats.extend([dx, dy, float(fst > 0)])
+        has_h = state.get("has_hammer", 0)
+        if not has_h:
+            dx = float(np.clip((state.get("hammer_x", 0) - mx) / 128.0, -1, 1))
+            dy = float(np.clip((state.get("hammer_y", 0) - my) / 120.0, -1, 1))
+        else:
+            dx = dy = 0.0
+        feats.extend([dx, dy, float(bool(has_h))])
+        return np.array(feats, dtype=np.float32)
+
+    # ---- reward shaping helpers -----------------------------------------
+    CELL = 16   # (x, height) grid size for the novelty/exploration bonus
+
+    # Zig-zag waypoint milestones: (height_min, is_x_lt, x_threshold, bonus).
+    # Each fires at most once per episode — not farmable.
+    # WP1a/WP1b split the old single +25 into two stages: +10 for reaching
+    # x<75 (agent already does this in run 9) and +20 for the final 22px to
+    # the actual ladder entrance at x≈53. Forces the full traverse.
+    WAYPOINTS = (
+        (36,  True,  140,  5.0),  # WP0: 2nd girder, heading left (x < 140)
+        (45,  True,   75, 10.0),  # WP1a: approaching ladder (x < 75)
+        (45,  True,   58, 30.0),  # WP1b: AT the ladder entrance (x < 58)
+        (65,  False, 100,  8.0),  # WP2: 3rd girder after traverse (x > 100)
+        (100, True,   85,  8.0),  # WP3: 3rd-girder left traverse (x < 85)
+        (150, False, 130,  8.0),  # WP4: near the top (x > 130)
+    )
+
+    # Per-step ladder-climb bonus: fires every step Mario is actively ascending
+    # the 2nd→3rd girder ladder (mario_y decreasing while at x≈53).
+    # Rewards the ACT of climbing — not just approaching — and can't be farmed
+    # (requires mario_y to decrease = actually gaining height on the ladder).
+    CLIMB_X_LO, CLIMB_X_HI = 43, 68   # ladder column ± tolerance
+    CLIMB_H_LO, CLIMB_H_HI = 40, 100  # height band: start of 2nd girder → 3rd
+    CLIMB_BONUS      = 0.30            # per step while actively ascending
+    LADDER_IDLE_COST = 0.05            # per step in ladder zone but y unchanged
+
+    # Dense leftward-progress reward on the 2nd girder: +TRAVERSE_PROGRESS per
+    # pixel moved left while in the traverse zone. Provides gradient on EVERY
+    # step toward the ladder — even failed attempts that end in death generate
+    # useful signal rather than just -10. Complements the one-shot waypoints.
+    TRAVERSE_H_LO, TRAVERSE_H_HI = 36, 65
+    TRAVERSE_X_LO, TRAVERSE_X_HI = 53, 143   # ladder entrance to right edge
+    TRAVERSE_PROGRESS = 0.05                   # reward per pixel moved left
+
+    # Anti-camping: height band and x threshold for the per-step girder penalty.
+    # Applies only to the right side of the 2nd girder — the zone where the agent
+    # farms barrels instead of traversing to the ladder. Traversing left is free.
+    CAMP_H_LO, CAMP_H_HI, CAMP_X, CAMP_COST = 36, 65, 130, 0.01
+
+    # Score-gating zone: block barrel-jump score reward only when camping
+    # (height<65, x>115, AND not moving left). Traversing left through the zone
+    # unlocks score so the agent is rewarded for jumping barrels en route — the
+    # same mechanic it already knows but now applied during the traverse.
+    SCORE_GATE_H, SCORE_GATE_X = 65, 115
+
+    def _count_curriculum(self):
+        d = os.path.join(os.path.dirname(self.bridge), "..", "artifacts",
+                         "states", "dkong")
+        try:
+            return len([f for f in os.listdir(os.path.abspath(d))
+                        if f.startswith("curric_") and f.endswith(".sta")])
+        except OSError:
+            return 0
+
+    def _load_corridor(self):
+        path = os.path.join(os.path.dirname(self.bridge), "..", "artifacts",
+                            "expert_corridor.json")
+        try:
+            with open(os.path.abspath(path)) as f:
+                return json.load(f)            # [{h_lo,h_hi,x_med,...}, ...]
+        except OSError:
+            return None
+
+    def _target_x(self, height: int):
+        if not self._corridor:
+            return None
+        for c in self._corridor:
+            if c["h_lo"] <= height < c["h_hi"]:
+                return c["x_med"]
+        return self._corridor[-1]["x_med"]      # above the top band -> Pauline x
+
+    def _reward(self, s: dict) -> tuple[float, bool]:
+        """Exploration-driven climb shaping, to break the right-camping local
+        optimum (agent farmed barrels at height ~47 and never traversed left to
+        the ladder). Terms:
+          * HEIGHT MILESTONE: 0.5 per new pixel of max height (top ~+100).
+          * NOVELTY: first visit to an (x,height) grid cell this episode pays
+            0.2, plus up to 0.3 more if that cell is on the expert's route
+            (corridor). Paid once per cell -> not farmable; rewards exploring
+            new ground, especially left/up toward the ladders.
+          * SCORE (de-weighted, artifact-guarded), death -10, clear +100.
+        Descending to dodge is free (no penalty)."""
+        if self._prev is None:
+            return 0.0, False
+        p = self._prev
+        died = s["lives"] < p["lives"]
+        cleared = s["screen_id"] > p["screen_id"]
+        r = 0.0
+        if not died and not cleared:
+            if s["mario_y"]:
+                height = self.BASE_Y - s["mario_y"]
+                # Height milestone: pay only for NEW max height.
+                if height > self._reward_max_h:
+                    r += (height - self._reward_max_h) * 0.5
+                    self._reward_max_h = height
+                # Zig-zag waypoint milestones: fire once per episode at each
+                # inflection point of the expert route. The first two pull
+                # specifically toward the 2nd-girder left traverse.
+                for _i, (_hmin, _lt, _xv, _bon) in enumerate(self.WAYPOINTS):
+                    if _i not in self._wp_hit and height >= _hmin:
+                        if (s["mario_x"] < _xv) if _lt else (s["mario_x"] > _xv):
+                            self._wp_hit.add(_i)
+                            r += _bon
+                # Anti-camping: small per-step cost for lingering on the right
+                # side of the 2nd girder (where the agent farms barrel-jumps
+                # instead of traversing left to the ladder). Traversing left
+                # past CAMP_X removes the cost immediately.
+                if (self.CAMP_H_LO <= height <= self.CAMP_H_HI
+                        and s["mario_x"] > self.CAMP_X
+                        and not s.get("has_hammer", 0)):
+                    r -= self.CAMP_COST
+                # Dense traverse progress: +TRAVERSE_PROGRESS per pixel moved
+                # left on the 2nd girder. Gives gradient on every failed attempt
+                # (not just when the agent survives all the way to x=53).
+                if (self.TRAVERSE_H_LO <= height <= self.TRAVERSE_H_HI
+                        and self.TRAVERSE_X_LO < s["mario_x"] <= self.TRAVERSE_X_HI
+                        and s["mario_x"] < p["mario_x"]):
+                    r += (p["mario_x"] - s["mario_x"]) * self.TRAVERSE_PROGRESS
+                # Ladder-climb bonus: per-step reward for actively ascending the
+                # 2nd→3rd girder ladder. Requires mario_y to decrease (gaining
+                # height) while positioned at the ladder column — can't be farmed
+                # by standing still.
+                if (self.CLIMB_H_LO <= height <= self.CLIMB_H_HI
+                        and self.CLIMB_X_LO <= s["mario_x"] <= self.CLIMB_X_HI):
+                    if s["mario_y"] < p["mario_y"]:
+                        r += self.CLIMB_BONUS
+                    elif s["mario_y"] == p["mario_y"]:
+                        r -= self.LADDER_IDLE_COST
+                # Novelty + corridor: reward first visit to a new (x,height)
+                # cell, more if it's on the expert route.
+                cell = (s["mario_x"] // self.CELL, height // self.CELL)
+                if cell not in self._visited:
+                    self._visited.add(cell)
+                    r += 0.2
+                    tx = self._target_x(height)
+                    if tx is not None:
+                        r += 0.3 * max(0.0, 1.0 - abs(s["mario_x"] - tx) / 48.0)
+            # Score gains, de-weighted. Guard ignores <=0 (incl. the pre-game
+            # 3700->0 reset) and implausible jumps (artifact / glitch).
+            # Score is GATED in the camp zone: no score reward when height < 65
+            # and mario_x > 115. This removes barrel-jump income from the right
+            # side of the 2nd girder — the camping penalty is no longer offset.
+            if s["score"] is not None and p["score"] is not None:
+                gained = s["score"] - p["score"]
+                # Gate: block score only when camping (low + right side + not
+                # moving left). Moving left through the zone is traversal, not
+                # camping — allow barrel-jump score to reward jumping en route.
+                in_gate = (s["mario_y"] > self.BASE_Y - self.SCORE_GATE_H
+                           and s["mario_x"] > self.SCORE_GATE_X
+                           and s["mario_x"] >= p["mario_x"])
+                if 0 < gained <= 2000 and not in_gate:
+                    r += gained * 0.003         # +0.3 per 100-pt barrel jump
+        if died:
+            r -= 10.0
+        if cleared:
+            r += 100.0                          # reaching Pauline is the goal
+        done = (died and s["lives"] == 0) or cleared
+        return r, done
+
+    # ---- gym API ---------------------------------------------------------
+    # Action byte constants understood by the bridge.
+    A_NOOP, A_COIN, A_START, A_RESET, A_QUIT = 0x00, 0xF1, 0xF2, 0xFE, 0xFD
+    A_SAVE, A_LOAD = 0xFC, 0xFB
+    A_RIGHT = 0b00010   # play bitmask: move right (controllability probe)
+    # Training-wheels barrel freeze: 0xF8 zeroes all barrel+fireball status bytes
+    # in MAME RAM each frame so they can't kill Mario. 0xF7 re-enables them.
+    # Python sends one or the other at the start of every episode.
+    A_FREEZE_BARRELS, A_UNFREEZE_BARRELS = 0xF8, 0xF7
+    P_NO_BARRELS = 0.15  # fraction of episodes that run with barrels disabled
+
+    def _exchange(self, action_byte: int):
+        self._sock.sendall(bytes([action_byte]))
+        ram, pix = self._read_obs()
+        return self._decode_state(ram), pix
+
+    def _hold(self, action_byte: int, n: int):
+        state = pix = None
+        for _ in range(n):
+            state, pix = self._exchange(action_byte)
+        return state, pix
+
+    def _start_game(self):
+        """Insert coin, press start, and WAIT OUT the ~19s intro until Mario is
+        actually controllable.
+
+        Detection uses input RESPONSE, not RAM flags: 0x6200 ("is_dead") is
+        unreliable here — Mario is alive, at the start, and walks under our input
+        while it still reads 1. So we just hold RIGHT and watch for Mario WALKING
+        (sustained increasing mario_x at the start row). The frozen intro-Mario
+        ignores input; the brief (0,0) hand-over blip isn't a sustained walk.
+        Holding right is also the safe opening (away from the left fireball)."""
+        self._hold(self.A_NOOP, 200)            # let boot RAM-test + attract settle
+        for _attempt in range(3):
+            self._hold(self.A_COIN, 15)
+            self._hold(self.A_NOOP, 10)
+            self._hold(self.A_START, 15)
+            inc = 0
+            state, pix = self._exchange(self.A_RIGHT)
+            for _ in range(500):                # up to ~33s; intro is ~19s
+                px = state["mario_x"]
+                state, pix = self._exchange(self.A_RIGHT)
+                if state["mario_x"] > px and state["mario_y"] > 150:
+                    inc += 1
+                    if inc >= 4:                # walking right -> level is live
+                        return state, pix
+                else:
+                    inc = 0
+        return state, pix   # give up gracefully; caller still gets a frame
+
+    def _save_state(self):
+        for _ in range(4):                   # save is scheduled; let it complete
+            self._exchange(self.A_SAVE)
+        self._hold(self.A_NOOP, 3)
+        self._has_state = True
+
+    def _load_state(self):
+        state = pix = None
+        for _ in range(3):                   # load is scheduled; let it complete
+            state, pix = self._exchange(self.A_LOAD)
+        state, pix = self._hold(self.A_NOOP, 2)
+        return state, pix
+
+    def _load_curriculum(self, idx):
+        """Load expert upper-board start-state curric_<idx> (bridge cmd 0xE0+idx)."""
+        state = pix = None
+        for _ in range(3):
+            state, pix = self._exchange(0xE0 + idx)
+        return self._hold(self.A_NOOP, 2)
+
+    def _is_responsive(self):
+        """Probe whether Mario actually responds to input (some curriculum
+        snapshots caught a mid-transition frozen frame). Mixed inputs cover both
+        on-girder (L/R move x) and on-ladder (U moves y). Returns (ok, state, pix)."""
+        s0, pix = self._exchange(self.A_NOOP)
+        x0, y0 = s0["mario_x"], s0["mario_y"]
+        st = s0
+        for a in (0b00100, 0b00100, 0b00010, 0b00001, 0b00100):  # up,up,right,left,up
+            st, pix = self._exchange(a)
+            if st["mario_x"] != x0 or st["mario_y"] != y0:
+                return True, st, pix
+        return False, st, pix
+
+    def _recover(self):
+        """A MAME instance died (e.g. crash / display hiccup) -> tear it down and
+        relaunch a fresh one with a new save-state. Keeps a long unattended run
+        alive: one crash costs one episode, not the whole training run."""
+        try:
+            if self._sock:
+                self._sock.close()
+        except OSError:
+            pass
+        self._sock = None
+        if self._proc:
+            try:
+                self._proc.kill()
+                self._proc.wait(timeout=5)
+            except Exception:
+                pass
+            self._proc = None
+        if getattr(self, "_mame_out", None):
+            try:
+                self._mame_out.close()
+            except OSError:
+                pass
+            self._mame_out = None
+        self._has_state = False
+        self._rxbuf = b""
+        self._launch_mame()
+        self._connect()
+        self._read_handshake()
+        state, pix = self._start_game()
+        if not self.record:
+            self._save_state()
+        return state, pix
+
+    def _begin_episode(self, state):
+        self._prev = state
+        # Per-episode progress trackers (BASE_Y is the start-row mario_y).
+        self._min_y = state["mario_y"] if state["mario_y"] else self.BASE_Y
+        self._max_screen = state["screen_id"]
+        # Height already paid by the milestone reward (start height -> no pay).
+        self._reward_max_h = max(0, self.BASE_Y - self._min_y)
+        self._visited = set()                # novelty bonus: cells seen this episode
+        self._wp_hit = set()                 # waypoint milestones fired this episode
+
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed)
+        try:
+            if self._proc is None:           # first reset: launch persistent MAME
+                self._launch_mame()
+                self._connect()
+                self._read_handshake()
+                state, pix = self._start_game()   # full ~19s intro, once
+                if not self.record:
+                    # Snapshot the controllable start so later resets just LOAD
+                    # it (~0.04s vs ~1.5s). Disabled when recording (a state load
+                    # isn't an input event and would break .inp playback).
+                    self._save_state()
+            elif self._has_state:            # fast path: instant state reload
+                # Self-curriculum: with prob p_curric, start partway up the board
+                # from an expert state (so the agent practices the upper board +
+                # finish); else start from the bottom. Bad (frozen) curriculum
+                # snapshots are detected and fall back to the bottom start.
+                # Wall-zone curriculum: restrict to the lowest 5 states
+                # (heights 35-52), which start Mario mid-traverse with live
+                # barrels. Upper states confound height metrics.
+                n_wall = min(5, self._n_curric)
+                if n_wall and self.np_random.random() < self._p_curric:
+                    idx = int(self.np_random.integers(n_wall))
+                    self._load_curriculum(idx)
+                    ok, state, pix = self._is_responsive()
+                    if not ok:
+                        state, pix = self._load_state()
+                else:
+                    state, pix = self._load_state()
+                # Per-episode barrel-freeze: 50% of episodes disable all barrels
+                # and the fireball so the agent can freely explore the left traverse
+                # and ladder-climb without danger. The remaining 50% run live.
+                self._no_barrels = self.np_random.random() < self.P_NO_BARRELS
+                mode_cmd = (self.A_FREEZE_BARRELS if self._no_barrels
+                            else self.A_UNFREEZE_BARRELS)
+                state, pix = self._exchange(mode_cmd)
+                # The save-state restores a FIXED barrel/RNG state; advance a
+                # random few frames so each episode's barrel pattern differs
+                # (generalization across DK's RNG, not one fixed start).
+                n = int(self.np_random.integers(0, 16))
+                if n:
+                    state, pix = self._hold(self.A_NOOP, n)
+            else:                            # recording path: clean soft-reset+intro
+                self._exchange(self.A_RESET)
+                state, pix = self._start_game()
+        except (ConnectionError, OSError):   # MAME died -> relaunch fresh
+            state, pix = self._recover()
+        self._begin_episode(state)
+        return self._preprocess(pix, state), self._info(state)
+
+    BASE_Y = 240   # Mario's start-row y; height climbed = BASE_Y - min_y reached
+
+    def _info(self, state: dict) -> dict:
+        # max_height = pixels climbed above the start row (higher = better);
+        # cleared = reached a later screen this episode.
+        return {"state": state,
+                "max_height": max(0, self.BASE_Y - self._min_y),
+                "cleared": int(self._max_screen > 1)}
+
+    def step(self, action: int):
+        try:
+            self._sock.sendall(bytes([ACTIONS[int(action)]]))
+            ram, pix = self._read_obs()
+        except (ConnectionError, OSError):
+            # MAME died mid-episode (crash / timeout): relaunch and end this
+            # episode cleanly so training continues on a fresh instance.
+            state, pix = self._recover()
+            self._begin_episode(state)
+            return self._preprocess(pix, state), 0.0, True, False, self._info(state)
+        state = self._decode_state(ram)
+        reward, terminated = self._reward(state)
+        if state["mario_y"]:
+            self._min_y = min(self._min_y, state["mario_y"])
+        self._max_screen = max(self._max_screen, state["screen_id"])
+        obs = self._preprocess(pix, state)   # uses self._prev (old) for vx/vy/fall-zone
+        self._prev = state
+        return obs, reward, terminated, False, self._info(state)
+
+    def close(self):
+        if self._sock:
+            # Ask MAME to exit cleanly so the -record .inp is flushed/finalized;
+            # only then close the socket.
+            try:
+                self._sock.sendall(bytes([self.A_QUIT]))
+                self._sock.settimeout(3.0)
+                try:
+                    while self._sock.recv(4096):
+                        pass            # drain until MAME closes the connection
+                except OSError:
+                    pass
+            except OSError:
+                pass
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            self._sock = None
+        if self._proc:
+            try:
+                self._proc.wait(timeout=8)   # let the clean exit complete
+            except subprocess.TimeoutExpired:
+                self._proc.terminate()
+                try:
+                    self._proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self._proc.kill()
+            self._proc = None
+        if getattr(self, "_mame_out", None):
+            try:
+                self._mame_out.close()
+            except OSError:
+                pass
+            self._mame_out = None

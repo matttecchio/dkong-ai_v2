@@ -1,0 +1,1 @@
+Drop expert DK .inp files here. They may contain all 4 stages; I'll segment by screen_id (0x6227==1 = barrel board) and use only the barrel-stage portion for behavioral cloning / save-state curriculum.

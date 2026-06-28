@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# ROMs — copyrighted, never commit
+roms/
+
+# Large artifacts — models, checkpoints, recordings, states
+artifacts/checkpoints/
+artifacts/recordings/
+artifacts/states/
+artifacts/*.zip
+artifacts/bc_data.npz
+
+# Training logs (TensorBoard events + MAME output)
+logs/
+
+# MAME runtime files
+*.inp
+*.sta
+*Zone.Identifier
+
+# Misc
+*.log
+*.out

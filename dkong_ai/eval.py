@@ -1,0 +1,55 @@
+"""Evaluate a trained policy and RECORD watchable .inp files.
+
+Runs with record=True (intro resets, no save-state loads) so each session's .inp
+plays back cleanly via scripts/playback.sh. Reports reward / max-height / score
+per episode so you can pick the good one to watch.
+
+    python -m dkong_ai.eval --rom-dir ./roms --model artifacts/ppo_dkong --episodes 5
+"""
+import argparse
+
+import numpy as np
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv
+
+from .mame_env import DonkeyKongEnv
+from .dk_policy import DkFeaturesExtractor, DkFrameStackWrapper
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--rom-dir", required=True)
+    ap.add_argument("--model", default="artifacts/ppo_dkong")
+    ap.add_argument("--episodes", type=int, default=5)
+    ap.add_argument("--stack", type=int, default=4)
+    ap.add_argument("--deterministic", action="store_true")
+    ap.add_argument("--port", type=int, default=5100,
+                    help="keep clear of a running training (it uses 5000+)")
+    args = ap.parse_args()
+
+    # record=True -> clean playable .inp; own port so it won't clash with training.
+    base = DonkeyKongEnv(rom_dir=args.rom_dir, port=args.port, record=True)
+    venv = DkFrameStackWrapper(DummyVecEnv([lambda: base]), n_stack=args.stack)
+    model = PPO.load(args.model, device="cuda")
+
+    print(f"recording -> {base._inp_path or '(set on first reset)'}")
+    for ep in range(args.episodes):
+        obs = venv.reset()
+        done = False
+        total_r, best_h, last = 0.0, 0, {}
+        while not done:
+            action, _ = model.predict(obs, deterministic=args.deterministic)
+            obs, r, dones, infos = venv.step(action)
+            done = bool(dones[0])
+            total_r += float(r[0])
+            best_h = max(best_h, infos[0].get("max_height", 0))
+            last = infos[0].get("state", last)
+        print(f"ep {ep}: reward={total_r:+.1f} max_height={best_h} "
+              f"score={last.get('score')} cleared={infos[0].get('cleared')}")
+    print(f"\n.inp recorded: {base._inp_path}")
+    print(f"watch it:  ./scripts/playback.sh {base._inp_path}")
+    venv.close()
+
+
+if __name__ == "__main__":
+    main()
