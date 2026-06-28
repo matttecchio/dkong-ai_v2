@@ -36,9 +36,14 @@ ADDR = {
     "barrel3_st": 0x6760, "barrel3_x": 0x6763, "barrel3_y": 0x6765,
     "barrel4_st": 0x6780, "barrel4_x": 0x6783, "barrel4_y": 0x6785,
     "barrel5_st": 0x67A0, "barrel5_x": 0x67A3, "barrel5_y": 0x67A5,
-    # Fireball (flame enemy that chases Mario): slot 0 of 5 at 0x6400, stride 0x20.
+    # Fireballs (flame enemies that chase Mario): 5 slots at 0x6400, stride 0x20.
     # +0x00=status (0=inactive,1=active), +0x03=x, +0x05=y.
-    "fireball_st": 0x6400, "fireball_x": 0x6403, "fireball_y": 0x6405,
+    # Barrel stage typically has 1 active; track all 5 for completeness.
+    "fireball0_st": 0x6400, "fireball0_x": 0x6403, "fireball0_y": 0x6405,
+    "fireball1_st": 0x6420, "fireball1_x": 0x6423, "fireball1_y": 0x6425,
+    "fireball2_st": 0x6440, "fireball2_x": 0x6443, "fireball2_y": 0x6445,
+    "fireball3_st": 0x6460, "fireball3_x": 0x6463, "fireball3_y": 0x6465,
+    "fireball4_st": 0x6480, "fireball4_x": 0x6483, "fireball4_y": 0x6485,
     # Hammer sprite at #6A1C-#6A1F. Pattern: +0=X, +3=Y. has_hammer=0x6217.
     "hammer_x": 0x6A1C, "hammer_y": 0x6A1F, "has_hammer": 0x6217,
 }
@@ -53,7 +58,11 @@ WATCH_ORDER = [
     "barrel3_st", "barrel3_x", "barrel3_y",
     "barrel4_st", "barrel4_x", "barrel4_y",
     "barrel5_st", "barrel5_x", "barrel5_y",
-    "fireball_st", "fireball_x", "fireball_y",
+    "fireball0_st", "fireball0_x", "fireball0_y",
+    "fireball1_st", "fireball1_x", "fireball1_y",
+    "fireball2_st", "fireball2_x", "fireball2_y",
+    "fireball3_st", "fireball3_x", "fireball3_y",
+    "fireball4_st", "fireball4_x", "fireball4_y",
     "hammer_x", "hammer_y", "has_hammer",
 ]
 

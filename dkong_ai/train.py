@@ -72,7 +72,12 @@ def main():
                     help="PPO entropy coefficient (raise for more exploration)")
     ap.add_argument("--gamma", type=float, default=0.999,
                     help="discount factor (0.999 makes clear-reward visible at episode start)")
+    ap.add_argument("--p-no-barrels", type=float, default=None,
+                    help="fraction of episodes with barrels disabled (default: env class value 0.15)")
     args = ap.parse_args()
+
+    if args.p_no_barrels is not None:
+        DonkeyKongEnv.P_NO_BARRELS = args.p_no_barrels
 
     # One MAME instance per env, each on its own socket port.
     thunks = [make_env(args.rom_dir, args.base_port + i, args.frameskip)

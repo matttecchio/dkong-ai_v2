@@ -1,360 +1,367 @@
 # Donkey Kong RL — Handoff / Complete Project State
 
-**This is the single source of truth.** The original assistant's chat history and
-private memory are gone (project moved to a new Claude plan). Everything needed to
-understand, run, and continue this project is in this file + the code. Read this
-fully before changing anything — several mechanisms are non-obvious and easy to
-regress (see Gotchas).
+**Single source of truth.** Read this before changing anything — several mechanisms
+are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Pairs with `README.md` (quick reference). Last updated after Run 8 launch (2026-06-26).
+Last updated: 2026-06-28, after Run 18 launch.
 
 ---
 
-## 0. TL;DR — where it landed (honest)
+## 0. TL;DR
 
-- The **full pipeline works and is robust**: MAME `dkong` driven from Python, a
-  Gymnasium env over a socket bridge, PPO (Stable-Baselines3) on pixels, reward
-  from RAM. 16 parallel envs, ~800–1000 fps, runs 30M steps overnight with **0
-  crashes**.
-- The agent **learns to climb ~half the barrel board (height ~52 of ~192),
-  jump barrels, and score** (5–7k/game). It can **occasionally clear the board
-  (~1% of episodes) when *started near the top*** (curriculum), but **cannot
-  reliably climb from the bottom to Pauline**. **Goal not yet achieved.**
-- The persistent blocker is one specific spot: the **left-traverse to the
-  2nd-girder ladder (~height 47–53)**. The agent camps on the right of that
-  girder farming barrels instead of going left to the ladder. Five training
-  approaches each got stuck at/near this wall.
-- **Best models to look at:** `artifacts/ppo_dkong_curric.zip` (climbs ~53, rare
-  top clears) or `artifacts/ppo_dkong_explore_last.zip`. (Details in §9.)
+- **Full pipeline works and is robust**: MAME `dkong` driven from Python, a
+  Gymnasium env over a socket bridge, PPO (Stable-Baselines3) on pixels+RAM,
+  reward from RAM. 16 parallel envs, ~600–900 fps, runs 30M steps overnight
+  with 0 crashes.
+- The agent learns to jump barrels, score, and climb roughly half the board.
+  With barrel-free curriculum episodes it can clear the stage (~10% of training
+  episodes). **Bottom-up with live barrels: still 0 clears as of run 18.**
+- The persistent blocker: the agent reaches height ~53–54 (2nd girder) then
+  **either farms barrel jumps on the right, or grabs the hammer, runs left past
+  the ladder, waits at the left wall, and dies when the hammer expires.**
+- Run 18 is the current run: 70% barrel-free episodes, stronger girder-level
+  rewards, farming-death penalty, corner penalty, height bonus. The code is
+  also ready for run 19 (all 5 fireballs tracked, obs space change).
+
+---
 
 ## 1. Goal
 
 Train an RL agent to play arcade **Donkey Kong** (`dkong`) through MAME from
-**pixels** (CNN), reward from **game RAM**. First milestone: **clear the barrel /
-girders board** (reach Pauline at the top). Stretch: all 4 stages.
+pixels (CNN) + RAM features (MLP). First milestone: **clear the barrel/girder
+stage bottom-up with live barrels** (reach Pauline at the top). Stretch: all 4
+stages.
 
-## 2. Machine / environment (already set up)
+---
+
+## 2. Machine / environment
 
 - WSL2 Linux, **RTX 4080 SUPER 16GB**, 22 cores, 30GB RAM.
-- **MAME 0.264** (`apt`). Python venv at `dkong-ai/.venv` (torch+CUDA, SB3 2.x,
+- **MAME 0.264** (`apt`). Python venv at `.venv` (torch+CUDA, SB3 2.x,
   gymnasium, opencv, numpy).
-- ROM: **`dkong.zip` in `dkong-ai/roms/`** (verified `romset dkong is good`). It
-  is copyrighted — not redistributable; it's already in place on this machine.
-- Project root: `/home/claw3/dkong-ai/`. All commands below run from there.
+- ROM: `dkong.zip` in `./roms/` (copyrighted — not redistributable).
+- Project root: `/home/claw3/dkong-ai/`.
+
+---
 
 ## 3. Quick start
 
 ```bash
-cd /home/claw3/dkong-ai
+# Train (16 envs, 30M steps, warm-start optional)
+.venv/bin/python -m dkong_ai.train --rom-dir ./roms \
+    --save artifacts/ppo_dkong_runN --stack 8 --gamma 0.999
 
-# Train (defaults: 16 envs, 30M steps; warm-start + curriculum optional)
-.venv/bin/python -m dkong_ai.train --rom-dir ./roms --save artifacts/ppo_dkong_NEW
-
-# Watch a trained model play (records a clean .inp, then plays it windowed)
-.venv/bin/python -m dkong_ai.eval --rom-dir ./roms --model artifacts/ppo_dkong_curric --port 5100
+# Watch a trained model (records .inp, then plays windowed)
+.venv/bin/python -m dkong_ai.eval --rom-dir ./roms \
+    --model artifacts/checkpoints/ppo_dkong_runN/ppo_dkong_runN_Xsteps \
+    --port 5100 --stack 8
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
-# Diagnose where a policy peaks/dies
-.venv/bin/python -m dkong_ai.diag --rom-dir ./roms --model artifacts/ppo_dkong_curric --port 5100
+# Bottom-up live-barrel eval (no curriculum, no barrel-free episodes)
+# Run inline Python: set P_NO_BARRELS=0.0, _p_curric=0.0, load model, 10 eps
 
-# Monitor a running train (logs go to /tmp/dk_*.log; pick the right one)
-grep -E "total_timesteps|ep_rew_mean|height_mean|height_best|clear_rate" /tmp/dk_*.log | tail
+# Monitor running train
+grep -E "total_timesteps|ep_rew_mean|height_mean|height_best|clear_rate" \
+    /tmp/dk_run18.log | tail
 .venv/bin/tensorboard --logdir logs
 ```
-⚠️ `eval`/`diag` use `--port 5100` to avoid colliding with a training run (5000+).
+
+⚠️ Eval/diag always use `--port 5100` to avoid colliding with training (5000+).
+
+---
 
 ## 4. Architecture
 
 ```
-MAME (dkong) --autoboot_script--> scripts/bridge.lua    (socket SERVER, lock-step)
-                                          | TCP 127.0.0.1:(5000+env_index)
-                          dkong_ai/mame_env.py   (Gymnasium env, socket CLIENT)
-                                          |
-                          dkong_ai/train.py   (SB3 PPO CnnPolicy, 16 parallel envs)
+MAME (dkong) --autoboot_script--> scripts/bridge.lua  (socket SERVER, lock-step)
+                                        | TCP 127.0.0.1:(5000+env_index)
+                        dkong_ai/mame_env.py  (Gymnasium env, socket CLIENT)
+                                        |
+                        dkong_ai/train.py  (SB3 PPO MultiInputPolicy, 16 envs)
 ```
-- Lock-step: per step the env sends 1 action byte; the bridge applies inputs, runs
-  `frameskip`(=4) frames, ships `[ram_bytes][pixels]`. Env makes the 84×84
-  grayscale obs (frame-stacked ×4) + reward.
-- Obs = pixels (CNN). Reward = from RAM. (Hybrid, decided up front.)
-- Bridge **control bytes** (not agent actions): `0xF1` coin, `0xF2` start,
-  `0xFE` soft-reset, `0xFD` clean-quit (flush .inp), `0xFC` save-state,
-  `0xFB` load-state, `0xE0+i` load curriculum state i. Agent actions are
-  `0x00–0x1F` = bitmask over [Left,Right,Up,Down,Jump].
-- Action set (`ACTIONS` in mame_env): noop, L, R, U, D, jump, jump+L, jump+R.
 
-## 5. Confirmed RAM map (`dkong_ai/memory_map.py`)
+**Observation** (`Dict`):
+- `"image"`: `(84, 84, 2)` uint8 — channel 0: grayscale pixels; channel 1:
+  static threat/ladder/fall-zone map (see §6). Stacked ×8 by
+  `DkFrameStackWrapper` → `(84, 84, 16)` at policy input.
+- `"ram"`: `(50,)` float32 — normalised RAM features (see §5).
+
+**Policy** (`dkong_ai/dk_policy.py`):
+- `DkFeaturesExtractor`: NatureCNN on image → 256 features; Linear MLP on RAM
+  → 64 features; concat → 320 features → PPO policy/value heads.
+- `DkFrameStackWrapper`: stacks `image` across N frames, passes `ram` from the
+  latest frame only.
+
+**Actions** (8): noop, L, R, U, D, jump, jump+L, jump+R.
+
+**Bridge control bytes** (not agent actions): `0xF1` coin, `0xF2` start,
+`0xFE` soft-reset, `0xFD` clean-quit, `0xFC` save, `0xFB` load, `0xE0+i`
+load curriculum state i, `0xF8` freeze barrels, `0xF7` unfreeze barrels.
+
+---
+
+## 5. RAM features (`dkong_ai/memory_map.py` + `mame_env.py:_build_ram_features`)
+
+**50 features** (layout: `[mario_x/255, mario_y/240]` + 6 barrels × 7 + 1
+fireball × 3 + hammer × 3):
+
+Per barrel: `[Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active]`
+- `vx/vy`: per-step velocity (frameskip=4); horiz norm ÷8, vertical ÷20.
+- `lad53`: barrel x-distance to the critical left ladder at x=53 (norm ÷64).
+  Tells agent whether a barrel is heading for that ladder column.
+- `edge_dist`: normalised distance to the girder edge the barrel is heading
+  toward (0 = at edge / about to fall, 1 = far away).
+
+⚠️ **Run 19 queued change**: RAM → 62 features (all 5 fireball slots tracked,
+currently only slot 0). Requires fresh start.
+
+**Full RAM address map:**
 
 | name | addr | notes |
 |---|---|---|
-| lives | 0x6228 | death = decrement (RELIABLE — use this for death) |
-| screen_id | 0x6227 | 1=barrels 2=pie 3=elevator 4=rivet; clear = increment (verified) |
+| lives | 0x6228 | death = decrement (RELIABLE) |
+| screen_id | 0x6227 | 1=barrels 2=pie 3=elevator 4=rivet |
 | level | 0x6229 | level counter |
-| game_start | 0x622C | 1 once a game is underway |
+| game_start | 0x622C | 1 once game is underway |
 | mario_x | 0x6203 | +right |
-| mario_y | 0x6205 | smaller = higher; bottom/start ≈ 240, top ≈ 48 |
-| score | 0x7721/41/61/81 | tile RAM digits hundreds→100k; digit = byte low nibble |
+| mario_y | 0x6205 | smaller=higher; start≈240, top≈58 |
+| is_jumping | 0x6216 | 1 mid-jump |
+| has_hammer | 0x6217 | 1 while wielding hammer |
+| hammer_x/y | 0x6A1C/1F | hammer pickup position |
+| score_100..100k | 0x7721/41/61/81 | tile RAM digits; digit = byte low nibble |
+| barrel0..5_st/x/y | 0x6700+ stride 0x20 | status (0=inactive,1=rolling,2=deploying) |
+| fireball0_st/x/y | 0x6400/03/05 | only slot 0 currently watched (5 exist) |
 
-⚠️ **`0x6200` ("is_dead") is UNRELIABLE** — reads 1 while Mario is alive and
-walking. Never use it for death/control detection; use `lives`.
-⚠️ **Pre-game score artifact:** DK shows ~3700 before a real game then resets to
-0; the score-reward guard ignores it (`0 < gain ≤ 2000`).
+⚠️ `0x6200` ("is_dead") is **unreliable** — use `lives` for death detection.
 
-## 6. Reward (`dkong_ai/mame_env.py:_reward`) — current ("explore"/curriculum)
+---
 
-Per non-death/non-clear step:
-- **Height milestone:** +0.5 per *new* pixel of max height this episode
-  (telescopes to best_height·0.5; top ≈ +96). Only progress pays; camping pays
-  nothing. Descending to dodge is free.
-- **Novelty + corridor:** first visit to an `(x//16, height//16)` cell this
-  episode pays +0.2, plus up to +0.3 if the cell is on the **expert route**
-  (`artifacts/expert_corridor.json`, a height→x map from the demo). Once per cell
-  → not farmable; rewards exploring left/up toward the ladders.
-- **Score:** +0.003/point (barrel jump = +0.3), artifact-guarded.
-- **Death −10, clear +100.**
+## 6. Observation image channel (channel 1 — threat/ladder/fall-zone map)
 
-Reward evolution (what each run taught us — see §8): started as score+climb (led
-to point-farming), → height-milestone (still camped), → +novelty+corridor (broke
-the plateau slightly), with curriculum + BC as separate levers.
+Pixel intensities in channel 1:
+| value | meaning |
+|---|---|
+| 255 | complete ladder (static, pre-computed) |
+| 200 | fall-zone: predicted barrel landing spot when barrel is within 40px of a girder edge |
+| 180 | live barrel current position |
+| 128 | broken ladder stub (barrel can fall through; Mario cannot climb) |
+| 120 | fireball position |
+| 80 | hammer pickup position |
 
-## 7. Reset / intro / save-state / curriculum mechanics (subtle — read before editing)
+Fall-zone prediction uses `GIRDER_EDGES` (5 entries) to map barrel position +
+direction → landing zone on the next girder below, drawn when the barrel is
+within `EDGE_PROX=40` game pixels of the relevant edge.
 
-- **One persistent MAME per env**; socket lives for the whole run. We do NOT
-  relaunch per episode (relaunch rebinds the port; MAME's listen socket has no
-  SO_REUSEADDR → "Address already in use").
-- **Intro:** after coin+start there's a **~19s intro** (Kong climbing) + a "ready"
-  freeze where input is ignored. RAM flags and the attract-mode demo all look
-  "live" during this, so they can't be trusted. `_start_game` detects real control
-  by **input response**: hold RIGHT until `mario_x` actually increases.
-- **Fast resets:** when `record=False` (training), the first reset plays the intro
-  once and **saves a state**; later resets **load** it (~0.03s vs ~1.5s).
-  Disabled when `record=True` (a state-load isn't an input event → breaks .inp
-  playback).
-- **RNG diversity:** after each load, advance a random 0–15 NOOP frames so the
-  barrel pattern differs per episode (generalization across DK's RNG).
-- **Self-curriculum:** with prob `_p_curric` (0.5 if curriculum states exist),
-  reset loads a random expert upper-board state (`curric_0..5`, heights ~35→182,
-  in `artifacts/states/dkong/`) so the agent practices the upper board + finish.
-  Frozen snapshots fall back to the bottom start (`_is_responsive` probe).
-  Create the states with `scripts/make_curriculum.lua` (replays the demo).
-  **NOTE:** curriculum makes `height_mean`/`height_best` **confounded by start
-  position** — use **`clear_rate`** as the success metric, and eval **bottom-up**
-  runs (`record=True`, no curriculum) to measure true climbing.
+---
 
-## 8. Complete run history (what was tried, what happened)
+## 7. Reward (`dkong_ai/mame_env.py:_reward`)
 
-| run | model file | reward / method | steps | bottom-up height | clear_rate | takeaway |
-|---|---|---|---|---|---|---|
-| 1 "overnight" | `ppo_dkong_overnight_last` | score + per-step climb | 16.7M | ~47 | 0 | **point-farming local optimum** (reward rose to +35 by camping & jumping barrels, never climbed) |
-| 2 "climb" | `ppo_dkong_climb` | height-milestone dominant | 30M | ~47.8 | 0 | milestone alone didn't break the wall |
-| 3 "explore" | `ppo_dkong_explore_last` | + novelty + expert corridor | 7.9M | **~52** | 0 | first to nudge the mean past 47, but slow |
-| 4 "curric" | `ppo_dkong_curric` | explore reward + curriculum (start near top) | 30M | ~53 | **0.01** | **first clears ever** — but only from near-top starts; bottom-up still ~53 |
-| 5 "bcrl" | `ppo_dkong_bcrl` | BC init + curriculum | 30M | ~43 | 0.01 | **BC init hurt bottom-up**; brittle BC policy + RL didn't recover |
-| 6 "waypoint" | `ppo_dkong_waypoint` | wall curriculum (heights 40/45/50) + waypoint milestones (WP0 x<120), warm-start from curric | 30M | ~53 | ~0 | **WP0 never fired**: agent arrives at h36 from x≈143; x<120 threshold too tight. Anti-camping absent. Wall unbroken. |
-| 7 "run7" | `ppo_dkong_run7_last` | same + wider WP0 (x<140) + anti-camping penalty + fresh start | ~2M (stopped) | — | — | **Stopped early**: `gamma=0.99` discovered to make +100 clear reward worth ~1e-8 at episode start (invisible to value fn). See §13 for gamma math. |
-| 8 "run8" | `ppo_dkong_run8` | all run-7 reward + **`gamma=0.999`** + **static ladder-map channel** (obs now 84×84×2) | 60M | — | — | **RUNNING** — see §13 for design |
+Per non-death/non-clear step (when `mario_y` is valid):
 
-Diagnosis throughout (confirmed by the user, a DK expert, watching replays + by
-`diag.py`): the agent reaches the 2nd/3rd girder (~height 47–53) then **camps on
-the RIGHT farming barrels; the up-ladder is to the LEFT and it won't traverse
-left to it.** This is a hard *exploration/navigation* wall, not a reward-scale
-problem. The forced-rightward start (control-probe + the "dodge the fireball"
-opening) likely reinforced the right-bias.
+| term | value | notes |
+|---|---|---|
+| Height milestone | +0.5 × new pixels of max height | fires only on NEW max; top ≈ +96 |
+| Per-step height bonus | +0.003 × height/100 | continuous gradient so value fn knows "up = better" |
+| Girder milestone | +10/30/40/55/70 | one-shot per episode on first reaching each girder |
+| Waypoints (6) | +5/10/30/8/8/8 | zig-zag route milestones; fire once per episode |
+| Traverse progress | +0.05/pixel moved left | while height 36-65, x 53-143 |
+| Climb bonus | +0.30/step | while ascending at x=43-68, height 40-100 |
+| Ladder idle cost | −0.05/step | in climb zone but y unchanged |
+| Anti-camping | −0.01/step | height 36-65, x>130, no hammer |
+| Corner penalty | −0.03/step | height<15, x<30 or x>190 (bottom floor dead-ends) |
+| Score | +0.003/pt | guarded: 0<gain≤2000; gated in camp zone |
+| Death | −10 | on lives decrement |
+| Farming death | −5 extra | if episode max height < 40 when dying |
+| Clear | +100 | screen_id increment |
 
-## 9. Models inventory (`artifacts/*.zip`)
+**Girder milestones** (new in run 18): heights 44/78/112/144/182 → bonuses
+10/30/40/55/70. Full climb path worth ~+300 total vs ~+65 for a farming episode.
 
-- `ppo_dkong_curric.zip` — **best overall**; climbs ~53, jumps barrels, rare
-  top-start clears. Good for demos / a continuation base.
-- `ppo_dkong_explore_last.zip` — similar climber (~52), no curriculum confound.
-- `ppo_dkong_bcrl.zip` — BC→RL; bottom-up ~43 (worse). 
-- `ppo_dkong_bc.zip` — behavioral-cloning-only; **brittle**, dies at height ~20
-  alone (kept for reference / re-fine-tuning experiments).
-- `ppo_dkong_climb.zip`, `ppo_dkong_overnight_last.zip` — earlier reward designs
-  (point-farmers / wall-stuck).
-- `ppo_dkong.zip`, `ppo_dkong_last.zip` — the initial 100k sanity run; ignore.
-- `*_last.zip` = saved on interrupt/finish; the bare name = final `model.save`.
+---
 
-## 10. Behavioral cloning pipeline (built in Run 5)
+## 8. Reset / curriculum mechanics
 
-- **Extract:** `dkong_ai/extract_bc.py` replays the expert demo (`demos/dkong.inp`)
-  through the bridge in **EXTRACT mode** (`DK_EXTRACT=1` → bridge doesn't apply
-  actions, appends the playback's current input bitmask to each obs). Keeps the
-  first barrel board, maps bitmask→nearest action, saves `artifacts/bc_data.npz`
-  (got 2032 pairs; expert uses LEFT > RIGHT — the route knowledge).
-- **Train:** `dkong_ai/train_bc.py` builds 4-frame stacks, constructs an SB3
-  CnnPolicy via a spaces-only stub env, supervised-trains (loss = −log_prob) →
-  `artifacts/ppo_dkong_bc` (88% train acc at 40 epochs).
-- **Fine-tune:** `train.py --init-from artifacts/ppo_dkong_bc` warm-starts PPO.
-- **Result:** BC-alone is brittle (no recovery data — expert never died), and
-  BC→RL did not beat the from-scratch curriculum run. See §12 for why and what to
-  try instead.
+- **One persistent MAME per env.** Socket lives the whole run. No per-episode
+  relaunch (port rebind = "Address already in use").
+- **Fast resets** (`record=False`): first reset plays ~19s intro, saves state;
+  all later resets load it (~0.03s). Disabled when `record=True` (.inp playback
+  requires real input events).
+- **RNG diversity**: after each load, advance 0–15 random NOOP frames so barrel
+  patterns differ per episode.
+- **Barrel-freeze training wheels** (`P_NO_BARRELS`, default 0.15, run 18 = 0.70):
+  the bridge `0xF8` command zeroes all barrel/fireball status bytes each frame.
+  70% barrel-free lets the agent drill the route; 30% live episodes keep it honest.
+- **Wall-zone curriculum** (`_p_curric=0.15`): 15% of episodes load one of the
+  5 lowest curriculum states (heights 35–52, mid-traverse with live barrels).
+  Upper states excluded to avoid confounding height metrics.
+- ⚠️ Curriculum confounds `height_mean`/`height_best` — judge by `clear_rate`
+  and bottom-up evals (P_NO_BARRELS=0, _p_curric=0).
 
-## 11. The expert demo (`demos/dkong.inp`)
+---
 
-- Recorded on **MAME 0.241**; **plays back faithfully on our 0.264** (dkong
-  emulation is deterministic across these versions — verified: stage progression
-  matched DK's real structure, lives rose to 4 = a genuine bonus life). This also
-  confirmed `screen_id` increments on a real clear.
-- Used to build the **route corridor** (`artifacts/expert_corridor.json`) and the
-  **curriculum states** (`artifacts/states/dkong/curric_*.sta`) and the **BC
-  dataset**. Drop more `.inp` files in `demos/` to extend any of these.
-- **Videos (mp4/mkv) were considered and rejected:** no action labels (would need
-  a VPT/inverse-dynamics pipeline) + most YouTube DK footage is the NES/other
-  ports with a *different board layout* than arcade `dkong`.
+## 9. Complete run history
 
-## 12. Run 6 "waypoint" — design and post-mortem
+| run | key changes | steps | bottom-up h | clear_rate | outcome |
+|---|---|---|---|---|---|
+| 1 "overnight" | score + per-step climb | 16.7M | ~47 | 0 | point-farming local optimum |
+| 2 "climb" | height milestone dominant | 30M | ~48 | 0 | milestone alone didn't break wall |
+| 3 "explore" | + novelty + expert corridor | 7.9M | ~52 | 0 | first to nudge past 47, slow |
+| 4 "curric" | + curriculum (near top) | 30M | ~53 | 0.01 | first clears — top-start only |
+| 5 "bcrl" | BC init + curriculum | 30M | ~43 | 0.01 | BC hurt bottom-up; brittle |
+| 6 "waypoint" | wall curriculum + waypoints | 30M | ~53 | ~0 | WP0 threshold too tight |
+| 7 | wider WP0 + anti-camp | ~2M | — | — | stopped: gamma=0.99 → clear reward ≈ 1e-8 |
+| 8 | gamma=0.999 + ladder map channel | — | — | — | superseded |
+| 9 | score gating + camping penalty | — | ~54 | 0 | wall at x≈75 |
+| 10 | WP1b + climb bonus + ent=0.03 | 10M | ~54 | 0 | wall unchanged |
+| 11 | 50% barrel-free episodes | — | ~54 | 0 | skill didn't transfer to live barrels |
+| 12 | dense traverse reward + p_no_barrels=0.15 | — | ~54 | 0 | marginal |
+| 13 | pure bottom-up (no curriculum) | 34.9M | ~54 | 0 | wall confirmed across 200M+ steps |
+| 14 | **hybrid CNN+RAM architecture** | ~5.5M | ~54 | 0.03 | first bottom-up clears — barrel-free only |
+| 15 | + vx/vy/lad53 features, stack=8 | ~5.5M | ~54 | 0 | **vx/vy bug: always 0 (see §11)** |
+| 16 | **vx/vy bug fixed** + edge_dist + fall-zone overlay | ~6.5M | ~54 | 0 | wall unchanged |
+| 17 | + per-step height bonus | ~3M | ~54 | 0 | wall unchanged |
+| 18 | **70% barrel-free** + farming death penalty + corner penalty + girder milestones | **active** | TBD | TBD | **current run** |
 
-**Changes made:**
-1. Wall-zone curriculum: heights now {35,40,45,50,65,95,126,155,182} (9 states, curric_0..8).
-2. Waypoint milestones (WP0 x<120, WP1 x<75 +15, WP2-4 for later zig-zags).
-3. Warm-start from `ppo_dkong_curric`.
+---
 
-**Failure mode (confirmed by post-run analysis):**
-- WP0 (x<120) **never fired.** The agent arrives at height 36 from x≈143 (just got off
-  the first ladder). x<120 is 23px too tight — the agent is already to the right of it.
-- The curriculum states captured the *first-ladder climb* (x≈143), not positions on the
-  2nd girder. So curriculum starts were also not near the traverse.
-- Run 6 died without breaking x≈47–53 wall.
+## 10. Run 18 — current run
 
-## 13. Run 8 "gamma + ladder" — design and what to watch (CURRENT RUN)
+**PID**: 180275. **Log**: `/tmp/dk_run18.log`.
+**Save**: `artifacts/ppo_dkong_run18`. **Stack**: 8.
 
-**Root causes addressed:**
+Key parameters vs run 17:
+- `--p-no-barrels 0.70` — 70% of episodes barrel-free (was 0.15)
+- `--init-from artifacts/checkpoints/ppo_dkong_run17/ppo_dkong_run17_3000000_steps`
+- Farming death penalty: extra −5 if episode max height < 40 at death
+- Corner penalty: −0.03/step at bottom floor corners (height<15, x<30 or x>190)
+- Girder milestones: +10/30/40/55/70 on first reaching each girder
 
-### A. `gamma=0.99` makes the clear reward invisible
-With ~1840 steps/episode and γ=0.99: present value of +100 clear at episode start
-= 0.99^1840 ≈ **1e-8**. The value function treats it as zero; clearing the board is
-essentially not in the policy objective.
+**Plan**: let run to ~5M steps → bottom-up eval. If clear_rate rising:
+keep going. If still walled: reduce `--p-no-barrels` to 0.40 for run 19
+(gradually reintroduce barrels) and apply queued run-19 changes (all 5
+fireballs, RAM 50→62, fresh start).
 
-With γ=0.999: 0.999^1840 ≈ **0.16** → the clear is worth ~16 units at episode start.
-The value function can now represent "being near the top is better" and TD errors
-propagate useful signal back to the bottom of the board.
+---
 
-Source: Wiering et al. 2018 DK paper uses γ=0.999 explicitly for this reason.
+## 11. Critical bugs already fixed (don't reintroduce)
 
-### B. The CNN had no ladder visibility
-The Wiering paper passes explicit 7×7 ladder-vision grids as input features. Our CNN
-had to discover ladders from raw pixels, which apparently it didn't. Run 8 adds a
-**second observation channel** — a static 84×84 binary map showing exactly where the
-complete ladders are. The barrel board never changes so this map is pre-computed once
-in `_build_ladder_map()`.
+### vx/vy always zero (fixed run 16)
+In `step()`, `self._prev = state` was assigned **before** `_preprocess(pix, state)`.
+Inside `_preprocess` → `_build_ram_features`, `prev = self._prev` equalled
+**current** state → `pbx == bx` → `vx = 0`, `vy = 0` for all barrels, every step.
+All velocity features in run 15 were dead weight.
+**Fix**: swap order in `step()` — call `_preprocess` first, then update `_prev`.
 
-**Only complete ladders are included** (broken ladders omitted). Positions derived from
-expert-corridor trajectory (mario_x while ascending = ladder x):
-| channel pixel | game x | game y range | ladder |
-|---|---|---|---|
-| x84≈47 | 143 | 175–224 | 1st: right side, floor→2nd girder |
-| **x84≈17** | **53** | **155–196** | **2nd: FAR LEFT, 2nd→3rd girder ← critical** |
-| x84≈43 | 131 | 118–158 | 3rd: right-ish, 3rd→4th girder |
-| x84≈22 | 67 | 85–125 | 4th: left, 4th→5th girder |
-| x84≈48 | 147 | 48–100 | top section to Pauline |
+### gamma=0.99 kills clear reward (fixed run 7)
+At ~1840 steps/episode, `0.99^1840 ≈ 1e-8`. The +100 clear reward was effectively
+invisible to the value function. **Fix**: `gamma=0.999` → `0.999^1840 ≈ 0.16`.
 
-**Obs space is now (84,84,2).** After VecFrameStack(4) → (84,84,8). Old models
-trained with (84,84,1) obs are INCOMPATIBLE with this env (don't load them here).
+### 0x6200 ("is_dead") unreliable
+Reads 1 while Mario is alive and walking. **Never use for death detection.**
+Use `lives` decrement instead.
 
-**Run 8 params:**
-- Fresh start (no `--init-from`), 60M steps
-- `gamma=0.999`, `ent_coef=0.02`
-- All run-7 reward: height milestone + waypoints (WP0 x<140) + anti-camping + novelty+corridor + score*0.003 + death-10 + clear+100
-- Trainer PID: see `/tmp/dk_run8.pid`. Log: `/tmp/dk_run8.log`
-- Save: `artifacts/ppo_dkong_run8`
+### MAME X connection crash (fixed run 3)
+Even with `-video none`, SDL opened an X connection to WSLg display. Display
+hiccup → MAME killed → `ConnectionError` crashed the whole `SubprocVecEnv`.
+**Fix**: `SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`, drop
+`DISPLAY`/`WAYLAND_DISPLAY` for headless processes.
 
-**How to judge run 8:**
+---
+
+## 12. Run 19 — queued changes (not yet launched)
+
+Requires fresh start (obs space change: RAM 50→62).
+
+- **All 5 fireball slots tracked** (currently only slot 0). `memory_map.py`
+  already updated: `fireball0..4_st/x/y`. `_build_ram_features` loops over 5.
+  Adds 12 features → RAM_FEATURE_DIM 50→62.
+- Corner penalty (already in code, active from run 18 onwards via reward).
+- Girder milestones (already in code).
+
+Launch command (after run 18 completes or is stopped):
 ```bash
-grep -E "height_mean|height_best|clear_rate|ep_rew_mean" /tmp/dk_run8.log | tail -30
+nohup .venv/bin/python -m dkong_ai.train \
+  --rom-dir ./roms --timesteps 30000000 --n-envs 16 \
+  --save artifacts/ppo_dkong_run19 --logdir logs \
+  --gamma 0.999 --ent-coef 0.01 --stack 8 \
+  --p-no-barrels 0.40 \
+  > /tmp/dk_run19.log 2>&1 &
 ```
-- `height_mean > 53` AND `clear_rate > 0` = wall broken. This is the milestone.
-- `ep_rew_mean` is not comparable to prior runs (reward scale changed + gamma changed).
-- Run bottom-up eval at ~20M and ~40M steps to check real climbing.
+(Reduce `--p-no-barrels` from 0.70 to 0.40 — start reintroducing barrels.)
 
-## 14. Recommended next steps (if run 8 also stalls)
+---
 
-1. **Exact ladder positions from tilemap RAM**: tile RAM at 0x7400–0x77FF holds the
-   actual barrel-board tilemap. A short Lua probe can extract exact ladder x columns
-   and y extents to replace the approximate hardcoded values in `_build_ladder_map`.
-2. **Stronger exploration** (RND intrinsic curiosity via `stable-baselines3-contrib`).
-3. **More BC data** + DAgger-style correction from varied start positions.
-4. **Reduce forced-rightward start** (right-camp bias reinforced from the opening).
-5. **Anneal `_p_curric`** down over training once clears appear.
+## 13. Why the wall persists (diagnosis)
 
-## 15. Gotchas (already bit us — don't rediscover)
+The agent has **never traversed from height 54 to the top with live barrels.**
+Without that experience, the value function at the wall state cannot represent
+"there is a +300 reward path above me." It only knows farming ≈ +65/ep.
 
-- **Headless = no X.** Even with `-video none`, SDL opens an X connection to `:0`;
-  a WSLg display hiccup then kills MAME mid-run. FIX (in `_launch_mame`):
-  `SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`, drop `DISPLAY`/`WAYLAND_DISPLAY`
-  for headless procs. (Windowed eval/playback are separate and keep the display.)
-- **Self-healing:** if a MAME dies (`ConnectionError: bridge closed` / timeout),
-  `step`/`reset` catch it and `_recover()` relaunches a fresh instance + new
-  save-state, ending just that episode. One crash ≠ whole run dies. Keep this.
-- **Killing MAME:** `pkill -x mame` (process name). **NEVER** `pkill -f 'mame
-  dkong'` — `-f` matches your own shell's command line and kills the shell.
-- **Orphan prevention:** `train.py` closes the vec env in `finally` + a SIGTERM
-  handler; MAME launches with `PR_SET_PDEATHSIG=SIGKILL`. Verified 0 orphans after
-  normal exit, SIGTERM, SIGKILL. Check with `pgrep -c -x mame`.
-- **Stream framing:** the env keeps `self._rxbuf`; handshake bytes can over-read
-  into the first obs frame and must not be dropped (caused intermittent
-  `IndexError` at 16-env launch).
-- **Throughput is CPU-bound** (MAME emulation), GPU ~idle. 16 envs saturates 22
-  cores (~800–1000 fps). More envs oversubscribe and don't help. More speed isn't
-  the bottleneck anyway — the wall is a learning problem.
-- **Warm-start logging:** `PPO.load` restores the saved model's `verbose`; the BC
-  model had `verbose=0` → silent training (looked stuck). `train.py` now forces
-  `model.verbose=1` on warm-start and uses `progress_bar=False` (rich bar garbles
-  file logs).
-- **Curriculum metric confound:** see §7 — judge by `clear_rate` + bottom-up eval.
-- **MAME runs ~20× real-time unthrottled** (`-nothrottle`); a "1.5s" reset is
-  ~30s emulated. Use `-nothrottle` for fast headless playback/extraction.
-- **Inline `python -c` with quotes/`%`/`$?` gets mangled** by this shell's wrapper
-  — write a module/script file and run `-m`.
-- **nohup wrapper PID ≠ Python trainer PID.** `nohup ... &` prints the *shell
-  wrapper* PID; the Python trainer is one more level down. Save the trainer PID
-  immediately after launch: `sleep 2; pgrep -n -x python > /tmp/dk_run8.pid`.
-  `kill $(cat /tmp/dk_run8.pid)` kills the trainer; MAME processes die ~5s later
-  (PR_SET_PDEATHSIG). Killing only the wrapper leaves the trainer + 16 MAMEs running.
-- **Obs space break:** models trained with obs (84,84,1) are INCOMPATIBLE with the
-  current env (84,84,2 since run 8). Load old models only with a patched env or
-  the old code version.
+Confirmed behaviorally by watching .inp recordings:
+1. Mario grabs hammer, runs LEFT past x=53 (the climb ladder), and farms hammer
+   kills at the left wall.
+2. Stands at the left wall until hammer expires, then dies to a barrel.
+3. He physically passes through the ladder location every episode but doesn't stop.
 
-## 16. File map
+The value function needs experience of the path above the wall to assign credit.
+Possible paths forward:
+- 70% barrel-free (run 18): let agent solidly learn the route without threat,
+  then gradually reintroduce barrels.
+- Raise girder milestone rewards further so even one crossing attempt on a
+  barrel-free episode is worth far more than a farming episode.
+- Recurrent policy (LSTM) for longer-horizon barrel-grouping strategy.
+
+---
+
+## 14. Gotchas (already bit us)
+
+- **Kill MAME**: `pkill -x mame`. **Never** `pkill -f 'mame dkong'` — matches
+  your shell and kills it.
+- **nohup PID**: `nohup ... &` prints the shell wrapper PID. The Python trainer
+  is `pgrep -n -f dkong_ai.train`. `kill <trainer_pid>` → MAME processes die
+  ~5s later (PR_SET_PDEATHSIG). Killing only the wrapper orphans 16 MAMEs.
+- **Throughput is GPU-bound** during PPO (not MAME emulation). 16 envs ~600–900
+  fps on RTX 4080 SUPER.
+- **Obs space breaks warm-start**: models from a different RAM dim or image shape
+  cannot be loaded. RAM changed: run 14 (26→44 initially, then 44, then 50).
+  Stack changed: runs 15+ use stack=8. Always specify `--stack 8` for runs 15+.
+- **Curriculum metric confound**: with `_p_curric>0`, `height_mean`/`height_best`
+  include curriculum-start episodes. Only `clear_rate` + bottom-up eval are clean.
+- **Bottom-up eval**: set `DonkeyKongEnv.P_NO_BARRELS = 0.0` and `base._p_curric = 0.0`
+  in the eval script. The training class default is 0.15.
+- **Recording + state loads don't mix**: `record=True` uses intro/soft-reset.
+  `record=False` uses save-state load (fast). A load isn't an input event → breaks
+  `.inp` playback.
+- **Stream framing**: `_rxbuf` keeps bytes that over-read from the handshake into
+  the first obs frame. Don't remove it — causes intermittent `IndexError` at
+  16-env launch.
+
+---
+
+## 15. File map
 
 `dkong_ai/`:
-- `mame_env.py` — Gymnasium env: MAME launch, socket protocol, reset/intro/
-  save-state/curriculum, reward (`_reward`), obs preprocessing, self-recovery.
-- `memory_map.py` — RAM addresses + score decode.
-- `train.py` — PPO training, `ClimbMetricsCallback` (logs `climb/*`),
-  checkpointing (per-run dir, every 500k steps), clean shutdown, `--init-from`,
-  `--ent-coef`, `--n-envs`, `--timesteps`, `--save`.
-- `eval.py` — run a model, print reward/height/score/cleared, record a .inp.
-- `diag.py` — death/peak-position diagnostic.
-- `extract_bc.py` / `train_bc.py` — behavioral cloning pipeline.
-- `analyze_ladders.py` — build the route corridor from a trajectory log.
-- `probe.py` / `smoke.py` — discovery (ports/screen) / end-to-end env sanity.
+- `mame_env.py` — env: MAME launch, socket bridge, obs build, reward, curriculum.
+- `memory_map.py` — all confirmed RAM addresses + score decode.
+- `dk_policy.py` — `DkFeaturesExtractor` (CNN+RAM MLP) + `DkFrameStackWrapper`.
+- `train.py` — PPO training. Flags: `--n-envs`, `--stack`, `--gamma`, `--ent-coef`,
+  `--init-from`, `--p-no-barrels`, `--save`, `--timesteps`.
+- `eval.py` — eval + record .inp. Flags: `--model`, `--stack`, `--port`, `--episodes`.
+- `diag.py` — death/peak position diagnostic.
+- `extract_bc.py` / `train_bc.py` — behavioral cloning pipeline (built run 5,
+  did not improve over pure RL).
+- `find_broken_ladders.py` — tilemap RAM analysis (one-shot tool, keep for reference).
 
 `scripts/`:
-- `bridge.lua` — the MAME-side lock-step bridge (autoboot script). Has EXTRACT
-  mode for BC.
-- `playback.sh <file.inp>` — watch a .inp windowed. `human_record.sh <name>` —
-  record human play to a .inp.
+- `bridge.lua` — MAME lock-step bridge. Supports EXTRACT mode (BC), barrel
+  freeze (0xF8/0xF7), curriculum loads (0xE0+i).
+- `playback.sh` — watch a .inp windowed.
+- `human_record.sh` — record human play.
 - `make_curriculum.lua` — snapshot curriculum states from a demo replay.
-- `ladder_extract.lua`, `playback_log.lua` — read-only loggers for playback.
 
-Root: `run_mame.sh` (windowed MAME + cheatfind plugin for RAM work).
-`artifacts/` — models (`*.zip`), `checkpoints/<run>/`, `recordings/` (.inp),
-`states/dkong/` (save-states), `expert_corridor.json`, `bc_data.npz`.
-`demos/` — drop expert `.inp` files here. `logs/` — tensorboard + per-port logs.
+`artifacts/`:
+- `checkpoints/<run>/` — PPO checkpoints every 500k steps.
+- `expert_corridor.json` — height→x route corridor from expert demo.
+- `states/dkong/curric_*.sta` — MAME save-states for curriculum.
 
-## 17. Gameplay facts (from the user, a DK expert)
-
-- The **first barrel becomes the fireball** — don't camp at spawn; move right a
-  little to start.
-- **Holding a direction while jumping** enlarges the barrel-jump scan, so you
-  reliably score the +100 (a plain jump often scores nothing). The action set
-  includes jump+L / jump+R for this reason.
-- The barrel board's ladders **alternate sides** (the route zig-zags); the
-  2nd-girder up-ladder is on the **left** — the spot the agent won't go to.
-
-## 18. Note on "memory"
-
-This file replaces the original assistant's chat history + private memory store,
-which do not transfer to the new Claude plan. If you (a future model/human)
-continue this: read §0, §8, §12, §13 first. The pipeline is solid and the problem
-is well-characterized — what's left is cracking the one left-traverse, most
-likely via wall-placed curriculum (§12 #1) and/or better demonstration data.
+`demos/dkong.inp` — expert demo (MAME 0.241, plays back faithfully on 0.264).

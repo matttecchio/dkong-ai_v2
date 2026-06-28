@@ -225,15 +225,16 @@ class DonkeyKongEnv(gym.Env):
                 for dy in (-1, 0, 1):
                     for dx in (-1, 0, 1):
                         threat[max(0, min(83, cy+dy)), max(0, min(83, cx+dx)), 0] = 180
-            if state.get("fireball_st", 0):
-                fx = state.get("fireball_x", 0)
-                fy = state.get("fireball_y", 0)
-                if fx and fy:
-                    cx = int(round(fx * sx))
-                    cy = int(round(fy * sy))
-                    for dy in (-1, 0, 1):
-                        for dx in (-1, 0, 1):
-                            threat[max(0, min(83, cy+dy)), max(0, min(83, cx+dx)), 0] = 120
+            for _fi in range(5):
+                if state.get(f"fireball{_fi}_st", 0):
+                    fx = state.get(f"fireball{_fi}_x", 0)
+                    fy = state.get(f"fireball{_fi}_y", 0)
+                    if fx and fy:
+                        cx = int(round(fx * sx))
+                        cy = int(round(fy * sy))
+                        for dy in (-1, 0, 1):
+                            for dx in (-1, 0, 1):
+                                threat[max(0, min(83, cy+dy)), max(0, min(83, cx+dx)), 0] = 120
             # Hammer pickup: bright dot (80) when available on the board.
             if not state.get("has_hammer", 0):
                 hx = state.get("hammer_x", 0)
@@ -335,7 +336,7 @@ class DonkeyKongEnv(gym.Env):
     # RAM feature layout (50 values, all in [-1, 1]):
     #   [mario_x/255, mario_y/240]                                              —  2
     #   [Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active] × 6        — 42
-    #   [Δx/128, Δy/120, active]                × 1 fireball                   —  3
+    #   [Δx/128, Δy/120, active]                × 5 fireballs                  — 15
     #   [Δx/128, Δy/120, has_hammer]            × 1 hammer pickup              —  3
     # vx/vy: per-step velocity (frameskip=4). Horiz max ~2px/frame → norm by 8;
     # vertical ~5px/frame falling → norm by 20.
@@ -343,7 +344,7 @@ class DonkeyKongEnv(gym.Env):
     # edge_dist: normalised [0,1] distance to the girder edge the barrel is heading
     # toward (0 = at edge / about to fall, 1 = far away). Paired with the fall-zone
     # image overlay so the agent can anticipate barrels appearing from above.
-    RAM_FEATURE_DIM = 50
+    RAM_FEATURE_DIM = 62
     LAD53_X = 53    # x of the critical left ladder (2nd→3rd girder)
 
     # Girder edge lookup: (barrel_y_lo, barrel_y_hi, x_left, x_right, landing_y).
@@ -390,13 +391,14 @@ class DonkeyKongEnv(gym.Env):
             else:
                 dx = dy = vx = vy = lad53 = edge_dist = 0.0
             feats.extend([dx, dy, vx, vy, lad53, edge_dist, float(st > 0)])
-        fst = state.get("fireball_st", 0)
-        if fst:
-            dx = float(np.clip((state.get("fireball_x", 0) - mx) / 128.0, -1, 1))
-            dy = float(np.clip((state.get("fireball_y", 0) - my) / 120.0, -1, 1))
-        else:
-            dx = dy = 0.0
-        feats.extend([dx, dy, float(fst > 0)])
+        for i in range(5):
+            fst = state.get(f"fireball{i}_st", 0)
+            if fst:
+                dx = float(np.clip((state.get(f"fireball{i}_x", 0) - mx) / 128.0, -1, 1))
+                dy = float(np.clip((state.get(f"fireball{i}_y", 0) - my) / 120.0, -1, 1))
+            else:
+                dx = dy = 0.0
+            feats.extend([dx, dy, float(fst > 0)])
         has_h = state.get("has_hammer", 0)
         if not has_h:
             dx = float(np.clip((state.get("hammer_x", 0) - mx) / 128.0, -1, 1))
@@ -423,6 +425,19 @@ class DonkeyKongEnv(gym.Env):
         (150, False, 130,  8.0),  # WP4: near the top (x > 130)
     )
 
+    # Girder-level milestones: fire once per episode when Mario first reaches
+    # each girder. Bonuses scale up with each level — making higher girders
+    # progressively more valuable than farming at the bottom.
+    # Heights: 2nd girder~44, 3rd~78, 4th~112, 5th~144, top~182.
+    GIRDER_MILESTONES = (
+        ( 44, 10.0),   # 2nd girder
+        ( 78, 30.0),   # 3rd girder
+        (112, 40.0),   # 4th girder
+        (144, 55.0),   # 5th girder
+        (182, 70.0),   # top / Pauline level
+    )
+    # Indices 100-104 in _wp_hit to avoid collision with WAYPOINTS (0-5).
+
     # Per-step ladder-climb bonus: fires every step Mario is actively ascending
     # the 2nd→3rd girder ladder (mario_y decreasing while at x≈53).
     # Rewards the ACT of climbing — not just approaching — and can't be farmed
@@ -444,6 +459,15 @@ class DonkeyKongEnv(gym.Env):
     # Applies only to the right side of the 2nd girder — the zone where the agent
     # farms barrels instead of traversing to the ladder. Traversing left is free.
     CAMP_H_LO, CAMP_H_HI, CAMP_X, CAMP_COST = 36, 65, 130, 0.01
+
+    # Bottom-floor corner penalty: per-step cost for being in the dead-end corners
+    # of the ground floor (height < 15). Left corner = past the left wall (x<30);
+    # right corner = past the ladder at x≈143 heading toward the right wall (x>190).
+    # The only useful position on the ground floor is near the right-side ladder up.
+    CORNER_H_MAX   = 15
+    CORNER_X_LEFT  = 30
+    CORNER_X_RIGHT = 190
+    CORNER_COST    = 0.03
 
     # Score-gating zone: block barrel-jump score reward only when camping
     # (height<65, x>115, AND not moving left). Traversing left through the zone
@@ -501,6 +525,10 @@ class DonkeyKongEnv(gym.Env):
                 if height > self._reward_max_h:
                     r += (height - self._reward_max_h) * 0.5
                     self._reward_max_h = height
+                # Per-step height bonus: small continuous reward for being higher.
+                # Gives the value function a gradient through the wall so the agent
+                # "knows" height 100 > height 54 without ever having cleared.
+                r += 0.003 * height / 100.0
                 # Zig-zag waypoint milestones: fire once per episode at each
                 # inflection point of the expert route. The first two pull
                 # specifically toward the 2nd-girder left traverse.
@@ -509,6 +537,14 @@ class DonkeyKongEnv(gym.Env):
                         if (s["mario_x"] < _xv) if _lt else (s["mario_x"] > _xv):
                             self._wp_hit.add(_i)
                             r += _bon
+                # Girder-level milestones: progressive bonuses for reaching each
+                # new girder — higher levels pay more, making climbing always
+                # worth more than staying at the bottom to farm.
+                for _j, (_hmin, _bon) in enumerate(self.GIRDER_MILESTONES):
+                    _key = 100 + _j
+                    if _key not in self._wp_hit and height >= _hmin:
+                        self._wp_hit.add(_key)
+                        r += _bon
                 # Anti-camping: small per-step cost for lingering on the right
                 # side of the 2nd girder (where the agent farms barrel-jumps
                 # instead of traversing left to the ladder). Traversing left
@@ -517,6 +553,13 @@ class DonkeyKongEnv(gym.Env):
                         and s["mario_x"] > self.CAMP_X
                         and not s.get("has_hammer", 0)):
                     r -= self.CAMP_COST
+                # Bottom-floor corner penalty: dead-end corners on the ground
+                # floor only (height<15). Left of x=30 or right of x=190
+                # (past the ladder) serve no purpose.
+                if (height < self.CORNER_H_MAX
+                        and (s["mario_x"] < self.CORNER_X_LEFT
+                             or s["mario_x"] > self.CORNER_X_RIGHT)):
+                    r -= self.CORNER_COST
                 # Dense traverse progress: +TRAVERSE_PROGRESS per pixel moved
                 # left on the 2nd girder. Gives gradient on every failed attempt
                 # (not just when the agent survives all the way to x=53).
@@ -560,6 +603,11 @@ class DonkeyKongEnv(gym.Env):
                     r += gained * 0.003         # +0.3 per 100-pt barrel jump
         if died:
             r -= 10.0
+            # Extra penalty when the agent never left the farming zone this episode.
+            # Uses max height reached (not death position) so a genuine crossing
+            # attempt that fails mid-route isn't punished — only pure farming deaths.
+            if self._reward_max_h < 40:
+                r -= 5.0
         if cleared:
             r += 100.0                          # reaching Pauline is the goal
         done = (died and s["lives"] == 0) or cleared
