@@ -70,6 +70,8 @@ def main():
                     help="warm-start policy weights from this saved model")
     ap.add_argument("--ent-coef", type=float, default=0.01,
                     help="PPO entropy coefficient (raise for more exploration)")
+    ap.add_argument("--lr", type=float, default=2.5e-4,
+                    help="PPO learning rate (default 2.5e-4; reduce for fine-tuning stable policy)")
     ap.add_argument("--gamma", type=float, default=0.999,
                     help="discount factor (0.999 makes clear-reward visible at episode start)")
     ap.add_argument("--p-no-barrels", type=float, default=None,
@@ -111,6 +113,7 @@ def main():
             model.verbose = 1
             model.ent_coef = args.ent_coef
             model.gamma = args.gamma
+            model.learning_rate = args.lr
         except ValueError as e:
             if "Observation spaces do not match" not in str(e):
                 raise
@@ -124,7 +127,7 @@ def main():
                 "MultiInputPolicy", venv,
                 policy_kwargs=policy_kwargs,
                 n_steps=512, batch_size=256, n_epochs=4,
-                learning_rate=2.5e-4, gamma=args.gamma, gae_lambda=0.95,
+                learning_rate=args.lr, gamma=args.gamma, gae_lambda=0.95,
                 clip_range=0.1, ent_coef=args.ent_coef,
                 tensorboard_log=args.logdir, verbose=1, device="cuda",
             )
@@ -146,7 +149,7 @@ def main():
             "MultiInputPolicy", venv,
             policy_kwargs=policy_kwargs,
             n_steps=512, batch_size=256, n_epochs=4,
-            learning_rate=2.5e-4, gamma=args.gamma, gae_lambda=0.95,
+            learning_rate=args.lr, gamma=args.gamma, gae_lambda=0.95,
             clip_range=0.1, ent_coef=args.ent_coef,
             tensorboard_log=args.logdir, verbose=1, device="cuda",
         )
