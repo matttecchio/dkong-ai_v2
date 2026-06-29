@@ -3,25 +3,26 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-06-28, after Run 18 launch.
+Last updated: 2026-06-29, after Run 21 (LSTM) launch.
 
 ---
 
 ## 0. TL;DR
 
 - **Full pipeline works and is robust**: MAME `dkong` driven from Python, a
-  Gymnasium env over a socket bridge, PPO (Stable-Baselines3) on pixels+RAM,
-  reward from RAM. 16 parallel envs, ~600–900 fps, runs 30M steps overnight
+  Gymnasium env over a socket bridge, PPO/RecurrentPPO (SB3 / SB3-Contrib) on
+  pixels+RAM, reward from RAM. 16 parallel envs, ~600–900 fps, runs overnight
   with 0 crashes.
 - The agent learns to jump barrels, score, and climb roughly half the board.
-  With barrel-free curriculum episodes it can clear the stage (~10% of training
-  episodes). **Bottom-up with live barrels: still 0 clears as of run 18.**
+  With barrel-free episodes it can clear the stage (~18% of training episodes
+  at run 19 peak). **Bottom-up with live barrels: still 0 clears after 21 runs.**
 - The persistent blocker: the agent reaches height ~53–54 (2nd girder) then
-  **either farms barrel jumps on the right, or grabs the hammer, runs left past
-  the ladder, waits at the left wall, and dies when the hammer expires.**
-- Run 18 is the current run: 70% barrel-free episodes, stronger girder-level
-  rewards, farming-death penalty, corner penalty, height bonus. The code is
-  also ready for run 19 (all 5 fireballs tracked, obs space change).
+  camps on the right side farming barrel jumps. The left traverse to the x=53
+  ladder requires barrel-timing memory beyond a frame stack. **Run 21 switches
+  to a recurrent policy (LSTM) to provide proper temporal memory.**
+- **lr_schedule bug fixed (2026-06-29)**: `PPO.load()` restores `lr_schedule`
+  from the checkpoint; setting `model.learning_rate` alone has no effect. Fix:
+  also set `model.lr_schedule = get_schedule_fn(args.lr)` after warm-start.
 
 ---
 
@@ -47,22 +48,26 @@ stages.
 ## 3. Quick start
 
 ```bash
-# Train (16 envs, 30M steps, warm-start optional)
-.venv/bin/python -m dkong_ai.train --rom-dir ./roms \
-    --save artifacts/ppo_dkong_runN --stack 8 --gamma 0.999
+# Train LSTM (run 21+) — fresh start, no warm-start from PPO
+nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
+    --save artifacts/ppo_dkong_run21 --stack 2 --gamma 0.999 \
+    --lstm --lstm-hidden 256 --n-envs 16 --timesteps 30000000 \
+    > /tmp/dk_run21.log 2>&1 &
 
 # Watch a trained model (records .inp, then plays windowed)
 .venv/bin/python -m dkong_ai.eval --rom-dir ./roms \
-    --model artifacts/checkpoints/ppo_dkong_runN/ppo_dkong_runN_Xsteps \
-    --port 5100 --stack 8
+    --model artifacts/checkpoints/ppo_dkong_run21/ppo_dkong_run21_Xsteps \
+    --port 5100 --stack 2
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
 # Bottom-up live-barrel eval (no curriculum, no barrel-free episodes)
-# Run inline Python: set P_NO_BARRELS=0.0, _p_curric=0.0, load model, 10 eps
+.venv/bin/python -m dkong_ai.eval --rom-dir ./roms \
+    --model <ckpt> --port 5100 --stack 2 \
+    --p-no-barrels 0 --p-curric 0 --episodes 10
 
 # Monitor running train
 grep -E "total_timesteps|ep_rew_mean|height_mean|height_best|clear_rate" \
-    /tmp/dk_run18.log | tail
+    /tmp/dk_run21.log | tail
 .venv/bin/tensorboard --logdir logs
 ```
 
@@ -88,9 +93,12 @@ MAME (dkong) --autoboot_script--> scripts/bridge.lua  (socket SERVER, lock-step)
 
 **Policy** (`dkong_ai/dk_policy.py`):
 - `DkFeaturesExtractor`: NatureCNN on image → 256 features; Linear MLP on RAM
-  → 64 features; concat → 320 features → PPO policy/value heads.
-- `DkFrameStackWrapper`: stacks `image` across N frames, passes `ram` from the
+  → 64 features; concat → 320 features → LSTM → RecurrentPPO policy/value heads.
+- `DkFrameStackWrapper`: stacks `image` across N frames (run 21: **stack=2** —
+  optical flow only; LSTM handles long-range temporal memory), passes `ram` from
   latest frame only.
+- **Run 21+**: `RecurrentPPO` (`sb3_contrib`) with `MultiInputLstmPolicy`.
+  LSTM hidden size 256, 1 layer, shared actor/critic. Stack reduced from 8→2.
 
 **Actions** (8): noop, L, R, U, D, jump, jump+L, jump+R.
 
@@ -220,30 +228,46 @@ Per non-death/non-clear step (when `mario_y` is valid):
 | 15 | + vx/vy/lad53 features, stack=8 | ~5.5M | ~54 | 0 | **vx/vy bug: always 0 (see §11)** |
 | 16 | **vx/vy bug fixed** + edge_dist + fall-zone overlay | ~6.5M | ~54 | 0 | wall unchanged |
 | 17 | + per-step height bonus | ~3M | ~54 | 0 | wall unchanged |
-| 18 | **70% barrel-free** + farming death penalty + corner penalty + girder milestones | **active** | TBD | TBD | **current run** |
+| 18 | **70% barrel-free** + farming death penalty + corner penalty + girder milestones | ~10M | ~54 | 0 | wall unchanged; 70% barrel-free didn't transfer |
+| 19 | episode timeout + hammer-wall penalty + WP1b=75, RAM 62 (5 fireballs) | 24.5M | ~54 | 0.18 peak | **best ever at 13.9M**; collapsed at 17M (lr=2.5e-4 too high); 18% clears = barrel-free only |
+| 20 | lr=5e-5 + P_NO_BARRELS=0.30, warm-start run19@14M | ~3M | ~54 | 0 | **lr_schedule bug**: lr was still 2.5e-4 (fixed in code); restarted; wall unchanged |
+| 21 | **LSTM (RecurrentPPO)**, stack=2, fresh start | **active** | TBD | TBD | **current run** |
 
 ---
 
-## 10. Run 18 — current run
+## 10. Run 21 — current run (LSTM)
 
-**PID**: 180275. **Log**: `/tmp/dk_run18.log`.
-**Save**: `artifacts/ppo_dkong_run18`. **Stack**: 8.
+**PID**: see `/tmp/dk_run21.pid`. **Log**: `/tmp/dk_run21.log`.
+**Save**: `artifacts/ppo_dkong_run21`. **Stack**: 2.
 
-Key parameters vs run 17:
-- `--p-no-barrels 0.70` — 70% of episodes barrel-free (was 0.15)
-- `--init-from artifacts/checkpoints/ppo_dkong_run17/ppo_dkong_run17_3000000_steps`
-- Farming death penalty: extra −5 if episode max height < 40 at death
-- Corner penalty: −0.03/step at bottom floor corners (height<15, x<30 or x>190)
-- Girder milestones: +10/30/40/55/70 on first reaching each girder
+**Why LSTM**: after 20 runs and ~300M+ steps, the wall at height 53–54 is an
+exploration failure, not a reward-shaping failure. The left traverse requires
+knowing whether a barrel passed the x=53 ladder column in the last 2–3 seconds.
+Our 8-frame stack gave ~0.5s of visual history — not enough. RecurrentPPO with
+an LSTM hidden state gives proper long-range temporal memory, letting the agent
+learn "barrel just passed, go now."
 
-**Plan**: let run to ~5M steps → bottom-up eval. If clear_rate rising:
-keep going. If still walled: reduce `--p-no-barrels` to 0.40 for run 19
-(gradually reintroduce barrels) and apply queued run-19 changes (all 5
-fireballs, RAM 50→62, fresh start).
+Key parameters:
+- `RecurrentPPO` + `MultiInputLstmPolicy` (sb3-contrib). `PPO` is gone.
+- `--stack 2` — optical flow only; LSTM handles temporal memory.
+- `--lstm-hidden 256` — LSTM hidden size matching CNN output.
+- `--p-no-barrels 0.30` — 30% barrel-free to maintain route gradient.
+- `--p-curric 0.15` — wall-zone curriculum (heights 35–52).
+- Fresh start (no warm-start possible: PPO → RecurrentPPO architecture change).
+- All reward fixes active: CORNER_COST=0.20, score gate unconditional in corner.
+
+**SUCCESS** = live-barrel bottom-up `height_mean > 54` or first live-barrel clear.
 
 ---
 
 ## 11. Critical bugs already fixed (don't reintroduce)
+
+### lr_schedule not overridden on warm-start (fixed 2026-06-29)
+`PPO.load()` restores `lr_schedule` (a callable) from the checkpoint.
+Setting `model.learning_rate = args.lr` updates only a dead attribute; the
+optimizer and logged lr remain at the checkpoint value.
+**Fix**: after warm-start, also set `model.lr_schedule = get_schedule_fn(args.lr)`.
+Applied in `train.py`.
 
 ### vx/vy always zero (fixed run 16)
 In `step()`, `self._prev = state` was assigned **before** `_preprocess(pix, state)`.
@@ -268,48 +292,51 @@ hiccup → MAME killed → `ConnectionError` crashed the whole `SubprocVecEnv`.
 
 ---
 
-## 12. Run 19 — queued changes (not yet launched)
+## 12. Reward summary (run 21)
 
-Requires fresh start (obs space change: RAM 50→62).
-
-- **All 5 fireball slots tracked** (currently only slot 0). `memory_map.py`
-  already updated: `fireball0..4_st/x/y`. `_build_ram_features` loops over 5.
-  Adds 12 features → RAM_FEATURE_DIM 50→62.
-- Corner penalty (already in code, active from run 18 onwards via reward).
-- Girder milestones (already in code).
-
-Launch command (after run 18 completes or is stopped):
-```bash
-nohup .venv/bin/python -m dkong_ai.train \
-  --rom-dir ./roms --timesteps 30000000 --n-envs 16 \
-  --save artifacts/ppo_dkong_run19 --logdir logs \
-  --gamma 0.999 --ent-coef 0.01 --stack 8 \
-  --p-no-barrels 0.40 \
-  > /tmp/dk_run19.log 2>&1 &
-```
-(Reduce `--p-no-barrels` from 0.70 to 0.40 — start reintroducing barrels.)
+| term | value | notes |
+|---|---|---|
+| Height milestone | +0.5 × new pixels | fires on NEW max height only |
+| Per-step height bonus | +0.003 × height/100 | continuous gradient |
+| Girder milestone | +10/30/40/55/70 | one-shot per episode per girder |
+| Waypoints (6) | +5/10/30/8/8/8 | zig-zag route; fire once per episode |
+| Traverse progress | +0.05/pixel left | height 36-65, x 53-143 |
+| Climb bonus | +0.30/step | ascending at x=43-68, height 40-100 |
+| Ladder idle cost | −0.05/step | climb zone but y unchanged |
+| Anti-camping | −0.01/step | height 36-65, x>130 |
+| Corner penalty | **−0.20/step** | height<15, x<30 or x>190 (raised from 0.03) |
+| Score | +0.003/pt | gated in camp zone; **unconditionally gated in right corner** |
+| Death | −10 | on lives decrement |
+| Farming death | −5 extra | episode max height < 40 at death |
+| Episode timeout | −15 | height<60 after 800 steps |
+| Hammer-wall penalty | −0.05/step | has_hammer, x<45, height>25 |
+| Clear | +100 | screen_id increment |
 
 ---
 
-## 13. Why the wall persists (diagnosis)
+## 13. Why the wall persists (diagnosis) + LSTM rationale
 
 The agent has **never traversed from height 54 to the top with live barrels.**
-Without that experience, the value function at the wall state cannot represent
-"there is a +300 reward path above me." It only knows farming ≈ +65/ep.
 
-Confirmed behaviorally by watching .inp recordings:
-1. Mario grabs hammer, runs LEFT past x=53 (the climb ladder), and farms hammer
-   kills at the left wall.
-2. Stands at the left wall until hammer expires, then dies to a barrel.
+Confirmed behaviorally (watching .inp):
+1. Mario grabs hammer, runs LEFT past x=53 (the climb ladder), farms hammer
+   kills at the left wall, then dies when hammer expires.
+2. Even without the hammer, he camps the right side of the 2nd girder jumping
+   barrels, never attempting the left traverse.
 3. He physically passes through the ladder location every episode but doesn't stop.
 
-The value function needs experience of the path above the wall to assign credit.
-Possible paths forward:
-- 70% barrel-free (run 18): let agent solidly learn the route without threat,
-  then gradually reintroduce barrels.
-- Raise girder milestone rewards further so even one crossing attempt on a
-  barrel-free episode is worth far more than a farming episode.
-- Recurrent policy (LSTM) for longer-horizon barrel-grouping strategy.
+**Root cause confirmed**: the left traverse (x=143→53) requires knowing whether
+a barrel passed the x=53 region in the last 2–3 seconds ("is it safe to go
+now?"). Our 8-frame stack gave ~0.5s of visual history — not enough. This is a
+**temporal memory problem**, not a reward-shaping problem.
+
+All reward approaches attempted and failed: height milestones, corridor bonuses,
+waypoints, score gating, camping penalties, barrel-free training, curriculum.
+After 20 runs and ~300M+ steps, only the LSTM architecture change remains untried.
+
+**DAgger (expert demo injection) was considered and rejected**: barrel positions
+differ between the demo and live game, so expert actions at "jump now" moments
+would be conditioned on barrels that may not exist → teaches nonsense.
 
 ---
 
@@ -344,9 +371,11 @@ Possible paths forward:
 - `mame_env.py` — env: MAME launch, socket bridge, obs build, reward, curriculum.
 - `memory_map.py` — all confirmed RAM addresses + score decode.
 - `dk_policy.py` — `DkFeaturesExtractor` (CNN+RAM MLP) + `DkFrameStackWrapper`.
-- `train.py` — PPO training. Flags: `--n-envs`, `--stack`, `--gamma`, `--ent-coef`,
-  `--init-from`, `--p-no-barrels`, `--save`, `--timesteps`.
-- `eval.py` — eval + record .inp. Flags: `--model`, `--stack`, `--port`, `--episodes`.
+- `train.py` — PPO/RecurrentPPO training. Flags: `--n-envs`, `--stack`,
+  `--gamma`, `--ent-coef`, `--init-from`, `--p-no-barrels`, `--save`,
+  `--timesteps`, `--lr`, `--lstm`, `--lstm-hidden`.
+- `eval.py` — eval + record .inp. Flags: `--model`, `--stack`, `--port`,
+  `--episodes`, `--p-no-barrels`, `--p-curric`.
 - `diag.py` — death/peak position diagnostic.
 - `extract_bc.py` / `train_bc.py` — behavioral cloning pipeline (built run 5,
   did not improve over pure RL).

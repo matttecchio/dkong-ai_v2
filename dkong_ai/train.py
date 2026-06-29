@@ -13,6 +13,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
+from stable_baselines3.common.utils import get_schedule_fn
 
 from .mame_env import DonkeyKongEnv
 from .dk_policy import DkFeaturesExtractor, DkFrameStackWrapper
@@ -114,6 +115,7 @@ def main():
             model.ent_coef = args.ent_coef
             model.gamma = args.gamma
             model.learning_rate = args.lr
+            model.lr_schedule = get_schedule_fn(args.lr)
         except ValueError as e:
             if "Observation spaces do not match" not in str(e):
                 raise

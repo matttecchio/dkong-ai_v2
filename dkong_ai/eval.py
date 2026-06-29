@@ -21,14 +21,20 @@ def main():
     ap.add_argument("--rom-dir", required=True)
     ap.add_argument("--model", default="artifacts/ppo_dkong")
     ap.add_argument("--episodes", type=int, default=5)
-    ap.add_argument("--stack", type=int, default=4)
+    ap.add_argument("--stack", type=int, default=8)
     ap.add_argument("--deterministic", action="store_true")
     ap.add_argument("--port", type=int, default=5100,
                     help="keep clear of a running training (it uses 5000+)")
+    ap.add_argument("--p-no-barrels", type=float, default=None)
+    ap.add_argument("--p-curric", type=float, default=None)
     args = ap.parse_args()
 
     # record=True -> clean playable .inp; own port so it won't clash with training.
     base = DonkeyKongEnv(rom_dir=args.rom_dir, port=args.port, record=True)
+    if args.p_no_barrels is not None:
+        base.P_NO_BARRELS = args.p_no_barrels
+    if args.p_curric is not None:
+        base._p_curric = args.p_curric
     venv = DkFrameStackWrapper(DummyVecEnv([lambda: base]), n_stack=args.stack)
     model = PPO.load(args.model, device="cuda")
 

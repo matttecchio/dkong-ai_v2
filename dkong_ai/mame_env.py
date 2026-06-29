@@ -467,7 +467,7 @@ class DonkeyKongEnv(gym.Env):
     CORNER_H_MAX   = 15
     CORNER_X_LEFT  = 30
     CORNER_X_RIGHT = 190
-    CORNER_COST    = 0.03
+    CORNER_COST    = 0.20
 
     # Score-gating zone: block barrel-jump score reward only when camping
     # (height<65, x>115, AND not moving left). Traversing left through the zone
@@ -609,10 +609,13 @@ class DonkeyKongEnv(gym.Env):
             # side of the 2nd girder — the camping penalty is no longer offset.
             if s["score"] is not None and p["score"] is not None:
                 gained = s["score"] - p["score"]
-                # Gate: block score only when camping (low + right side + not
-                # moving left). Moving left through the zone is traversal, not
-                # camping — allow barrel-jump score to reward jumping en route.
-                in_gate = (s["mario_y"] > self.BASE_Y - self.SCORE_GATE_H
+                # Gate: block score when camping (low + right side + not moving
+                # left). Also unconditionally block in the right corner (x>190,
+                # height<15) — no barrel-jump reward for the dead-end wall.
+                in_corner = (height < self.CORNER_H_MAX
+                             and s["mario_x"] > self.CORNER_X_RIGHT)
+                in_gate = in_corner or (
+                           s["mario_y"] > self.BASE_Y - self.SCORE_GATE_H
                            and s["mario_x"] > self.SCORE_GATE_X
                            and s["mario_x"] >= p["mario_x"])
                 if 0 < gained <= 2000 and not in_gate:
