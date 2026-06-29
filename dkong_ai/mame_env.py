@@ -612,10 +612,12 @@ class DonkeyKongEnv(gym.Env):
                 # Gate: block score when camping (low + right side + not moving
                 # left). Also unconditionally block in the right corner (x>190,
                 # height<15) — no barrel-jump reward for the dead-end wall.
-                in_corner = (height < self.CORNER_H_MAX
+                in_corner = (s["mario_y"] is not None
+                             and s["mario_y"] > self.BASE_Y - self.CORNER_H_MAX
                              and s["mario_x"] > self.CORNER_X_RIGHT)
                 in_gate = in_corner or (
-                           s["mario_y"] > self.BASE_Y - self.SCORE_GATE_H
+                           s["mario_y"] is not None
+                           and s["mario_y"] > self.BASE_Y - self.SCORE_GATE_H
                            and s["mario_x"] > self.SCORE_GATE_X
                            and s["mario_x"] >= p["mario_x"])
                 if 0 < gained <= 2000 and not in_gate:
@@ -626,7 +628,8 @@ class DonkeyKongEnv(gym.Env):
                 # ground-floor corner penalty isn't double-counted.
                 if (s.get("has_hammer", 0)
                         and s["mario_x"] < self.HAMMER_WALL_X
-                        and height > self.HAMMER_WALL_H_LO):
+                        and s["mario_y"] is not None
+                        and s["mario_y"] < self.BASE_Y - self.HAMMER_WALL_H_LO):
                     r -= self.HAMMER_WALL_COST
         if died:
             r -= 10.0

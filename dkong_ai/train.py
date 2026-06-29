@@ -1,10 +1,7 @@
-"""Train a PPO agent on Donkey Kong via the MAME bridge.
+"""Train a PPO/RecurrentPPO agent on Donkey Kong via the MAME bridge.
 
     python -m dkong_ai.train --rom-dir /path/to/roms --timesteps 2000000
-
-Starts simple (single env, frame-stacked CNN policy). Scale to vectorized
-parallel MAME instances (SubprocVecEnv on distinct ports) once the single-env
-loop is confirmed working end-to-end.
+    python -m dkong_ai.train --rom-dir /path/to/roms --lstm --stack 2  # LSTM run
 """
 import argparse
 import signal
@@ -77,6 +74,13 @@ def main():
                     help="discount factor (0.999 makes clear-reward visible at episode start)")
     ap.add_argument("--p-no-barrels", type=float, default=None,
                     help="fraction of episodes with barrels disabled (default: env class value 0.15)")
+    ap.add_argument("--lstm", action="store_true",
+                    help="use RecurrentPPO (LSTM) instead of PPO")
+    ap.add_argument("--lstm-hidden", type=int, default=256,
+                    help="LSTM hidden size (default 256)")
+    ap.add_argument("--transfer-features-from", default=None,
+                    help="copy features_extractor weights (CNN+RAM MLP) from this "
+                         "checkpoint into a fresh model; rest is randomly initialised")
     args = ap.parse_args()
 
     if args.p_no_barrels is not None:
@@ -102,15 +106,31 @@ def main():
                               save_path=os.path.join("artifacts/checkpoints", run_name),
                               name_prefix=run_name)
     callbacks = [ckpt, ClimbMetricsCallback()]
-    policy_kwargs = {
-        "features_extractor_class":  DkFeaturesExtractor,
-        "features_extractor_kwargs": {},
-    }
+    if args.lstm:
+        from sb3_contrib import RecurrentPPO
+        AlgoClass   = RecurrentPPO
+        policy_name = "MultiInputLstmPolicy"
+        policy_kwargs = {
+            "features_extractor_class":  DkFeaturesExtractor,
+            "features_extractor_kwargs": {},
+            "lstm_hidden_size": args.lstm_hidden,
+            "n_lstm_layers": 1,
+            "shared_lstm": True,
+            "enable_critic_lstm": False,
+        }
+    else:
+        AlgoClass   = PPO
+        policy_name = "MultiInputPolicy"
+        policy_kwargs = {
+            "features_extractor_class":  DkFeaturesExtractor,
+            "features_extractor_kwargs": {},
+        }
+
     if args.init_from:
         print(f"warm-starting from {args.init_from}")
         try:
-            model = PPO.load(args.init_from, env=venv, device="cuda",
-                             tensorboard_log=args.logdir)
+            model = AlgoClass.load(args.init_from, env=venv, device="cuda",
+                                   tensorboard_log=args.logdir)
             model.verbose = 1
             model.ent_coef = args.ent_coef
             model.gamma = args.gamma
@@ -119,27 +139,19 @@ def main():
         except ValueError as e:
             if "Observation spaces do not match" not in str(e):
                 raise
-            # Obs space changed (e.g. RAM dim increased). Do a partial load:
-            # create a fresh model with the correct obs space, then copy all
-            # weights from the checkpoint that still have matching shapes.
-            # CNN backbone + policy/value heads transfer cleanly; only the RAM
-            # MLP first layer (wrong input dim) is skipped and stays random.
+            # Obs space changed. Partial load: copy matching-shape layers only.
             print(f"obs space mismatch — partial load (CNN+heads preserved, RAM MLP reinit)")
-            model = PPO(
-                "MultiInputPolicy", venv,
+            model = AlgoClass(
+                policy_name, venv,
                 policy_kwargs=policy_kwargs,
                 n_steps=512, batch_size=256, n_epochs=4,
                 learning_rate=args.lr, gamma=args.gamma, gae_lambda=0.95,
                 clip_range=0.1, ent_coef=args.ent_coef,
                 tensorboard_log=args.logdir, verbose=1, device="cuda",
             )
-            # Load checkpoint without env= so SB3 skips obs space validation.
-            old = PPO.load(args.init_from, device="cuda")
+            old = AlgoClass.load(args.init_from, device="cuda")
             old_sd = old.policy.state_dict()
             new_sd = model.policy.state_dict()
-            # strict=False still errors on shape mismatches — filter manually:
-            # only copy layers whose shapes match exactly (CNN, policy/value
-            # heads transfer; RAM MLP first layer is reinitialised randomly).
             filtered = {k: v for k, v in old_sd.items()
                         if k in new_sd and v.shape == new_sd[k].shape}
             skipped = [k for k in old_sd if k not in filtered]
@@ -147,14 +159,27 @@ def main():
             print(f"  partial load: {len(filtered)}/{len(old_sd)} layers copied; "
                   f"skipped (shape mismatch): {skipped}")
     else:
-        model = PPO(
-            "MultiInputPolicy", venv,
+        model = AlgoClass(
+            policy_name, venv,
             policy_kwargs=policy_kwargs,
             n_steps=512, batch_size=256, n_epochs=4,
             learning_rate=args.lr, gamma=args.gamma, gae_lambda=0.95,
             clip_range=0.1, ent_coef=args.ent_coef,
             tensorboard_log=args.logdir, verbose=1, device="cuda",
         )
+        if args.transfer_features_from:
+            # Copy features_extractor weights (CNN + RAM MLP) from any saved
+            # model into the fresh model. Everything else (LSTM, heads) stays
+            # randomly initialised. Works across PPO→RecurrentPPO changes.
+            print(f"transferring features_extractor weights from {args.transfer_features_from}")
+            src = PPO.load(args.transfer_features_from, device="cuda")
+            src_sd = src.policy.state_dict()
+            tgt_sd = model.policy.state_dict()
+            transferred = {k: v for k, v in src_sd.items()
+                           if k.startswith("features_extractor.")
+                           and k in tgt_sd and v.shape == tgt_sd[k].shape}
+            model.policy.load_state_dict(transferred, strict=False)
+            print(f"  transferred {len(transferred)} features_extractor layers")
     try:
         model.learn(total_timesteps=args.timesteps, progress_bar=False,
                     callback=callbacks)

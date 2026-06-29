@@ -3,7 +3,7 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-06-29, after Run 21 (LSTM) launch.
+Last updated: 2026-06-30, Run 21 (LSTM) active.
 
 ---
 
@@ -48,10 +48,12 @@ stages.
 ## 3. Quick start
 
 ```bash
-# Train LSTM (run 21+) — fresh start, no warm-start from PPO
+# Train LSTM (run 21+) — transfer CNN/RAM weights from best PPO ckpt, no barrel-free
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
     --save artifacts/ppo_dkong_run21 --stack 2 --gamma 0.999 \
-    --lstm --lstm-hidden 256 --n-envs 16 --timesteps 30000000 \
+    --lstm --lstm-hidden 256 --n-envs 16 --timesteps 100000000 \
+    --p-no-barrels 0.0 \
+    --transfer-features-from artifacts/checkpoints/ppo_dkong_run19/ppo_dkong_run19_14000000_steps \
     > /tmp/dk_run21.log 2>&1 &
 
 # Watch a trained model (records .inp, then plays windowed)
@@ -253,8 +255,17 @@ Key parameters:
 - `--lstm-hidden 256` — LSTM hidden size matching CNN output.
 - `--p-no-barrels 0.30` — 30% barrel-free to maintain route gradient.
 - `--p-curric 0.15` — wall-zone curriculum (heights 35–52).
-- Fresh start (no warm-start possible: PPO → RecurrentPPO architecture change).
+- **Feature transfer**: `--transfer-features-from run19_14M` copies CNN + RAM MLP
+  weights (11 layers) into the fresh LSTM model. LSTM and policy/value heads are
+  randomly initialised. This preserves 300M+ steps of visual/RAM feature learning
+  while giving the LSTM a clean slate for temporal reasoning.
 - All reward fixes active: CORNER_COST=0.20, score gate unconditional in corner.
+
+**Bug fixed (2026-06-30)**: `in_corner` and `hammer_wall` checks in `_reward`
+referenced `height` which is only defined inside the `if s["mario_y"]:` guard.
+When mario_y is zero/None (off-screen sentinel), these raised `UnboundLocalError`
+and crashed the env workers. Fixed by using `s["mario_y"]` directly with
+`BASE_Y - CORNER_H_MAX` arithmetic instead of the derived `height` variable.
 
 **SUCCESS** = live-barrel bottom-up `height_mean > 54` or first live-barrel clear.
 
@@ -373,7 +384,7 @@ would be conditioned on barrels that may not exist → teaches nonsense.
 - `dk_policy.py` — `DkFeaturesExtractor` (CNN+RAM MLP) + `DkFrameStackWrapper`.
 - `train.py` — PPO/RecurrentPPO training. Flags: `--n-envs`, `--stack`,
   `--gamma`, `--ent-coef`, `--init-from`, `--p-no-barrels`, `--save`,
-  `--timesteps`, `--lr`, `--lstm`, `--lstm-hidden`.
+  `--timesteps`, `--lr`, `--lstm`, `--lstm-hidden`, `--transfer-features-from`.
 - `eval.py` — eval + record .inp. Flags: `--model`, `--stack`, `--port`,
   `--episodes`, `--p-no-barrels`, `--p-curric`.
 - `diag.py` — death/peak position diagnostic.
