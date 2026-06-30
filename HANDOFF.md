@@ -3,7 +3,7 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-06-30, Run 21 (LSTM) stopped at 30.4M steps — see §10.
+Last updated: 2026-06-30, Run 22 (LSTM, lr=5e-5, no curriculum) active.
 
 ---
 
@@ -18,8 +18,8 @@ Last updated: 2026-06-30, Run 21 (LSTM) stopped at 30.4M steps — see §10.
   at run 19 peak). **Bottom-up with live barrels: still 0 clears after 21 runs.**
 - The persistent blocker: the agent reaches height ~53–54 (2nd girder) then
   camps on the right side farming barrel jumps. The left traverse to the x=53
-  ladder requires barrel-timing memory beyond a frame stack. **Run 21 switches
-  to a recurrent policy (LSTM) to provide proper temporal memory.**
+  ladder requires barrel-timing memory beyond a frame stack. **Runs 21–22 use
+  RecurrentPPO (LSTM) to provide proper temporal memory. Run 22 is active.**
 - **lr_schedule bug fixed (2026-06-29)**: `PPO.load()` restores `lr_schedule`
   from the checkpoint; setting `model.learning_rate` alone has no effect. Fix:
   also set `model.lr_schedule = get_schedule_fn(args.lr)` after warm-start.
@@ -48,17 +48,17 @@ stages.
 ## 3. Quick start
 
 ```bash
-# Train LSTM (run 21+) — transfer CNN/RAM weights from best PPO ckpt, no barrel-free
+# Train LSTM (run 22) — fresh LSTM, CNN/RAM from run21_last, no curriculum, lr=5e-5
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
-    --save artifacts/ppo_dkong_run21 --stack 2 --gamma 0.999 \
+    --save artifacts/ppo_dkong_run22 --stack 2 --gamma 0.999 \
     --lstm --lstm-hidden 256 --n-envs 16 --timesteps 100000000 \
-    --p-no-barrels 0.0 \
-    --transfer-features-from artifacts/checkpoints/ppo_dkong_run19/ppo_dkong_run19_14000000_steps \
-    > /tmp/dk_run21.log 2>&1 &
+    --p-no-barrels 0.0 --p-curric 0.0 --lr 5e-5 \
+    --transfer-features-from artifacts/ppo_dkong_run21_last \
+    > /tmp/dk_run22.log 2>&1 &
 
 # Watch a trained model (records .inp, then plays windowed)
 .venv/bin/python -m dkong_ai.eval --rom-dir ./roms \
-    --model artifacts/checkpoints/ppo_dkong_run21/ppo_dkong_run21_Xsteps \
+    --model artifacts/checkpoints/ppo_dkong_run22/ppo_dkong_run22_Xsteps \
     --port 5100 --stack 2
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
@@ -69,8 +69,12 @@ nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
 
 # Monitor running train
 grep -E "total_timesteps|ep_rew_mean|height_mean|height_best|clear_rate" \
-    /tmp/dk_run21.log | tail
-.venv/bin/tensorboard --logdir logs
+    /tmp/dk_run22.log | tail
+
+# TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
+nohup .venv/bin/tensorboard --logdir logs --port 6006 --host 0.0.0.0 \
+    > /tmp/tensorboard.log 2>&1 &
+# Then open http://localhost:6006 in Windows browser (run 22 = RecurrentPPO_5)
 ```
 
 ⚠️ Eval/diag always use `--port 5100` to avoid colliding with training (5000+).
@@ -234,10 +238,32 @@ Per non-death/non-clear step (when `mario_y` is valid):
 | 19 | episode timeout + hammer-wall penalty + WP1b=75, RAM 62 (5 fireballs) | 24.5M | ~54 | 0.18 peak | **best ever at 13.9M**; collapsed at 17M (lr=2.5e-4 too high); 18% clears = barrel-free only |
 | 20 | lr=5e-5 + P_NO_BARRELS=0.30, warm-start run19@14M | ~3M | ~54 | 0 | **lr_schedule bug**: lr was still 2.5e-4 (fixed in code); restarted; wall unchanged |
 | 21 | **LSTM (RecurrentPPO)**, stack=2, no barrel-free, CNN weights from run19@14M | 30.4M | 16–28 (eval broken) | 0 | stopped: `clip_fraction=0.34` (lr too high); restart at lr=5e-5 recommended |
+| 22 | LSTM, lr=5e-5, **no curriculum**, CNN/RAM from run21_last (fresh LSTM weights) | **active** | TBD | TBD | **current run** |
 
 ---
 
-## 10. Run 21 — stopped at 30.4M steps
+## 10. Run 22 — current run (LSTM, lr=5e-5, no curriculum)
+
+**PID**: `cat /tmp/dk_run22.pid`. **Log**: `/tmp/dk_run22.log`.
+**Save**: `artifacts/ppo_dkong_run22`. **Stack**: 2.
+**TensorBoard**: `RecurrentPPO_5` entry in TensorBoard (`--host 0.0.0.0` for WSL2 access).
+
+**Key changes from run 21:**
+- `--lr 5e-5` (was 2.5e-4 — too high, causing clip_fraction=0.34 and thrashing)
+- `--p-curric 0.0` — no curriculum starts. Every episode begins from the bottom.
+  Rationale: LSTM's advantage is temporal memory built up during the episode.
+  Curriculum starts deprive it of that context — the LSTM arrives at the traverse
+  zone with no barrel history, defeating the whole purpose of adding recurrence.
+- `--transfer-features-from artifacts/ppo_dkong_run21_last` — CNN + RAM MLP weights
+  from run21's 30.4M-step checkpoint (12 layers transferred). LSTM and policy/value
+  heads are freshly initialised. This gives better features than the run19 source
+  used in run 21, and correctly discards the thrashed LSTM weights.
+
+**SUCCESS** = live-barrel bottom-up `height_mean > 54` or first live-barrel clear.
+
+---
+
+## 11. Run 21 — stopped at 30.4M steps
 
 **Log**: `/tmp/dk_run21.log`. **Recovery checkpoint**: `artifacts/ppo_dkong_run21_last.zip`.
 **Checkpoints**: `artifacts/checkpoints/ppo_dkong_run21/` (every 500k steps, up to 30M).
@@ -269,21 +295,11 @@ this LSTM model.
 - explained_variance: 0.957
 - fps: 511
 
-**Next run (run 22)**: warm-start from `ppo_dkong_run21_last.zip` at `lr=5e-5`.
-```bash
-nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
-    --save artifacts/ppo_dkong_run22 --stack 2 --gamma 0.999 \
-    --lstm --lstm-hidden 256 --n-envs 16 --timesteps 100000000 \
-    --p-no-barrels 0.0 --lr 5e-5 \
-    --init-from artifacts/ppo_dkong_run21_last \
-    > /tmp/dk_run22.log 2>&1 &
-```
-
 **SUCCESS** = live-barrel bottom-up `height_mean > 54` or first live-barrel clear.
 
 ---
 
-## 11. Critical bugs already fixed (don't reintroduce)
+## 12. Critical bugs already fixed (don't reintroduce)
 
 ### lr_schedule not overridden on warm-start (fixed 2026-06-29)
 `PPO.load()` restores `lr_schedule` (a callable) from the checkpoint.
@@ -415,8 +431,9 @@ would be conditioned on barrels that may not exist → teaches nonsense.
 - `memory_map.py` — all confirmed RAM addresses + score decode.
 - `dk_policy.py` — `DkFeaturesExtractor` (CNN+RAM MLP) + `DkFrameStackWrapper`.
 - `train.py` — PPO/RecurrentPPO training. Flags: `--n-envs`, `--stack`,
-  `--gamma`, `--ent-coef`, `--init-from`, `--p-no-barrels`, `--save`,
-  `--timesteps`, `--lr`, `--lstm`, `--lstm-hidden`, `--transfer-features-from`.
+  `--gamma`, `--ent-coef`, `--init-from`, `--p-no-barrels`, `--p-curric`,
+  `--save`, `--timesteps`, `--lr`, `--lstm`, `--lstm-hidden`,
+  `--transfer-features-from`.
 - `eval.py` — eval + record .inp. Flags: `--model`, `--stack`, `--port`,
   `--episodes`, `--p-no-barrels`, `--p-curric`.
 - `diag.py` — death/peak position diagnostic.

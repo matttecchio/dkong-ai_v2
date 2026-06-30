@@ -74,6 +74,8 @@ def main():
                     help="discount factor (0.999 makes clear-reward visible at episode start)")
     ap.add_argument("--p-no-barrels", type=float, default=None,
                     help="fraction of episodes with barrels disabled (default: env class value 0.15)")
+    ap.add_argument("--p-curric", type=float, default=None,
+                    help="fraction of episodes using curriculum start states (default: env class value 0.15)")
     ap.add_argument("--lstm", action="store_true",
                     help="use RecurrentPPO (LSTM) instead of PPO")
     ap.add_argument("--lstm-hidden", type=int, default=256,
@@ -85,6 +87,8 @@ def main():
 
     if args.p_no_barrels is not None:
         DonkeyKongEnv.P_NO_BARRELS = args.p_no_barrels
+    if args.p_curric is not None:
+        DonkeyKongEnv._p_curric = args.p_curric
 
     # One MAME instance per env, each on its own socket port.
     thunks = [make_env(args.rom_dir, args.base_port + i, args.frameskip)
@@ -170,9 +174,13 @@ def main():
         if args.transfer_features_from:
             # Copy features_extractor weights (CNN + RAM MLP) from any saved
             # model into the fresh model. Everything else (LSTM, heads) stays
-            # randomly initialised. Works across PPO→RecurrentPPO changes.
+            # randomly initialised. Works across PPO→RecurrentPPO changes and
+            # from RecurrentPPO→RecurrentPPO (tries RecurrentPPO first).
             print(f"transferring features_extractor weights from {args.transfer_features_from}")
-            src = PPO.load(args.transfer_features_from, device="cuda")
+            try:
+                src = AlgoClass.load(args.transfer_features_from, device="cuda")
+            except Exception:
+                src = PPO.load(args.transfer_features_from, device="cuda")
             src_sd = src.policy.state_dict()
             tgt_sd = model.policy.state_dict()
             transferred = {k: v for k, v in src_sd.items()
