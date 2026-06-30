@@ -16,6 +16,16 @@ from .mame_env import DonkeyKongEnv
 from .dk_policy import DkFeaturesExtractor, DkFrameStackWrapper
 
 
+def _load_model(path, device="cuda"):
+    """Load PPO or RecurrentPPO depending on what was saved."""
+    try:
+        from sb3_contrib import RecurrentPPO
+        return RecurrentPPO.load(path, device=device), True
+    except Exception:
+        pass
+    return PPO.load(path, device=device), False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rom-dir", required=True)
@@ -36,20 +46,31 @@ def main():
     if args.p_curric is not None:
         base._p_curric = args.p_curric
     venv = DkFrameStackWrapper(DummyVecEnv([lambda: base]), n_stack=args.stack)
-    model = PPO.load(args.model, device="cuda")
+    model, is_lstm = _load_model(args.model)
 
     print(f"recording -> {base._inp_path or '(set on first reset)'}")
+    print(f"model type: {'RecurrentPPO (LSTM)' if is_lstm else 'PPO'}")
     for ep in range(args.episodes):
         obs = venv.reset()
         done = False
         total_r, best_h, last = 0.0, 0, {}
+        lstm_state = None
+        episode_start = np.ones((1,), dtype=bool)
         while not done:
-            action, _ = model.predict(obs, deterministic=args.deterministic)
+            if is_lstm:
+                action, lstm_state = model.predict(
+                    obs, state=lstm_state, episode_start=episode_start,
+                    deterministic=args.deterministic)
+                episode_start = np.zeros((1,), dtype=bool)
+            else:
+                action, _ = model.predict(obs, deterministic=args.deterministic)
             obs, r, dones, infos = venv.step(action)
             done = bool(dones[0])
             total_r += float(r[0])
             best_h = max(best_h, infos[0].get("max_height", 0))
             last = infos[0].get("state", last)
+            if done:
+                episode_start = np.ones((1,), dtype=bool)
         print(f"ep {ep}: reward={total_r:+.1f} max_height={best_h} "
               f"score={last.get('score')} cleared={infos[0].get('cleared')}")
     print(f"\n.inp recorded: {base._inp_path}")

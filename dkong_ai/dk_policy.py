@@ -5,9 +5,9 @@ left on the 2nd girder. Barrels approaching from behind on a blurry 84×84 frame
 are hard to react to; explicit relative positions from RAM are not.
 
 Architecture:
-  - NatureCNN(8, 84, 84) → 256-dim image features  (spatial/structural)
-  - Linear(26→64→64)     →  64-dim RAM features    (barrel/fireball distances)
-  - Concat(256+64=320)   → PPO policy/value heads
+  - NatureCNN(n_stack×2, 84, 84) → 256-dim image features  (spatial/structural)
+  - Linear(62→64→64)             →  64-dim RAM features    (barrel/fireball/hammer)
+  - Concat(256+64=320)           → PPO/RecurrentPPO policy/value heads
 
 DkFrameStackWrapper stacks the 'image' channel n times (matching SB3's
 VecFrameStack behaviour) while passing the 'ram' vector from the latest frame

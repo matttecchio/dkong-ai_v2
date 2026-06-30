@@ -3,7 +3,7 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-06-30, Run 21 (LSTM) active.
+Last updated: 2026-06-30, Run 21 (LSTM) stopped at 30.4M steps — see §10.
 
 ---
 
@@ -89,9 +89,10 @@ MAME (dkong) --autoboot_script--> scripts/bridge.lua  (socket SERVER, lock-step)
 
 **Observation** (`Dict`):
 - `"image"`: `(84, 84, 2)` uint8 — channel 0: grayscale pixels; channel 1:
-  static threat/ladder/fall-zone map (see §6). Stacked ×8 by
-  `DkFrameStackWrapper` → `(84, 84, 16)` at policy input.
-- `"ram"`: `(50,)` float32 — normalised RAM features (see §5).
+  static threat/ladder/fall-zone map (see §6). Stacked ×n_stack by
+  `DkFrameStackWrapper` → `(84, 84, 2×n_stack)` at policy input.
+  Run 21+: `n_stack=2` → `(84, 84, 4)`.
+- `"ram"`: `(62,)` float32 — normalised RAM features (see §5).
 
 **Policy** (`dkong_ai/dk_policy.py`):
 - `DkFeaturesExtractor`: NatureCNN on image → 256 features; Linear MLP on RAM
@@ -112,8 +113,8 @@ load curriculum state i, `0xF8` freeze barrels, `0xF7` unfreeze barrels.
 
 ## 5. RAM features (`dkong_ai/memory_map.py` + `mame_env.py:_build_ram_features`)
 
-**50 features** (layout: `[mario_x/255, mario_y/240]` + 6 barrels × 7 + 1
-fireball × 3 + hammer × 3):
+**62 features** (layout: `[mario_x/255, mario_y/240]` + 6 barrels × 7 + 5
+fireballs × 3 + hammer × 3):
 
 Per barrel: `[Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active]`
 - `vx/vy`: per-step velocity (frameskip=4); horiz norm ÷8, vertical ÷20.
@@ -122,8 +123,7 @@ Per barrel: `[Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active]`
 - `edge_dist`: normalised distance to the girder edge the barrel is heading
   toward (0 = at edge / about to fall, 1 = far away).
 
-⚠️ **Run 19 queued change**: RAM → 62 features (all 5 fireball slots tracked,
-currently only slot 0). Requires fresh start.
+Per fireball: `[Δx/128, Δy/120, active]` — all 5 slots tracked.
 
 **Full RAM address map:**
 
@@ -140,7 +140,7 @@ currently only slot 0). Requires fresh start.
 | hammer_x/y | 0x6A1C/1F | hammer pickup position |
 | score_100..100k | 0x7721/41/61/81 | tile RAM digits; digit = byte low nibble |
 | barrel0..5_st/x/y | 0x6700+ stride 0x20 | status (0=inactive,1=rolling,2=deploying) |
-| fireball0_st/x/y | 0x6400/03/05 | only slot 0 currently watched (5 exist) |
+| fireball0..4_st/x/y | 0x6400+ stride 0x20 | all 5 slots tracked (status + x + y) |
 
 ⚠️ `0x6200` ("is_dead") is **unreliable** — use `lives` for death detection.
 
@@ -233,39 +233,51 @@ Per non-death/non-clear step (when `mario_y` is valid):
 | 18 | **70% barrel-free** + farming death penalty + corner penalty + girder milestones | ~10M | ~54 | 0 | wall unchanged; 70% barrel-free didn't transfer |
 | 19 | episode timeout + hammer-wall penalty + WP1b=75, RAM 62 (5 fireballs) | 24.5M | ~54 | 0.18 peak | **best ever at 13.9M**; collapsed at 17M (lr=2.5e-4 too high); 18% clears = barrel-free only |
 | 20 | lr=5e-5 + P_NO_BARRELS=0.30, warm-start run19@14M | ~3M | ~54 | 0 | **lr_schedule bug**: lr was still 2.5e-4 (fixed in code); restarted; wall unchanged |
-| 21 | **LSTM (RecurrentPPO)**, stack=2, fresh start | **active** | TBD | TBD | **current run** |
+| 21 | **LSTM (RecurrentPPO)**, stack=2, no barrel-free, CNN weights from run19@14M | 30.4M | 16–28 (eval broken) | 0 | stopped: `clip_fraction=0.34` (lr too high); restart at lr=5e-5 recommended |
 
 ---
 
-## 10. Run 21 — current run (LSTM)
+## 10. Run 21 — stopped at 30.4M steps
 
-**PID**: see `/tmp/dk_run21.pid`. **Log**: `/tmp/dk_run21.log`.
-**Save**: `artifacts/ppo_dkong_run21`. **Stack**: 2.
+**Log**: `/tmp/dk_run21.log`. **Recovery checkpoint**: `artifacts/ppo_dkong_run21_last.zip`.
+**Checkpoints**: `artifacts/checkpoints/ppo_dkong_run21/` (every 500k steps, up to 30M).
 
-**Why LSTM**: after 20 runs and ~300M+ steps, the wall at height 53–54 is an
-exploration failure, not a reward-shaping failure. The left traverse requires
-knowing whether a barrel passed the x=53 ladder column in the last 2–3 seconds.
-Our 8-frame stack gave ~0.5s of visual history — not enough. RecurrentPPO with
-an LSTM hidden state gives proper long-range temporal memory, letting the agent
-learn "barrel just passed, go now."
+**Why LSTM**: after 20 runs and ~300M+ steps, the wall at height 53–54 is a
+temporal memory problem. The left traverse requires knowing whether a barrel
+passed x=53 in the last 2–3 seconds. An 8-frame stack gives ~0.5s of visual
+history — not enough. `RecurrentPPO` + LSTM hidden state provides proper
+long-range memory.
 
-Key parameters:
-- `RecurrentPPO` + `MultiInputLstmPolicy` (sb3-contrib). `PPO` is gone.
-- `--stack 2` — optical flow only; LSTM handles temporal memory.
-- `--lstm-hidden 256` — LSTM hidden size matching CNN output.
-- `--p-no-barrels 0.30` — 30% barrel-free to maintain route gradient.
-- `--p-curric 0.15` — wall-zone curriculum (heights 35–52).
-- **Feature transfer**: `--transfer-features-from run19_14M` copies CNN + RAM MLP
-  weights (11 layers) into the fresh LSTM model. LSTM and policy/value heads are
-  randomly initialised. This preserves 300M+ steps of visual/RAM feature learning
-  while giving the LSTM a clean slate for temporal reasoning.
-- All reward fixes active: CORNER_COST=0.20, score gate unconditional in corner.
+**What ran:**
+- `RecurrentPPO` + `MultiInputLstmPolicy` (sb3-contrib).
+- `--stack 2`, `--lstm-hidden 256`, `--p-no-barrels 0.0`, `--lr 2.5e-4`.
+- CNN + RAM MLP weights transferred from run19@14M (`features_extractor.*`, 11 layers).
+  Note: the first CNN conv layer was **not** transferred (shape mismatch: run19 had
+  8 input channels [stack=4 × 2ch/frame], run21 has 4 [stack=2 × 2ch/frame]).
+  Only deeper conv layers + RAM MLP were copied.
 
-**Bug fixed (2026-06-30)**: `in_corner` and `hammer_wall` checks in `_reward`
-referenced `height` which is only defined inside the `if s["mario_y"]:` guard.
-When mario_y is zero/None (off-screen sentinel), these raised `UnboundLocalError`
-and crashed the env workers. Fixed by using `s["mario_y"]` directly with
-`BASE_Y - CORNER_H_MAX` arithmetic instead of the derived `height` variable.
+**Why stopped**: `clip_fraction=0.27–0.34` throughout training (healthy: 0.05–0.15).
+34% of gradient steps were hitting the PPO clip ceiling, meaning the policy was
+lurching around rather than converging. `height_mean` declined from 33→23 over
+12M steps — signature of thrashing. Root cause: `--lr 2.5e-4` is too high for
+this LSTM model.
+
+**Training metrics at stop (30.4M steps):**
+- height_best: 192 (near top — reached at least once during training)
+- height_mean: ~23
+- clip_fraction: 0.27
+- explained_variance: 0.957
+- fps: 511
+
+**Next run (run 22)**: warm-start from `ppo_dkong_run21_last.zip` at `lr=5e-5`.
+```bash
+nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
+    --save artifacts/ppo_dkong_run22 --stack 2 --gamma 0.999 \
+    --lstm --lstm-hidden 256 --n-envs 16 --timesteps 100000000 \
+    --p-no-barrels 0.0 --lr 5e-5 \
+    --init-from artifacts/ppo_dkong_run21_last \
+    > /tmp/dk_run22.log 2>&1 &
+```
 
 **SUCCESS** = live-barrel bottom-up `height_mean > 54` or first live-barrel clear.
 
@@ -294,6 +306,21 @@ invisible to the value function. **Fix**: `gamma=0.999` → `0.999^1840 ≈ 0.16
 ### 0x6200 ("is_dead") unreliable
 Reads 1 while Mario is alive and walking. **Never use for death detection.**
 Use `lives` decrement instead.
+
+### eval.py loaded RecurrentPPO models as PPO (fixed 2026-06-30)
+`eval.py` used `PPO.load()` on all models. When the model is a `RecurrentPPO`
+checkpoint, this loads the wrong algorithm class. Additionally, the eval loop
+did not pass `state=` or `episode_start=` to `model.predict()`, so the LSTM
+hidden state reset every step — making the LSTM a feedforward network during
+eval. **Fix**: `_load_model()` now tries `RecurrentPPO.load()` first and falls
+back to `PPO.load()`; LSTM state is threaded through the step loop with proper
+`episode_start` flags.
+
+### Recording path never sent barrel freeze/unfreeze (fixed 2026-06-30)
+In `mame_env.py:reset()`, the barrel mode command (`0xF8`/`0xF7`) was only sent
+in the fast save-state path (training). The recording path (eval) never sent it,
+leaving the Lua bridge in whatever `freeze_barrels` state it had from a previous
+episode. **Fix**: barrel mode command is now sent in both paths.
 
 ### MAME X connection crash (fixed run 3)
 Even with `-video none`, SDL opened an X connection to WSLg display. Display
@@ -361,8 +388,13 @@ would be conditioned on barrels that may not exist → teaches nonsense.
 - **Throughput is GPU-bound** during PPO (not MAME emulation). 16 envs ~600–900
   fps on RTX 4080 SUPER.
 - **Obs space breaks warm-start**: models from a different RAM dim or image shape
-  cannot be loaded. RAM changed: run 14 (26→44 initially, then 44, then 50).
-  Stack changed: runs 15+ use stack=8. Always specify `--stack 8` for runs 15+.
+  cannot be loaded. RAM dim: 62 (as of run 19). Stack: run 21+ uses `--stack 2`
+  (`--stack 8` for runs 15–20). Always match `--stack` to the run being loaded.
+- **eval.py --stack default is 8** — always pass `--stack 2` explicitly for run 21+
+  models or the observation shape won't match and the model will fail to predict.
+- **clip_fraction warning**: for LSTM (RecurrentPPO), healthy clip_fraction is
+  0.05–0.15. Above 0.25 means `--lr` is too high and the policy is thrashing.
+  Run 21 hit 0.34 throughout — reduced to `lr=5e-5` for run 22.
 - **Curriculum metric confound**: with `_p_curric>0`, `height_mean`/`height_best`
   include curriculum-start episodes. Only `clear_rate` + bottom-up eval are clean.
 - **Bottom-up eval**: set `DonkeyKongEnv.P_NO_BARRELS = 0.0` and `base._p_curric = 0.0`

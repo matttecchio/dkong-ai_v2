@@ -90,8 +90,8 @@ class DonkeyKongEnv(gym.Env):
         self._no_barrels = False   # set per-episode by reset(); drives 0xF8/0xF7 cmd
         self._ladder_map = self._build_ladder_map()  # static; barrel board never changes
 
-        # Dict obs: "image" = 84×84×2 (pixels + threat/ladder/fall-zone map, stacked ×8
-        # by DkFrameStackWrapper); "ram" = 50 normalised RAM features giving
+        # Dict obs: "image" = 84×84×2 (pixels + threat/ladder/fall-zone map, stacked ×n
+        # by DkFrameStackWrapper); "ram" = 62 normalised RAM features giving
         # explicit barrel/fireball/hammer positions, velocities, and edge proximity.
         self.observation_space = spaces.Dict({
             "image": spaces.Box(0, 255, (84, 84, 2), dtype=np.uint8),
@@ -333,7 +333,7 @@ class DonkeyKongEnv(gym.Env):
                         m[row, col] = 128
         return m[..., None]  # (84, 84, 1)
 
-    # RAM feature layout (50 values, all in [-1, 1]):
+    # RAM feature layout (62 values, all in [-1, 1]):
     #   [mario_x/255, mario_y/240]                                              —  2
     #   [Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active] × 6        — 42
     #   [Δx/128, Δy/120, active]                × 5 fireballs                  — 15
@@ -824,6 +824,11 @@ class DonkeyKongEnv(gym.Env):
             else:                            # recording path: clean soft-reset+intro
                 self._exchange(self.A_RESET)
                 state, pix = self._start_game()
+                # Still need to set barrel mode for recording sessions.
+                self._no_barrels = self.np_random.random() < self.P_NO_BARRELS
+                mode_cmd = (self.A_FREEZE_BARRELS if self._no_barrels
+                            else self.A_UNFREEZE_BARRELS)
+                state, pix = self._exchange(mode_cmd)
         except (ConnectionError, OSError):   # MAME died -> relaunch fresh
             state, pix = self._recover()
         self._begin_episode(state)
