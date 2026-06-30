@@ -22,7 +22,7 @@ class ClimbMetricsCallback(BaseCallback):
 
     def __init__(self, window=100):
         super().__init__()
-        self._heights, self._clears = [], []
+        self._heights, self._clears, self._scores = [], [], []
         self.window = window
         self.best_height = 0
 
@@ -34,13 +34,18 @@ class ClimbMetricsCallback(BaseCallback):
             h = info.get("max_height", 0)
             self._heights.append(h)
             self._clears.append(info.get("cleared", 0))
+            state = info.get("state", {})
+            score = state.get("score") or 0
+            self._scores.append(score)
             self._heights = self._heights[-self.window:]
-            self._clears = self._clears[-self.window:]
+            self._clears  = self._clears[-self.window:]
+            self._scores  = self._scores[-self.window:]
             self.best_height = max(self.best_height, h)
         if self._heights:
             self.logger.record("climb/height_mean", sum(self._heights) / len(self._heights))
             self.logger.record("climb/height_best", self.best_height)
-            self.logger.record("climb/clear_rate", sum(self._clears) / len(self._clears))
+            self.logger.record("climb/clear_rate",  sum(self._clears) / len(self._clears))
+            self.logger.record("climb/score_mean",  sum(self._scores) / len(self._scores))
         return True
 
 
