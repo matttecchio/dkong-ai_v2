@@ -444,6 +444,15 @@ class DonkeyKongEnv(gym.Env):
     )
     # Indices 100-104 in _wp_hit to avoid collision with WAYPOINTS (0-5).
 
+    # Per-step climb bonus for the FIRST ladder (ground floor → 2nd girder, x≈143).
+    # Same mechanic as CLIMB_BONUS. Without this, the only incentive to climb the
+    # first ladder is the one-shot girder milestone (+10), which can't compete with
+    # repeatable ground-floor barrel-jump rewards (+0.3 each).
+    FIRST_CLIMB_X_LO, FIRST_CLIMB_X_HI = 133, 155   # first ladder ± tolerance
+    FIRST_CLIMB_H_LO, FIRST_CLIMB_H_HI =  10,  44   # ground floor → 2nd girder
+    FIRST_CLIMB_BONUS      = 0.30
+    FIRST_LADDER_IDLE_COST = 0.05
+
     # Per-step ladder-climb bonus: fires every step Mario is actively ascending
     # the 2nd→3rd girder ladder (mario_y decreasing while at x≈53).
     # Rewards the ACT of climbing — not just approaching — and can't be farmed
@@ -613,6 +622,16 @@ class DonkeyKongEnv(gym.Env):
                         and self.UPPER_TRAVERSE_X_LO <= s["mario_x"] < self.UPPER_TRAVERSE_X_HI
                         and s["mario_x"] > p["mario_x"]):
                     r += (s["mario_x"] - p["mario_x"]) * self.UPPER_TRAVERSE_PROGRESS
+                # First-ladder climb bonus: per-step reward for actively ascending
+                # the ground-floor → 2nd girder ladder at x≈143. Without this,
+                # the only incentive to climb is the one-shot girder milestone,
+                # which loses to repeatable ground-floor barrel-jump farming.
+                if (self.FIRST_CLIMB_H_LO <= height <= self.FIRST_CLIMB_H_HI
+                        and self.FIRST_CLIMB_X_LO <= s["mario_x"] <= self.FIRST_CLIMB_X_HI):
+                    if s["mario_y"] < p["mario_y"]:
+                        r += self.FIRST_CLIMB_BONUS
+                    elif s["mario_y"] == p["mario_y"]:
+                        r -= self.FIRST_LADDER_IDLE_COST
                 # Ladder-climb bonus: per-step reward for actively ascending the
                 # 2nd→3rd girder ladder. Requires mario_y to decrease (gaining
                 # height) while positioned at the ladder column — can't be farmed
