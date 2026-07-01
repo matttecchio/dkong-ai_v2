@@ -3,7 +3,7 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-01, Run 23 (LSTM, lr=2e-5, n_epochs=3, full LSTM warm-start from run22) active.
+Last updated: 2026-07-01, Run 23 restarted (PID 477461, RecurrentPPO_7) after six-bug fix pass.
 
 ---
 
@@ -73,7 +73,7 @@ tail -f logs/run23.out
 # TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
 nohup .venv/bin/tensorboard --logdir logs --port 6006 --host 0.0.0.0 \
     > /tmp/tensorboard.log 2>&1 &
-# Then open http://localhost:6006 in Windows browser (run 23 = RecurrentPPO_6)
+# Then open http://localhost:6006 in Windows browser (run 23 = RecurrentPPO_7)
 ```
 
 ⚠️ Eval/diag always use `--port 5100` to avoid colliding with training (5000+).
@@ -246,9 +246,10 @@ Per non-death/non-clear step (when `mario_y` is valid):
 
 ## 10. Run 23 — current run (LSTM, lr=2e-5, n_epochs=3, full warm-start from run 22)
 
-**PID**: 444164. **Log**: `logs/run23.out`.
+**PID**: 477461. **Log**: `logs/run23.out`.
 **Save**: `artifacts/ppo_dkong_run23`. **Stack**: 2.
-**TensorBoard**: `RecurrentPPO_6` (`--host 0.0.0.0` for WSL2 access).
+**TensorBoard**: `RecurrentPPO_7` (`--host 0.0.0.0` for WSL2 access).
+*(Restarted after six-bug fix pass — see §12. Previous short run at RecurrentPPO_6 discarded.)*
 
 **Key changes from run 22:**
 - `--lr 2e-5` (was 5e-5 — clip_fraction stuck at 0.20–0.23, policy still thrashing)
@@ -327,6 +328,44 @@ this LSTM model.
 
 ## 12. Critical bugs already fixed (don't reintroduce)
 
+### --p-curric flag silently ignored (fixed 2026-07-01)
+`mame_env.py:__init__` set `self._p_curric = 0.15` as an **instance** attribute,
+which shadowed the class attribute set by `DonkeyKongEnv._p_curric = args.p_curric`
+in `train.py`. Every env construction overwrote the CLI value — so `--p-curric 0.0`
+ran at 15% curriculum anyway. Runs 22 and early 23 were affected.
+**Fix**: removed the `self._p_curric` assignment from `__init__`. `_p_curric` is
+now a class attribute only (same pattern as `P_NO_BARRELS`).
+
+### CORNER_H_MAX too low — corner penalty never fired (fixed 2026-07-01)
+`CORNER_H_MAX = 15` was supposed to catch Mario in ground-floor dead-end corners.
+But the ground floor is at mario_y ≈ 220–224, giving `height = BASE_Y - mario_y ≈ 16–20`.
+`height < 15` is below the floor and never true in normal gameplay — the penalty
+was completely dead. `CORNER_X_RIGHT = 190` also left a large unpenalised gap
+between the first ladder (x≈143) and the right wall (x≈224).
+**Fix**: `CORNER_H_MAX` 15→25, `CORNER_X_RIGHT` 190→160.
+
+### smoke.py broken with Dict observation space (fixed 2026-07-01)
+`smoke.py` called `obs.shape` on the reset output, which is a `Dict` since run 14.
+This raised `AttributeError` before any validation ran.
+**Fix**: changed to `obs["image"].shape`, `obs["image"].dtype`, `obs["ram"].shape`.
+
+### diag.py incompatible with current architecture (fixed 2026-07-01)
+Used `VecFrameStack` (wrong — should be `DkFrameStackWrapper`) and `PPO.load()`
+only (crashes on RecurrentPPO checkpoints). Effectively broken since run 14.
+**Fix**: full rewrite to match `eval.py` — `DkFrameStackWrapper`, auto-detect
+RecurrentPPO with LSTM state threading, `--stack` flag.
+
+### eval.py default --stack 8 mismatched training (fixed 2026-07-01)
+`eval.py` defaulted to `--stack 8` while `train.py` defaulted to `--stack 4`
+and current runs use `--stack 2`. Easy to silently get wrong observation shape.
+**Fix**: eval default changed to `--stack 2` (matches all runs from 21+).
+
+### probe.py --headless flag could not be disabled (fixed 2026-07-01)
+`action="store_true", default=True` means the flag is always True and cannot
+be unset from the CLI. **Fix**: replaced with `--no-headless` flag.
+
+---
+
 ### lr_schedule not overridden on warm-start (fixed 2026-06-29)
 `PPO.load()` restores `lr_schedule` (a callable) from the checkpoint.
 Setting `model.learning_rate = args.lr` updates only a dead attribute; the
@@ -384,7 +423,7 @@ hiccup → MAME killed → `ConnectionError` crashed the whole `SubprocVecEnv`.
 | Climb bonus | +0.30/step | ascending at x=43-68, height 40-100 |
 | Ladder idle cost | −0.05/step | climb zone but y unchanged |
 | Anti-camping | −0.01/step | height 36-65, x>130 |
-| Corner penalty | **−0.20/step** | height<15, x<30 or x>190 (raised from 0.03) |
+| Corner penalty | **−0.20/step** | height<25, x<30 or x>160 (threshold fixed 2026-07-01; was 15/190 = never fired) |
 | Score | +0.003/pt | gated in camp zone; **unconditionally gated in right corner** |
 | Death | −10 | on lives decrement |
 | Farming death | −5 extra | episode max height < 40 at death |
@@ -432,8 +471,8 @@ would be conditioned on barrels that may not exist → teaches nonsense.
 - **Obs space breaks warm-start**: models from a different RAM dim or image shape
   cannot be loaded. RAM dim: 62 (as of run 19). Stack: run 21+ uses `--stack 2`
   (`--stack 8` for runs 15–20). Always match `--stack` to the run being loaded.
-- **eval.py --stack default is 8** — always pass `--stack 2` explicitly for run 21+
-  models or the observation shape won't match and the model will fail to predict.
+- **eval.py --stack default** is now `2` (fixed 2026-07-01; was 8). Always verify
+  it matches the training run — run 21+ use `--stack 2`.
 - **clip_fraction warning**: for LSTM (RecurrentPPO), healthy clip_fraction is
   0.05–0.15. Above 0.20 means `--lr` is too high and the policy is thrashing.
   Run 21 hit 0.34 (lr=2.5e-4); run 22 stuck at 0.20-0.23 (lr=5e-5); run 23 at lr=2e-5.
