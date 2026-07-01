@@ -422,7 +422,8 @@ class DonkeyKongEnv(gym.Env):
         (45,  True,   58, 75.0),  # WP1b: AT the ladder entrance (x < 58)
         (65,  False, 100,  8.0),  # WP2: 3rd girder after traverse (x > 100)
         (100, True,   85,  8.0),  # WP3: 3rd-girder left traverse (x < 85)
-        (150, False, 130,  8.0),  # WP4: near the top (x > 130)
+        (150, False, 130,  8.0),  # WP4: on the final ladder (x > 130)
+        (170, False, 100, 20.0),  # WP5: near Pauline — high on the final ladder
     )
 
     # Girder-level milestones: fire once per episode when Mario first reaches
@@ -447,6 +448,14 @@ class DonkeyKongEnv(gym.Env):
     CLIMB_BONUS      = 0.30            # per step while actively ascending
     LADDER_IDLE_COST = 0.05            # per step in ladder zone but y unchanged
 
+    # Upper-section final-ladder climb bonus: same mechanic as CLIMB_BONUS but
+    # for the top ladder at x≈147 (5th girder → Pauline). Fills the reward
+    # desert above height 144 where only the sparse height milestone fires.
+    UPPER_CLIMB_X_LO, UPPER_CLIMB_X_HI = 137, 160   # top ladder ± tolerance
+    UPPER_CLIMB_H_LO, UPPER_CLIMB_H_HI = 138, 192   # 5th girder → Pauline
+    UPPER_CLIMB_BONUS      = 0.30
+    UPPER_LADDER_IDLE_COST = 0.05
+
     # Dense leftward-progress reward on the 2nd girder: +TRAVERSE_PROGRESS per
     # pixel moved left while in the traverse zone. Provides gradient on EVERY
     # step toward the ladder — even failed attempts that end in death generate
@@ -454,6 +463,14 @@ class DonkeyKongEnv(gym.Env):
     TRAVERSE_H_LO, TRAVERSE_H_HI = 36, 65
     TRAVERSE_X_LO, TRAVERSE_X_HI = 53, 143   # ladder entrance to right edge
     TRAVERSE_PROGRESS = 0.05                   # reward per pixel moved left
+
+    # Dense rightward-progress reward on the 5th girder: mirrors TRAVERSE_PROGRESS
+    # but for the rightward traverse from the 4th→5th ladder (x≈67) to the top
+    # ladder entrance (x≈147). This is exactly the stall zone for run 22 (height
+    # 146) — no dense signal existed for this 80px traverse.
+    UPPER_TRAVERSE_H_LO, UPPER_TRAVERSE_H_HI = 140, 158   # 5th girder band
+    UPPER_TRAVERSE_X_LO, UPPER_TRAVERSE_X_HI =  67, 147   # arrival → top ladder
+    UPPER_TRAVERSE_PROGRESS = 0.05                         # per pixel moved right
 
     # Anti-camping: height band and x threshold for the per-step girder penalty.
     # Applies only to the right side of the 2nd girder — the zone where the agent
@@ -583,6 +600,13 @@ class DonkeyKongEnv(gym.Env):
                         and self.TRAVERSE_X_LO < s["mario_x"] <= self.TRAVERSE_X_HI
                         and s["mario_x"] < p["mario_x"]):
                     r += (p["mario_x"] - s["mario_x"]) * self.TRAVERSE_PROGRESS
+                # Dense rightward-progress reward on the 5th girder: same
+                # mechanic for the traverse from the 4th→5th ladder to the top
+                # ladder entrance (the stall zone above height 140).
+                if (self.UPPER_TRAVERSE_H_LO <= height <= self.UPPER_TRAVERSE_H_HI
+                        and self.UPPER_TRAVERSE_X_LO <= s["mario_x"] < self.UPPER_TRAVERSE_X_HI
+                        and s["mario_x"] > p["mario_x"]):
+                    r += (s["mario_x"] - p["mario_x"]) * self.UPPER_TRAVERSE_PROGRESS
                 # Ladder-climb bonus: per-step reward for actively ascending the
                 # 2nd→3rd girder ladder. Requires mario_y to decrease (gaining
                 # height) while positioned at the ladder column — can't be farmed
@@ -593,6 +617,15 @@ class DonkeyKongEnv(gym.Env):
                         r += self.CLIMB_BONUS
                     elif s["mario_y"] == p["mario_y"]:
                         r -= self.LADDER_IDLE_COST
+                # Upper ladder climb bonus: same mechanic for the final ladder
+                # (x≈147, 5th girder → Pauline). Fills the reward desert above
+                # height 144 where only the sparse height milestone fires.
+                if (self.UPPER_CLIMB_H_LO <= height <= self.UPPER_CLIMB_H_HI
+                        and self.UPPER_CLIMB_X_LO <= s["mario_x"] <= self.UPPER_CLIMB_X_HI):
+                    if s["mario_y"] < p["mario_y"]:
+                        r += self.UPPER_CLIMB_BONUS
+                    elif s["mario_y"] == p["mario_y"]:
+                        r -= self.UPPER_LADDER_IDLE_COST
                 # Novelty + corridor: reward first visit to a new (x,height)
                 # cell, more if it's on the expert route.
                 cell = (s["mario_x"] // self.CELL, height // self.CELL)

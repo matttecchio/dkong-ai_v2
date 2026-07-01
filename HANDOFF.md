@@ -3,7 +3,7 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-06-30, Run 22 (LSTM, lr=5e-5, no curriculum) active.
+Last updated: 2026-07-01, Run 23 (LSTM, lr=2e-5, n_epochs=3, full LSTM warm-start from run22) active.
 
 ---
 
@@ -16,10 +16,10 @@ Last updated: 2026-06-30, Run 22 (LSTM, lr=5e-5, no curriculum) active.
 - The agent learns to jump barrels, score, and climb roughly half the board.
   With barrel-free episodes it can clear the stage (~18% of training episodes
   at run 19 peak). **Bottom-up with live barrels: still 0 clears after 21 runs.**
-- The persistent blocker: the agent reaches height ~53–54 (2nd girder) then
-  camps on the right side farming barrel jumps. The left traverse to the x=53
-  ladder requires barrel-timing memory beyond a frame stack. **Runs 21–22 use
-  RecurrentPPO (LSTM) to provide proper temporal memory. Run 22 is active.**
+- The persistent blocker was height ~53–54. **RecurrentPPO (LSTM) broke it**: run 22
+  reached height_best=146 (5th girder, one below Pauline) — first run ever past 54.
+  **Run 23 is active**, warm-starting from run 22's LSTM weights with lower lr and new
+  upper-board rewards to push past the new stall at 146.
 - **lr_schedule bug fixed (2026-06-29)**: `PPO.load()` restores `lr_schedule`
   from the checkpoint; setting `model.learning_rate` alone has no effect. Fix:
   also set `model.lr_schedule = get_schedule_fn(args.lr)` after warm-start.
@@ -48,17 +48,17 @@ stages.
 ## 3. Quick start
 
 ```bash
-# Train LSTM (run 22) — fresh LSTM, CNN/RAM from run21_last, no curriculum, lr=5e-5
+# Train LSTM (run 23) — full LSTM warm-start from run22, lr=2e-5, n_epochs=3
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
-    --save artifacts/ppo_dkong_run22 --stack 2 --gamma 0.999 \
+    --save artifacts/ppo_dkong_run23 --stack 2 --gamma 0.999 \
     --lstm --lstm-hidden 256 --n-envs 16 --timesteps 100000000 \
-    --p-no-barrels 0.0 --p-curric 0.0 --lr 5e-5 \
-    --transfer-features-from artifacts/ppo_dkong_run21_last \
-    > /tmp/dk_run22.log 2>&1 &
+    --p-no-barrels 0.0 --p-curric 0.0 --lr 2e-5 --n-epochs 3 \
+    --init-from artifacts/ppo_dkong_run22_last \
+    > logs/run23.out 2>&1 &
 
 # Watch a trained model (records .inp, then plays windowed)
 .venv/bin/python -m dkong_ai.eval --rom-dir ./roms \
-    --model artifacts/checkpoints/ppo_dkong_run22/ppo_dkong_run22_Xsteps \
+    --model artifacts/checkpoints/ppo_dkong_run23/ppo_dkong_run23_Xsteps \
     --port 5100 --stack 2
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
@@ -68,13 +68,12 @@ nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
     --p-no-barrels 0 --p-curric 0 --episodes 10
 
 # Monitor running train
-grep -E "total_timesteps|ep_rew_mean|height_mean|height_best|clear_rate" \
-    /tmp/dk_run22.log | tail
+tail -f logs/run23.out
 
 # TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
 nohup .venv/bin/tensorboard --logdir logs --port 6006 --host 0.0.0.0 \
     > /tmp/tensorboard.log 2>&1 &
-# Then open http://localhost:6006 in Windows browser (run 22 = RecurrentPPO_5)
+# Then open http://localhost:6006 in Windows browser (run 23 = RecurrentPPO_6)
 ```
 
 ⚠️ Eval/diag always use `--port 5100` to avoid colliding with training (5000+).
@@ -177,10 +176,12 @@ Per non-death/non-clear step (when `mario_y` is valid):
 | Height milestone | +0.5 × new pixels of max height | fires only on NEW max; top ≈ +96 |
 | Per-step height bonus | +0.003 × height/100 | continuous gradient so value fn knows "up = better" |
 | Girder milestone | +10/30/40/55/70 | one-shot per episode on first reaching each girder |
-| Waypoints (6) | +5/10/30/8/8/8 | zig-zag route milestones; fire once per episode |
-| Traverse progress | +0.05/pixel moved left | while height 36-65, x 53-143 |
-| Climb bonus | +0.30/step | while ascending at x=43-68, height 40-100 |
-| Ladder idle cost | −0.05/step | in climb zone but y unchanged |
+| Waypoints (7) | +5/10/30/8/8/8/20 | zig-zag route milestones; fire once per episode |
+| Traverse progress | +0.05/pixel moved left | while height 36-65, x 53-143 (2nd girder) |
+| Upper traverse progress | +0.05/pixel moved right | height 140-158, x 67-147 (5th girder → top ladder) |
+| Climb bonus | +0.30/step | while ascending at x=43-68, height 40-100 (2nd→3rd ladder) |
+| Upper climb bonus | +0.30/step | while ascending at x=137-160, height 138-192 (final ladder) |
+| Ladder idle cost | −0.05/step | in either climb zone but y unchanged |
 | Anti-camping | −0.01/step | height 36-65, x>130, no hammer |
 | Corner penalty | −0.03/step | height<15, x<30 or x>190 (bottom floor dead-ends) |
 | Score | +0.003/pt | guarded: 0<gain≤2000; gated in camp zone |
@@ -238,32 +239,57 @@ Per non-death/non-clear step (when `mario_y` is valid):
 | 19 | episode timeout + hammer-wall penalty + WP1b=75, RAM 62 (5 fireballs) | 24.5M | ~54 | 0.18 peak | **best ever at 13.9M**; collapsed at 17M (lr=2.5e-4 too high); 18% clears = barrel-free only |
 | 20 | lr=5e-5 + P_NO_BARRELS=0.30, warm-start run19@14M | ~3M | ~54 | 0 | **lr_schedule bug**: lr was still 2.5e-4 (fixed in code); restarted; wall unchanged |
 | 21 | **LSTM (RecurrentPPO)**, stack=2, no barrel-free, CNN weights from run19@14M | 30.4M | 16–28 (eval broken) | 0 | stopped: `clip_fraction=0.34` (lr too high); restart at lr=5e-5 recommended |
-| 22 | LSTM, lr=5e-5, **no curriculum**, CNN/RAM from run21_last (fresh LSTM weights) | **active** | TBD | TBD | **current run** |
+| 22 | LSTM, lr=5e-5, **no curriculum**, CNN/RAM from run21_last (fresh LSTM weights) | 36.5M | 18–26 (eval) | 0 | **height_best=146** (5th girder — first run past 54); stalled at 37M, height_mean=27 |
+| 23 | LSTM, lr=2e-5, n_epochs=3, **full LSTM warm-start** from run22_last, upper-board rewards | **active** | TBD | TBD | **current run** |
 
 ---
 
-## 10. Run 22 — current run (LSTM, lr=5e-5, no curriculum)
+## 10. Run 23 — current run (LSTM, lr=2e-5, n_epochs=3, full warm-start from run 22)
 
-**PID**: `cat /tmp/dk_run22.pid`. **Log**: `/tmp/dk_run22.log`.
-**Save**: `artifacts/ppo_dkong_run22`. **Stack**: 2.
-**TensorBoard**: `RecurrentPPO_5` entry in TensorBoard (`--host 0.0.0.0` for WSL2 access).
+**PID**: 444164. **Log**: `logs/run23.out`.
+**Save**: `artifacts/ppo_dkong_run23`. **Stack**: 2.
+**TensorBoard**: `RecurrentPPO_6` (`--host 0.0.0.0` for WSL2 access).
+
+**Key changes from run 22:**
+- `--lr 2e-5` (was 5e-5 — clip_fraction stuck at 0.20–0.23, policy still thrashing)
+- `--n-epochs 3` (was 4 — fewer passes over each rollout batch reduces clip_fraction)
+- `--init-from artifacts/ppo_dkong_run22_last` — **full warm-start including LSTM weights**.
+  Run 22 built LSTM temporal context that reached height 146; run 23 inherits it.
+  (Run 22 only transferred CNN/RAM via `--transfer-features-from`; run 23 keeps everything.)
+- **New upper-board rewards** (all in `mame_env.py`):
+  - `UPPER_TRAVERSE_PROGRESS`: +0.05/pixel rightward on 5th girder (x=67→147, h=140-158)
+    — mirrors the 2nd-girder TRAVERSE_PROGRESS that broke the 54 wall; targets the run 22
+    stall zone (height 146 = 5th girder, arrive at x≈67 from 4th-girder ladder)
+  - `UPPER_CLIMB_BONUS`: +0.30/step ascending the final ladder (x=137-160, h=138-192)
+  - `UPPER_LADDER_IDLE_COST`: −0.05/step idle on the final ladder
+  - `WP5`: +20 waypoint near Pauline (height≥170, x>100)
+
+**SUCCESS** = `height_mean` rising past 40 then 60; `height_best` breaking past 146.
+
+---
+
+## 11. Run 22 — stopped at 36.5M steps (2026-07-01)
+
+**Recovery checkpoint**: `artifacts/ppo_dkong_run22_last.zip`.
+**Checkpoints**: `artifacts/checkpoints/ppo_dkong_run22/` (every 500k, up to 36.5M).
+**TensorBoard**: `RecurrentPPO_5`.
+
+**Result**: `height_best=146` (5th girder — **first run in 22 attempts to break past 54**).
+`height_mean=27–29` flat, `clip_fraction=0.20–0.23` not declining.
+Stalled at 37M steps with no upward movement for 5M+ steps → stopped early.
+Eval (10 eps, live barrels): max_height 18–26 — confirms 146 was a rare outlier, not reliable.
 
 **Key changes from run 21:**
-- `--lr 5e-5` (was 2.5e-4 — too high, causing clip_fraction=0.34 and thrashing)
-- `--p-curric 0.0` — no curriculum starts. Every episode begins from the bottom.
-  Rationale: LSTM's advantage is temporal memory built up during the episode.
-  Curriculum starts deprive it of that context — the LSTM arrives at the traverse
-  zone with no barrel history, defeating the whole purpose of adding recurrence.
-- `--transfer-features-from artifacts/ppo_dkong_run21_last` — CNN + RAM MLP weights
-  from run21's 30.4M-step checkpoint (12 layers transferred). LSTM and policy/value
-  heads are freshly initialised. This gives better features than the run19 source
-  used in run 21, and correctly discards the thrashed LSTM weights.
-
-**SUCCESS** = live-barrel bottom-up `height_mean > 54` or first live-barrel clear.
+- `--lr 5e-5` (was 2.5e-4 — too high, clip_fraction=0.34 and thrashing)
+- `--p-curric 0.0` — no curriculum. Every episode starts from the bottom.
+  LSTM temporal context built during the episode is the core insight; curriculum
+  starts deprive it of barrel history at the traverse zone.
+- `--transfer-features-from artifacts/ppo_dkong_run21_last` — 12 CNN+RAM MLP layers
+  transferred; LSTM + policy/value heads freshly initialised.
 
 ---
 
-## 11. Run 21 — stopped at 30.4M steps
+## 12a. Run 21 — stopped at 30.4M steps
 
 **Log**: `/tmp/dk_run21.log`. **Recovery checkpoint**: `artifacts/ppo_dkong_run21_last.zip`.
 **Checkpoints**: `artifacts/checkpoints/ppo_dkong_run21/` (every 500k steps, up to 30M).
@@ -409,8 +435,8 @@ would be conditioned on barrels that may not exist → teaches nonsense.
 - **eval.py --stack default is 8** — always pass `--stack 2` explicitly for run 21+
   models or the observation shape won't match and the model will fail to predict.
 - **clip_fraction warning**: for LSTM (RecurrentPPO), healthy clip_fraction is
-  0.05–0.15. Above 0.25 means `--lr` is too high and the policy is thrashing.
-  Run 21 hit 0.34 throughout — reduced to `lr=5e-5` for run 22.
+  0.05–0.15. Above 0.20 means `--lr` is too high and the policy is thrashing.
+  Run 21 hit 0.34 (lr=2.5e-4); run 22 stuck at 0.20-0.23 (lr=5e-5); run 23 at lr=2e-5.
 - **Curriculum metric confound**: with `_p_curric>0`, `height_mean`/`height_best`
   include curriculum-start episodes. Only `clear_rate` + bottom-up eval are clean.
 - **Bottom-up eval**: set `DonkeyKongEnv.P_NO_BARRELS = 0.0` and `base._p_curric = 0.0`
@@ -432,7 +458,7 @@ would be conditioned on barrels that may not exist → teaches nonsense.
 - `dk_policy.py` — `DkFeaturesExtractor` (CNN+RAM MLP) + `DkFrameStackWrapper`.
 - `train.py` — PPO/RecurrentPPO training. Flags: `--n-envs`, `--stack`,
   `--gamma`, `--ent-coef`, `--init-from`, `--p-no-barrels`, `--p-curric`,
-  `--save`, `--timesteps`, `--lr`, `--lstm`, `--lstm-hidden`,
+  `--save`, `--timesteps`, `--lr`, `--n-epochs`, `--lstm`, `--lstm-hidden`,
   `--transfer-features-from`.
 - `eval.py` — eval + record .inp. Flags: `--model`, `--stack`, `--port`,
   `--episodes`, `--p-no-barrels`, `--p-curric`.

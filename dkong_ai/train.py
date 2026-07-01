@@ -88,6 +88,8 @@ def main():
     ap.add_argument("--transfer-features-from", default=None,
                     help="copy features_extractor weights (CNN+RAM MLP) from this "
                          "checkpoint into a fresh model; rest is randomly initialised")
+    ap.add_argument("--n-epochs", type=int, default=4,
+                    help="PPO epochs per rollout (default 4; reduce to 3 to lower clip_fraction)")
     args = ap.parse_args()
 
     if args.p_no_barrels is not None:
@@ -145,6 +147,7 @@ def main():
             model.gamma = args.gamma
             model.learning_rate = args.lr
             model.lr_schedule = get_schedule_fn(args.lr)
+            model.n_epochs = args.n_epochs
         except ValueError as e:
             if "Observation spaces do not match" not in str(e):
                 raise
@@ -153,7 +156,7 @@ def main():
             model = AlgoClass(
                 policy_name, venv,
                 policy_kwargs=policy_kwargs,
-                n_steps=512, batch_size=256, n_epochs=4,
+                n_steps=512, batch_size=256, n_epochs=args.n_epochs,
                 learning_rate=args.lr, gamma=args.gamma, gae_lambda=0.95,
                 clip_range=0.1, ent_coef=args.ent_coef,
                 tensorboard_log=args.logdir, verbose=1, device="cuda",
@@ -171,7 +174,7 @@ def main():
         model = AlgoClass(
             policy_name, venv,
             policy_kwargs=policy_kwargs,
-            n_steps=512, batch_size=256, n_epochs=4,
+            n_steps=512, batch_size=256, n_epochs=args.n_epochs,
             learning_rate=args.lr, gamma=args.gamma, gae_lambda=0.95,
             clip_range=0.1, ent_coef=args.ent_coef,
             tensorboard_log=args.logdir, verbose=1, device="cuda",
