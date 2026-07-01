@@ -20,7 +20,8 @@ def main():
 
     env = DonkeyKongEnv(rom_dir=args.rom_dir)
     obs, info = env.reset()
-    print(f"reset OK | obs {obs.shape} {obs.dtype} | start state {info['state']}")
+    print(f"reset OK | image {obs['image'].shape} {obs['image'].dtype} "
+          f"| ram {obs['ram'].shape} | start state {info['state']}")
 
     rng = np.random.default_rng(0)
     rewards, deaths = [], 0

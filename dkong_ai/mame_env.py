@@ -65,6 +65,11 @@ def _die_with_parent():
 class DonkeyKongEnv(gym.Env):
     metadata = {"render_modes": []}
 
+    # _p_curric is a class-level default (like P_NO_BARRELS) overridden by
+    # train.py before env construction. Must NOT become an instance attribute
+    # or CLI --p-curric will be silently ignored.
+    _p_curric = 0.15
+
     def __init__(self, rom_dir: str, port: int = 5000, frameskip: int = 4,
                  headless: bool = True, mame_bin: str = "mame",
                  bridge: str | None = None, record: bool = True):
@@ -83,7 +88,7 @@ class DonkeyKongEnv(gym.Env):
         self._rxbuf = b""
         self._corridor = self._load_corridor()   # height-band -> expert target x
         self._n_curric = self._count_curriculum()  # expert upper-board start states
-        self._p_curric = 0.15  # run 15: wall-zone curriculum (lowest 5 states only)
+        # _p_curric is a CLASS attribute — do not set self._p_curric here
         self._sock: socket.socket | None = None
         self._geom: dict | None = None
         self._prev: dict | None = None
@@ -478,12 +483,13 @@ class DonkeyKongEnv(gym.Env):
     CAMP_H_LO, CAMP_H_HI, CAMP_X, CAMP_COST = 36, 65, 130, 0.01
 
     # Bottom-floor corner penalty: per-step cost for being in the dead-end corners
-    # of the ground floor (height < 15). Left corner = past the left wall (x<30);
-    # right corner = past the ladder at x≈143 heading toward the right wall (x>190).
-    # The only useful position on the ground floor is near the right-side ladder up.
-    CORNER_H_MAX   = 15
+    # of the ground floor. Left corner = past the left wall (x<30); right corner =
+    # past the first ladder at x≈143 heading toward the right wall (x>160).
+    # CORNER_H_MAX=25: ground floor is mario_y≈220-224 → height≈16-20, so the
+    # threshold must be >20 to actually fire. 15 was too low and never triggered.
+    CORNER_H_MAX   = 25
     CORNER_X_LEFT  = 30
-    CORNER_X_RIGHT = 190
+    CORNER_X_RIGHT = 160
     CORNER_COST    = 0.20
 
     # Score-gating zone: block barrel-jump score reward only when camping

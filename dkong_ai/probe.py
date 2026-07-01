@@ -17,11 +17,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rom-dir", required=True)
     ap.add_argument("--port", type=int, default=5000)
-    ap.add_argument("--headless", action="store_true", default=True)
+    ap.add_argument("--no-headless", action="store_true", default=False,
+                    help="run MAME with a display (for debugging)")
     args = ap.parse_args()
 
     env = DonkeyKongEnv(rom_dir=args.rom_dir, port=args.port,
-                        headless=args.headless)
+                        headless=not args.no_headless)
     env._launch_mame()
     env._connect()
     env._read_handshake()

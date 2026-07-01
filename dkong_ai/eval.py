@@ -31,7 +31,8 @@ def main():
     ap.add_argument("--rom-dir", required=True)
     ap.add_argument("--model", default="artifacts/ppo_dkong")
     ap.add_argument("--episodes", type=int, default=5)
-    ap.add_argument("--stack", type=int, default=8)
+    ap.add_argument("--stack", type=int, default=2,
+                    help="frame stack depth — must match the training run (run 21+: 2)")
     ap.add_argument("--deterministic", action="store_true")
     ap.add_argument("--port", type=int, default=5100,
                     help="keep clear of a running training (it uses 5000+)")
