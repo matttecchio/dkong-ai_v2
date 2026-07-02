@@ -846,6 +846,7 @@ class DonkeyKongEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
+        self._start_type = "bottomup"
         try:
             if self._proc is None:           # first reset: launch persistent MAME
                 self._launch_mame()
@@ -872,6 +873,8 @@ class DonkeyKongEnv(gym.Env):
                     ok, state, pix = self._is_responsive()
                     if not ok:
                         state, pix = self._load_state()
+                    else:
+                        self._start_type = "curriculum"
                 else:
                     state, pix = self._load_state()
                 # Per-episode barrel-freeze: 50% of episodes disable all barrels
@@ -907,7 +910,8 @@ class DonkeyKongEnv(gym.Env):
         # cleared = reached a later screen this episode.
         return {"state": state,
                 "max_height": max(0, self.BASE_Y - self._min_y),
-                "cleared": int(self._max_screen > 1)}
+                "cleared": int(self._max_screen > 1),
+                "start_type": self._start_type}
 
     def step(self, action: int):
         try:

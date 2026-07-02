@@ -7,13 +7,13 @@ Train an agent to play arcade **Donkey Kong** (`dkong`) through MAME. First goal
 > full project state, what's been tried and why, the current training run, and
 > next steps. This README is the reference; HANDOFF is the story + status.
 
-- **Observation:** Dict — `image`: 84×84 pixels + threat/ladder/fall-zone map,
-  frame-stacked ×8 (CNN); `ram`: 50 normalised features (barrel positions,
-  velocities, edge proximity, fireball, hammer) fed to a separate MLP.
+- **Observation:** Dict — `image`: 84×84×4 (2-frame stack, grayscale + threat/ladder map);
+  `ram`: 62 normalised features (barrel positions, velocities, edge proximity, fireball, hammer).
 - **Reward (from RAM):** height-milestone + exploration novelty + expert-route
   corridor + waypoint milestones + climb bonus + de-weighted score + death/clear.
-  See `dkong_ai/mame_env.py:_reward` and HANDOFF for *why* it's shaped this way.
-- **Algorithm:** PPO (Stable-Baselines3), GPU, 16 parallel envs.
+  All height rewards gated on `is_jumping==0`. See `dkong_ai/mame_env.py:_reward` and HANDOFF.
+- **Algorithm:** RecurrentPPO / LSTM (`sb3_contrib.RecurrentPPO`, `MultiInputLstmPolicy`),
+  GPU, 16 parallel envs.
 
 ## Architecture
 
@@ -151,19 +151,13 @@ MAME with the cheatfind plugin for RAM work).
 - **Throughput** is GPU/inference-bound, not reset-bound: scale via `--n-envs`
   (8≈250 fps, 16≈800 fps).
 
-## Status (final, after 5 training runs)
+## Status
 
 **Full project state, run history, models, and next steps: [`HANDOFF.md`](HANDOFF.md).**
 
-In short: the pipeline works and is robust; the agent **climbs ~half the board
-(height ~52/192), jumps barrels, scores ~5–7k**, and can **occasionally clear when
-started near the top (~1%)** — but **cannot yet reliably climb bottom-to-top to
-Pauline.** The unsolved blocker is the **left-traverse to the 2nd-girder ladder**
-(it camps right and farms barrels instead). Five approaches (reward shaping,
-exploration+route-corridor, curriculum, behavioral cloning) each stalled at/near
-that wall. Best models: `artifacts/ppo_dkong_curric.zip` /
-`ppo_dkong_explore_last.zip`.
-
-Recommended next step (see HANDOFF §12): **curriculum states placed *at* the wall**
-(2nd girder, right side, height ~47) so the agent drills the exact left-traverse,
-plus stronger exploration and/or better demonstration data.
+In short (run 26 active): the LSTM broke the long-standing height~54 wall — run 22
+first reached height_best=146 with RecurrentPPO. Run 25 at 42M steps has `height_mean≈38`
+(reliably into the first ladder) and `height_best=162` (4th girder). Still 0 clears
+bottom-up with live barrels. The remaining blocker is the left traverse from the 2nd
+girder to the x=53 ladder — the agent needs to learn to time that crossing around
+barrel gaps.

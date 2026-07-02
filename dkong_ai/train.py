@@ -17,12 +17,14 @@ from .dk_policy import DkFeaturesExtractor, DkFrameStackWrapper
 
 
 class ClimbMetricsCallback(BaseCallback):
-    """Logs barrel-stage progress so we can SEE the agent climbing higher:
-    mean/peak height reached and the stage-clear rate over recent episodes."""
+    """Logs barrel-stage progress: mean/peak height, clear rate, score, and
+    height segmented by episode start type (bottomup vs curriculum)."""
 
     def __init__(self, window=100):
         super().__init__()
         self._heights, self._clears, self._scores = [], [], []
+        self._heights_bt: list[float] = []   # bottomup episodes only
+        self._heights_cu: list[float] = []   # curriculum episodes only
         self.window = window
         self.best_height = 0
 
@@ -41,11 +43,23 @@ class ClimbMetricsCallback(BaseCallback):
             self._clears  = self._clears[-self.window:]
             self._scores  = self._scores[-self.window:]
             self.best_height = max(self.best_height, h)
+            if info.get("start_type") == "curriculum":
+                self._heights_cu.append(h)
+                self._heights_cu = self._heights_cu[-self.window:]
+            else:
+                self._heights_bt.append(h)
+                self._heights_bt = self._heights_bt[-self.window:]
         if self._heights:
             self.logger.record("climb/height_mean", sum(self._heights) / len(self._heights))
             self.logger.record("climb/height_best", self.best_height)
             self.logger.record("climb/clear_rate",  sum(self._clears) / len(self._clears))
             self.logger.record("climb/score_mean",  sum(self._scores) / len(self._scores))
+        if self._heights_bt:
+            self.logger.record("climb/height_mean_bottomup",
+                               sum(self._heights_bt) / len(self._heights_bt))
+        if self._heights_cu:
+            self.logger.record("climb/height_mean_curric",
+                               sum(self._heights_cu) / len(self._heights_cu))
         return True
 
 
@@ -55,7 +69,7 @@ def make_env(rom_dir, port, frameskip):
         # with recording for watchable playback of a trained policy).
         env = DonkeyKongEnv(rom_dir=rom_dir, port=port, frameskip=frameskip,
                             record=False)
-        return Monitor(env, info_keywords=("max_height", "cleared"))
+        return Monitor(env, info_keywords=("max_height", "cleared", "start_type"))
     return _thunk
 
 

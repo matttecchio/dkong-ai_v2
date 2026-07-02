@@ -3,7 +3,7 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-02, Run 25 active (PID 490714, RecurrentPPO_10).
+Last updated: 2026-07-02, Run 25 ended at ~42M steps; **Run 26 starting**.
 
 ---
 
@@ -12,21 +12,23 @@ Last updated: 2026-07-02, Run 25 active (PID 490714, RecurrentPPO_10).
 - **Full pipeline works and is robust**: MAME `dkong` driven from Python, a
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
-- **Current run (25)** at 23M steps: `height_best=162` (4th girder), `height_mean=36`
-  (reliably on the first ladder), `clip_fraction≈0.10` (healthy).
-- `height_mean=36` is the key diagnostic threshold — it means Mario is reliably
-  getting 2/3 up the first ladder per episode. Height 44+ = first ladder complete.
-- All height metrics are now honest: gated on `is_jumping==0` so jump arcs do not
-  inflate `height_best`, `height_mean`, or the height milestone reward.
-- **Bottom-up with live barrels: still 0 clears** after 25 runs and 300M+ steps,
-  but run 25 is showing the best sustained progress yet.
+- **Run 25 ended at 42M steps**: `height_best=162` (4th girder), `height_mean≈38`
+  (reliably on the first ladder, trending up toward 44). `ep_rew_mean=-5.78`.
+  `explained_variance=0.962` (value function very well calibrated at this point).
+- **Run 26**: warm-starts from run25_last. Re-enables curriculum (`p_curric=0.15`)
+  to give the agent practice on the upper board. New `climb/height_mean_bottomup`
+  and `climb/height_mean_curric` TensorBoard metrics let you see both signal lines.
+- All height metrics honest: gated on `is_jumping==0` so jump arcs don't inflate
+  `height_best`, `height_mean`, or the height milestone reward.
+- **Bottom-up with live barrels: still 0 clears** after 25 runs and ~300M+ steps,
+  but run 25 is the best sustained progress yet (LSTM broke the old height~54 wall).
 
 ---
 
 ## 1. Goal
 
 Train an RL agent to play arcade **Donkey Kong** (`dkong`) through MAME from
-pixels (CNN) + RAM features (MLP). First milestone: **clear the barrel/girder
+pixels (CNN) + RAM features (LSTM). First milestone: **clear the barrel/girder
 stage bottom-up with live barrels** (reach Pauline at the top). Stretch: all 4 stages.
 
 ---
@@ -44,28 +46,31 @@ stage bottom-up with live barrels** (reach Pauline at the top). Stretch: all 4 s
 ## 3. Quick start
 
 ```bash
-# Current run command (run 25):
+# Run 26 start command:
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
     --timesteps 100000000 --n-envs 16 \
     --save artifacts/ppo_dkong_run26 --logdir logs \
     --gamma 0.999 --ent-coef 0.01 --lr 2e-5 --n-epochs 3 \
-    --stack 2 --p-no-barrels 0.0 --p-curric 0.0 \
+    --stack 2 --p-no-barrels 0.0 --p-curric 0.15 \
     --lstm --lstm-hidden 256 \
     --init-from artifacts/ppo_dkong_run25_last \
     > logs/run26.log 2>&1 &
 
+# Check training is alive
+ps aux | grep dkong_ai.train | grep -v grep
+tail -f logs/run26.log
+
+# Kill gracefully (saves final checkpoint to artifacts/ppo_dkong_run26_last.zip):
+kill -SIGTERM <pid>
+
 # Watch a trained model (records .inp, then plays windowed)
 .venv/bin/python -m dkong_ai.eval --rom-dir ./roms \
-    --model artifacts/checkpoints/ppo_dkong_run25/ppo_dkong_run25_Xsteps \
+    --model artifacts/checkpoints/ppo_dkong_run26/ppo_dkong_run26_Xsteps \
     --port 5100 --stack 2
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
-# Monitor running train
-tail -f logs/run25.log
-
 # TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
-# Already running: PID 296598. Run 25 = RecurrentPPO_10.
-# Open http://localhost:6006 in Windows browser.
+# Open http://localhost:6006 in Windows browser. Run 26 = RecurrentPPO_11.
 ```
 
 ⚠️ Eval/diag always use `--port 5100` to avoid colliding with training (5000+).
@@ -123,7 +128,8 @@ Per fireball: `[Δx/128, Δy/120, active]` — all 5 slots tracked.
 **⚠️ Missing feature (known gap):** There is no `lad143` — barrel distance to
 the x=143 first ladder. `lad53` helps time the 2nd→3rd girder climb; an
 equivalent for x=143 would help time the first-ladder climb between barrels.
-Consider adding as a future improvement.
+Consider adding as a future improvement (changes `RAM_FEATURE_DIM` 62→68,
+breaks warm-start from run 25).
 
 **Full RAM address map** (`memory_map.py` + `bridge.lua` WATCH_ADDRS, 47 entries,
 ORDER MUST MATCH between both files):
@@ -145,6 +151,7 @@ ORDER MUST MATCH between both files):
 
 ⚠️ `is_jumping` (0x6216) is the **last entry** in both `WATCH_ORDER` and bridge.lua
 `WATCH_ADDRS`. Both lists have exactly 47 entries and must remain in sync.
+`tests/test_bridge_sync.py` enforces this mechanically — run it after any WATCH change.
 
 ---
 
@@ -166,7 +173,7 @@ within `EDGE_PROX=40` game pixels of the relevant edge.
 
 ---
 
-## 7. Reward (`dkong_ai/mame_env.py:_reward`) — current as of run 25
+## 7. Reward (`dkong_ai/mame_env.py:_reward`) — current as of run 26
 
 ### Key design principle: is_jumping gate
 **All height-based rewards are gated on `not s.get("is_jumping", 0)`.**
@@ -179,7 +186,7 @@ in TensorBoard) is also gated in `step()`.
 
 | term | value | trigger |
 |---|---|---|
-| Height milestone | +0.5 × new pixels | NEW max height AND not jumping |
+| Height milestone | +0.5 × new pixels | NEW max height AND **not jumping** |
 | WP0 | +5 | height ≥ 36 AND x < 140 (2nd girder heading left) |
 | WP1a | +10 | height ≥ 45 AND x < 75 (approaching 2nd→3rd ladder) |
 | WP1b | +75 | height ≥ 45 AND x < 58 (AT the ladder entrance) |
@@ -201,9 +208,9 @@ in TensorBoard) is also gated in `step()`.
 | Per-step height bonus | +0.003 × height/100 | continuous gradient |
 | Novelty | +0.2 (+0.3 bonus) | first visit to 16×16 (x,height) cell; bonus if on expert corridor |
 | Score | +0.003/pt | 0 < gain ≤ 2000; **gated out** when height<65 AND x>115 AND not moving left |
-| First-ladder climb | +0.30/step | not jumping, x=133-155, height=10-44, mario_y decreasing |
-| 2nd→3rd ladder climb | +0.30/step | not jumping, x=43-68, height=40-100, mario_y decreasing |
-| Top-ladder climb | +0.30/step | not jumping, x=137-160, height=138-192, mario_y decreasing |
+| First-ladder climb | +0.30/step | **not jumping**, x=133-155, height=10-44, mario_y decreasing |
+| 2nd→3rd ladder climb | +0.30/step | **not jumping**, x=43-68, height=40-100, mario_y decreasing |
+| Top-ladder climb | +0.30/step | **not jumping**, x=137-160, height=138-192, mario_y decreasing |
 | 2nd-girder traverse | +0.05/pixel | moving left, height=36-65, x=53-143 |
 | 5th-girder traverse | +0.05/pixel | moving right, height=140-158, x=67-147 |
 
@@ -216,9 +223,9 @@ in TensorBoard) is also gated in `step()`.
 | Episode timeout | −15 | 800 steps elapsed without reaching height 60 |
 | Anti-camping | −0.01/step | height=36-65, x>130, no hammer |
 | Corner penalty | −0.20/step | height<25 AND (x<30 OR x>160) |
-| First-ladder idle | −0.05/step | not jumping, x=133-155, height=10-44, mario_y unchanged |
-| 2nd→3rd ladder idle | −0.05/step | not jumping, x=43-68, height=40-100, mario_y unchanged |
-| Top-ladder idle | −0.05/step | not jumping, x=137-160, height=138-192, mario_y unchanged |
+| First-ladder idle | −0.05/step | **not jumping**, x=133-155, height=10-44, mario_y unchanged |
+| 2nd→3rd ladder idle | −0.05/step | **not jumping**, x=43-68, height=40-100, mario_y unchanged |
+| Top-ladder idle | −0.05/step | **not jumping**, x=137-160, height=138-192, mario_y unchanged |
 | Hammer-at-wall | −0.05/step | has_hammer AND x<45 AND height>25 |
 
 ---
@@ -274,11 +281,18 @@ that the new objective has been learned.
   requires real input events).
 - **RNG diversity**: after each load, advance 0–15 random NOOP frames so barrel
   patterns differ per episode.
-- **Barrel-freeze training wheels** (`P_NO_BARRELS`, run 25: **0.0**):
+- **Barrel-freeze training wheels** (`P_NO_BARRELS`, run 26: **0.0**):
   bridge `0xF8` command zeroes all barrel/fireball status bytes each frame.
   Currently OFF — all episodes have live barrels.
-- **Curriculum** (`_p_curric`, run 25: **0.0**): OFF — all episodes start from
-  the ground floor. Curriculum confounds height metrics; bottom-up is the clean signal.
+- **Curriculum** (`_p_curric`, run 26: **0.15**): With 15% probability, reset to
+  one of the 5 lowest curriculum states (heights 35-52) instead of the ground floor.
+  The `_info()` dict includes `start_type = "curriculum" | "bottomup"` so TensorBoard
+  can show `climb/height_mean_curric` and `climb/height_mean_bottomup` separately.
+  Wall-zone curriculum: only the lowest 5 states (heights 35-52) are used (`n_wall=min(5,n_curric)`).
+  Upper states confound height metrics.
+- **Start-type tracking**: `mame_env.py:reset()` sets `self._start_type = "bottomup"` as
+  default; overrides to `"curriculum"` only when a curriculum state loads successfully
+  (falls back to "bottomup" if `_is_responsive()` fails).
 
 ---
 
@@ -310,34 +324,39 @@ that the new objective has been learned.
 | 22 | LSTM, lr=5e-5, no curriculum | 36.5M | **146** | 27–29 | 0 | **first run past 54**; stalled 5th girder |
 | 23 | lr=2e-5, n_epochs=3, full LSTM warm-start, upper-board rewards | ~1M clean | 58 | ~27 | 0 | stopped: jump-farming bug found |
 | 24 | + is_jumping gate on climb bonuses | ~500K | 58 | ~21 | 0 | stopped: height milestone also unfixed |
-| **25** | **+ is_jumping gate on height milestone + _min_y** | **23M+** | **162** | **36** | **0** | **ACTIVE — best sustained progress** |
+| 25 | + is_jumping gate on height milestone + _min_y | **42M** | **162** | **38** | **0** | **ended cleanly; best sustained progress** |
+| **26** | **warm-start run25, p_curric=0.15, new curriculum metric segmentation** | **—** | **—** | **—** | **—** | **STARTING** |
 
 ---
 
-## 11. Current run — Run 25 (RecurrentPPO_10)
+## 11. Current run — Run 26
 
-**PID**: 490714. **Log**: `logs/run25.log`.
-**Save**: `artifacts/ppo_dkong_run25`. **Stack**: 2.
-**TensorBoard**: `RecurrentPPO_10` (open `http://localhost:6006` in Windows browser).
-**Warm-start**: `artifacts/ppo_dkong_run24_last.zip`.
+**Warm-start**: `artifacts/ppo_dkong_run25_last.zip`.
+**Save**: `artifacts/ppo_dkong_run26`. **Stack**: 2.
+**TensorBoard**: `RecurrentPPO_11` (next run label after run 25's `RecurrentPPO_10`).
 
-**Key changes from run 22 (the last long run):**
-- `--lr 2e-5` (was 5e-5 — clip_fraction stuck at 0.20–0.23)
-- `--n-epochs 3` (was 4)
-- Full LSTM warm-start (inherits LSTM weights that learned to reach height 146)
-- **FIRST_CLIMB_BONUS** (+0.30/step ascending first ladder, x=133-155, h=10-44)
-- **is_jumping gate** on ALL three climb bonuses (runs without this gate were farming
-  +0.30/step by jumping at the ladder base instead of climbing)
-- **is_jumping gate on height milestone** (jump arcs no longer give milestone credit)
-- **is_jumping gate on `_min_y`** (height_best metric now reflects true stood-at height)
+**Key changes from run 25:**
+- **`p_curric=0.15`** (was 0.0): re-enables wall-zone curriculum. 15% of episodes
+  start at heights 35-52 (the 2nd girder approach zone) so the agent drills the
+  left-traverse more frequently.
+- **Curriculum metric segmentation**: `mame_env.py:_info()` now includes
+  `"start_type": "curriculum" | "bottomup"`. `ClimbMetricsCallback` logs
+  `climb/height_mean_bottomup` and `climb/height_mean_curric` as separate
+  TensorBoard series. This lets you verify the curriculum isn't contaminating
+  the bottom-up signal.
+- **tests/test_bridge_sync.py**: 4 tests enforce the 47-entry WATCH_ORDER/WATCH_ADDRS
+  invariant mechanically. Run after any RAM map change.
+- **tests/test_reward.py**: 9 unit tests for `_reward()` — is_jumping gate on
+  milestone, climb bonuses, and idle cost; termination conditions.
 
-**Metrics at 23M steps:**
-- height_best = 162 (4th girder level — honest, not jump-inflated)
-- height_mean = 36 (reliably climbing the first ladder past midpoint)
-- ep_rew_mean = −10.8 (trending up from −22 at 368K steps)
-- clip_fraction = 0.103–0.126 (healthy)
+**Run 25 final state** (what we're warm-starting from):
+- 42M steps, height_mean≈38, height_best=162, ep_rew_mean=-5.78
+- explained_variance=0.962 (value function well calibrated)
+- clip_fraction≈0.109 (healthy for LSTM RecurrentPPO)
 
 **SUCCESS** = `height_mean` rising past 44 (first ladder complete), then 78 (3rd girder).
+Watch `climb/height_mean_bottomup` — this is the honest bottom-up signal.
+`climb/height_mean_curric` will be higher (starts partway up) and that's expected.
 
 ---
 
@@ -480,38 +499,40 @@ an emergent behavior that requires many death-from-bad-timing experiences to cre
 
 **Known gap**: `lad53` (barrel x-distance to x=53 ladder) exists as an explicit feature.
 No equivalent `lad143` for the first ladder (x=143). Adding it would give an explicit
-"barrel approaching my ladder" signal to the LSTM.
+"barrel approaching my ladder" signal to the LSTM. Deferred because it changes
+`RAM_FEATURE_DIM` 62→68, which breaks warm-start.
 
 ---
 
-## 14. Gotchas (already bit us)
+## 14. Recommended next steps (for Fable / new session)
 
-- **Kill MAME**: `pkill -x mame`. **Never** `pkill -f 'mame dkong'` — matches
-  your shell and kills it.
-- **nohup PID**: `nohup ... &` prints the shell wrapper PID. The Python trainer
-  is found via `ps aux | grep dkong_ai.train`. `kill <trainer_pid>` → MAME
-  processes die ~5s later (PR_SET_PDEATHSIG). Killing only the wrapper orphans 16 MAMEs.
-- **Throughput is GPU-bound** during PPO (not MAME emulation). 16 envs ~500–600
-  fps on RTX 4080 SUPER.
-- **Obs space breaks warm-start**: models from a different RAM dim or image shape
-  cannot be loaded. RAM dim: 62 (as of run 19). Stack: run 21+ uses `--stack 2`.
-  Always match `--stack` to the run being loaded.
-- **clip_fraction warning**: for LSTM (RecurrentPPO), healthy clip_fraction is
-  0.05–0.15. Above 0.20 means `--lr` is too high and the policy is thrashing.
-  Run 21 hit 0.34 (lr=2.5e-4); run 22 stuck at 0.20-0.23 (lr=5e-5); runs 23-25
-  at lr=2e-5 → 0.10-0.13 (healthy).
-- **Warm-start regression**: inheriting weights trained on a different reward
-  function causes a dip from ~50 to ~25 in height_mean as PPO corrects toward
-  the new objective. Normal; wait for recovery.
-- **WATCH_ORDER / WATCH_ADDRS must match**: `memory_map.WATCH_ORDER` (Python)
-  and `WATCH_ADDRS` in `bridge.lua` (Lua) must have entries in the same order.
-  Currently 47 entries each. `is_jumping` is the 47th (last) in both.
-- **Recording + state loads don't mix**: `record=True` uses intro/soft-reset.
-  `record=False` uses save-state load (fast). A load isn't an input event → breaks
-  `.inp` playback.
-- **Stream framing**: `_rxbuf` keeps bytes that over-read from the handshake into
-  the first obs frame. Don't remove it — causes intermittent `IndexError` at
-  16-env launch.
+In priority order:
+
+1. **Watch run 26 stabilize**: After warm-start regression (~2-5M steps), watch
+   `climb/height_mean_bottomup`. If it stalls at ~38 as run 25 did, the curriculum
+   isn't helping and it's not a reward problem — it's an exploration problem.
+
+2. **Go-Explore** (highest-leverage, ~1 week of work): maintain an archive of
+   (x, height) cells reached across all episodes; on episode start, reset to the
+   frontier cell with lowest known height_mean. This makes hard-to-reach states
+   much more frequently practiced. The existing curriculum infrastructure makes
+   this tractable — curriculum states are already snapshots, Go-Explore would just
+   dynamically update which snapshot to reload.
+
+3. **Potential-based shaping** (complements Go-Explore): define Φ(s) = arc-length
+   along the expert corridor, reward `r_shape = γΦ(s') - Φ(s)`. Policy-invariant
+   (can't be farmed), provides dense gradient all the way to Pauline without
+   changing the optimal policy.
+
+4. **lad143 feature**: add barrel-distance-to-first-ladder (x=143) as a RAM feature
+   alongside lad53. Explicit "barrel approaching my ladder" signal for timing.
+   Changes RAM_FEATURE_DIM 62→68 — breaks warm-start from any prior run. Do this
+   at the start of a fresh run, not as a mid-run change.
+
+5. **Deferred (lower priority)**:
+   - VecNormalize (observation normalization — adds complexity to save/load flows)
+   - Config dataclass (code quality, doesn't affect agent behavior)
+   - Curriculum metric segmentation already done (run 26)
 
 ---
 
@@ -535,16 +556,54 @@ track barrel state across the ~3s traverse window.
 
 ---
 
-## 16. File map
+## 16. Gotchas (already bit us)
+
+- **Kill MAME**: `pkill -x mame`. **Never** `pkill -f 'mame dkong'` — matches
+  your shell and kills it.
+- **nohup PID**: `nohup ... &` prints the shell wrapper PID. The Python trainer
+  is found via `ps aux | grep dkong_ai.train`. `kill <trainer_pid>` → MAME
+  processes die ~5s later (PR_SET_PDEATHSIG). Killing only the wrapper orphans 16 MAMEs.
+- **Throughput is GPU-bound** during PPO (not MAME emulation). 16 envs ~500–600
+  fps on RTX 4080 SUPER.
+- **Obs space breaks warm-start**: models from a different RAM dim or image shape
+  cannot be loaded. RAM dim: 62 (as of run 19). Stack: run 21+ uses `--stack 2`.
+  Always match `--stack` to the run being loaded.
+- **clip_fraction warning**: for LSTM (RecurrentPPO), healthy clip_fraction is
+  0.05–0.15. Above 0.20 means `--lr` is too high and the policy is thrashing.
+  Run 21 hit 0.34 (lr=2.5e-4); run 22 stuck at 0.20-0.23 (lr=5e-5); runs 23-25
+  at lr=2e-5 → 0.10-0.13 (healthy).
+- **Warm-start regression**: inheriting weights trained on a different reward
+  function causes a dip from ~50 to ~25 in height_mean as PPO corrects toward
+  the new objective. Normal; wait for recovery. Run 26 warm-starts from a SAME
+  reward function so regression should be minimal — just curriculum re-adaptation.
+- **WATCH_ORDER / WATCH_ADDRS must match**: `memory_map.WATCH_ORDER` (Python)
+  and `WATCH_ADDRS` in `bridge.lua` (Lua) must have entries in the same order.
+  Currently 47 entries each. `is_jumping` is the 47th (last) in both.
+  `tests/test_bridge_sync.py` enforces this mechanically.
+- **Recording + state loads don't mix**: `record=True` uses intro/soft-reset.
+  `record=False` uses save-state load (fast). A load isn't an input event → breaks
+  `.inp` playback.
+- **Stream framing**: `_rxbuf` keeps bytes that over-read from the handshake into
+  the first obs frame. Don't remove it — causes intermittent `IndexError` at
+  16-env launch.
+- **start_type in info**: `_info()` returns `"start_type"` but it's only meaningful
+  at episode end (when the callback reads it). The value from `step()` reflects the
+  start type set during the last `reset()`, which is correct.
+
+---
+
+## 17. File map
 
 `dkong_ai/`:
 - `mame_env.py` — env: MAME launch, socket bridge, obs build, reward, curriculum.
+  `_info()` returns `{"state", "max_height", "cleared", "start_type"}`.
 - `memory_map.py` — all confirmed RAM addresses + score decode. 47 WATCH_ORDER entries.
 - `dk_policy.py` — `DkFeaturesExtractor` (CNN+RAM MLP) + `DkFrameStackWrapper`.
-- `train.py` — PPO/RecurrentPPO training. Flags: `--n-envs`, `--stack`,
-  `--gamma`, `--ent-coef`, `--init-from`, `--p-no-barrels`, `--p-curric`,
-  `--save`, `--timesteps`, `--lr`, `--n-epochs`, `--lstm`, `--lstm-hidden`,
-  `--transfer-features-from`.
+- `train.py` — RecurrentPPO training. Callback logs `climb/height_mean_bottomup`
+  and `climb/height_mean_curric` in addition to the existing metrics. Flags:
+  `--n-envs`, `--stack`, `--gamma`, `--ent-coef`, `--init-from`, `--p-no-barrels`,
+  `--p-curric`, `--save`, `--timesteps`, `--lr`, `--n-epochs`, `--lstm`,
+  `--lstm-hidden`, `--transfer-features-from`.
 - `eval.py` — eval + record .inp. Flags: `--model`, `--stack`, `--port`,
   `--episodes`, `--p-no-barrels`, `--p-curric`.
 - `diag.py` — death/peak position diagnostic (RecurrentPPO-aware, stack=2).
@@ -560,13 +619,20 @@ track barrel state across the ~3s traverse window.
 - `human_record.sh` — record human play.
 - `make_curriculum.lua` — snapshot curriculum states from a demo replay.
 
+`tests/`:
+- `test_bridge_sync.py` — 4 tests: WATCH_ORDER count, WATCH_ADDRS count, address
+  match, is_jumping last. Run after any RAM map change.
+- `test_reward.py` — 9 unit tests for `_reward()`. Tests is_jumping gate, idle
+  cost, milestone, death/clear termination. No MAME required.
+
 `artifacts/`:
 - `checkpoints/<run>/` — PPO checkpoints every 500k steps.
 - `expert_corridor.json` — height→x route corridor from expert demo.
 - `states/dkong/curric_*.sta` — MAME save-states for curriculum.
 - `ppo_dkong_run22_last.zip` — run 22 recovery (height_best=146, 36.5M steps).
-- `ppo_dkong_run25_last.zip` — run 25 latest checkpoint (updated on graceful kill).
+- `ppo_dkong_run25_last.zip` — run 25 final checkpoint (42M steps, height_mean≈38).
 
 `demos/dkong.inp` — expert demo (MAME 0.241, plays back faithfully on 0.264).
-`logs/run25.log` — current training log.
-`logs/` — TensorBoard event files. RecurrentPPO_10 = run 25.
+`logs/run25.log` — run 25 training log (complete).
+`logs/run26.log` — run 26 training log (current).
+`logs/` — TensorBoard event files. RecurrentPPO_10=run25, RecurrentPPO_11=run26.
