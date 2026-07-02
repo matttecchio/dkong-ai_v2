@@ -569,8 +569,11 @@ class DonkeyKongEnv(gym.Env):
         if not died and not cleared:
             if s["mario_y"]:
                 height = self.BASE_Y - s["mario_y"]
-                # Height milestone: pay only for NEW max height.
-                if height > self._reward_max_h:
+                not_jumping = not s.get("is_jumping", 0)
+                # Height milestone: pay only for NEW max height, and only when
+                # not mid-jump — jump apexes are transient and shouldn't give
+                # credit for heights Mario hasn't actually stood on.
+                if height > self._reward_max_h and not_jumping:
                     r += (height - self._reward_max_h) * 0.5
                     self._reward_max_h = height
                 # Per-step height bonus: small continuous reward for being higher.
@@ -626,7 +629,10 @@ class DonkeyKongEnv(gym.Env):
                 # the ground-floor → 2nd girder ladder at x≈143. Without this,
                 # the only incentive to climb is the one-shot girder milestone,
                 # which loses to repeatable ground-floor barrel-jump farming.
-                if (self.FIRST_CLIMB_H_LO <= height <= self.FIRST_CLIMB_H_HI
+                # Gated on is_jumping==0 so the bonus only fires during real
+                # ladder climbing, not during jump arcs at the ladder base.
+                if (not_jumping
+                        and self.FIRST_CLIMB_H_LO <= height <= self.FIRST_CLIMB_H_HI
                         and self.FIRST_CLIMB_X_LO <= s["mario_x"] <= self.FIRST_CLIMB_X_HI):
                     if s["mario_y"] < p["mario_y"]:
                         r += self.FIRST_CLIMB_BONUS
@@ -636,7 +642,8 @@ class DonkeyKongEnv(gym.Env):
                 # 2nd→3rd girder ladder. Requires mario_y to decrease (gaining
                 # height) while positioned at the ladder column — can't be farmed
                 # by standing still.
-                if (self.CLIMB_H_LO <= height <= self.CLIMB_H_HI
+                if (not_jumping
+                        and self.CLIMB_H_LO <= height <= self.CLIMB_H_HI
                         and self.CLIMB_X_LO <= s["mario_x"] <= self.CLIMB_X_HI):
                     if s["mario_y"] < p["mario_y"]:
                         r += self.CLIMB_BONUS
@@ -645,7 +652,8 @@ class DonkeyKongEnv(gym.Env):
                 # Upper ladder climb bonus: same mechanic for the final ladder
                 # (x≈147, 5th girder → Pauline). Fills the reward desert above
                 # height 144 where only the sparse height milestone fires.
-                if (self.UPPER_CLIMB_H_LO <= height <= self.UPPER_CLIMB_H_HI
+                if (not_jumping
+                        and self.UPPER_CLIMB_H_LO <= height <= self.UPPER_CLIMB_H_HI
                         and self.UPPER_CLIMB_X_LO <= s["mario_x"] <= self.UPPER_CLIMB_X_HI):
                     if s["mario_y"] < p["mario_y"]:
                         r += self.UPPER_CLIMB_BONUS
@@ -913,7 +921,7 @@ class DonkeyKongEnv(gym.Env):
             return self._preprocess(pix, state), 0.0, True, False, self._info(state)
         state = self._decode_state(ram)
         reward, terminated = self._reward(state)
-        if state["mario_y"]:
+        if state["mario_y"] and not state.get("is_jumping", 0):
             self._min_y = min(self._min_y, state["mario_y"])
         self._max_screen = max(self._max_screen, state["screen_id"])
         obs = self._preprocess(pix, state)   # uses self._prev (old) for vx/vy/fall-zone

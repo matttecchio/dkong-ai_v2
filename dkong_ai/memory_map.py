@@ -46,6 +46,7 @@ ADDR = {
     "fireball4_st": 0x6480, "fireball4_x": 0x6483, "fireball4_y": 0x6485,
     # Hammer sprite at #6A1C-#6A1F. Pattern: +0=X, +3=Y. has_hammer=0x6217.
     "hammer_x": 0x6A1C, "hammer_y": 0x6A1F, "has_hammer": 0x6217,
+    "is_jumping": 0x6216,
 }
 
 # Bytes the bridge ships each step, in this order (must match bridge WATCH_ADDRS).
@@ -64,6 +65,7 @@ WATCH_ORDER = [
     "fireball3_st", "fireball3_x", "fireball3_y",
     "fireball4_st", "fireball4_x", "fireball4_y",
     "hammer_x", "hammer_y", "has_hammer",
+    "is_jumping",
 ]
 
 WATCH_ADDRS = [ADDR[name] for name in WATCH_ORDER]

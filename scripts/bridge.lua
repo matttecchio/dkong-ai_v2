@@ -82,6 +82,7 @@ local WATCH_ADDRS = {
   0x6480, 0x6483, 0x6485,  -- fireball 4
   -- Hammer sprite (#6A1C-#6A1F): +0=X, +3=Y. has_hammer at 0x6217.
   0x6A1C, 0x6A1F, 0x6217,  -- hammer x, hammer y, has_hammer
+  0x6216,                   -- is_jumping (non-zero while Mario is in a jump arc)
 }
 
 -- Training-wheels barrel-freeze: Python sends 0xF8 to disable barrels+fireball
