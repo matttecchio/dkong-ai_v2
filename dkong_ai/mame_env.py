@@ -22,6 +22,7 @@ import os
 import signal
 import socket
 import struct
+import shutil
 import subprocess
 import sys
 import time
@@ -72,9 +73,12 @@ class DonkeyKongEnv(gym.Env):
 
     def __init__(self, rom_dir: str, port: int = 5000, frameskip: int = 4,
                  headless: bool = True, mame_bin: str = "mame",
-                 bridge: str | None = None, record: bool = True):
+                 bridge: str | None = None, record: bool = True,
+                 backward_manifest: str | None = None,
+                 extra_mame_args: list[str] | None = None):
         super().__init__()
         self.rom_dir = rom_dir
+        self.extra_mame_args = list(extra_mame_args or [])
         self.port = port
         self.frameskip = frameskip
         self.headless = headless
@@ -88,6 +92,32 @@ class DonkeyKongEnv(gym.Env):
         self._rxbuf = b""
         self._corridor = self._load_corridor()   # height-band -> expert target x
         self._n_curric = self._count_curriculum()  # expert upper-board start states
+        # Backward-algorithm curriculum (phase 2 of Go-Explore): chains of
+        # save-states along PROVEN bottom-up winner routes. When set, episodes
+        # start from a chain cell no deeper than _bw_level allows; the trainer
+        # raises the level (via set_backward_level) as the clear rate rises,
+        # walking the start back toward the bottom. Supersedes the legacy
+        # expert-demo curric_<idx> states.
+        self._bw_chains: list[list[dict]] | None = None
+        self._bw_level = 0
+        self._bw_start: tuple | None = None
+        self._bottom_backup_ok = False   # bottom_<port>.sta from THIS instance
+        if backward_manifest:
+            if record:
+                raise ValueError(
+                    "backward_manifest requires record=False: recording uses "
+                    "clean intro resets (no save-state loads), so the backward "
+                    "curriculum could never activate")
+            with open(backward_manifest) as f:
+                mani = json.load(f)
+            base = os.path.dirname(os.path.abspath(backward_manifest))
+            self._bw_chains = [
+                [{"sta": os.path.join(base, c["sta"]),
+                  "height": c.get("height", 0)} for c in ch["cells"]]
+                for ch in mani["chains"]] or None
+            if self._bw_chains is None:
+                print("[env] WARNING: backward manifest has no chains — "
+                      "backward curriculum disabled", flush=True)
         # _p_curric is a CLASS attribute — do not set self._p_curric here
         self._sock: socket.socket | None = None
         self._geom: dict | None = None
@@ -142,6 +172,10 @@ class DonkeyKongEnv(gym.Env):
             self._inp_path = os.path.abspath(os.path.join(recdir, fname))
             args += ["-input_directory", os.path.abspath(recdir),
                      "-record", fname]
+        # Caller-supplied extras (e.g. -aviwrite, -throttle) go LAST so they
+        # override any earlier flag — including the headless and record blocks
+        # above — since MAME takes the later value for a repeated option.
+        args += self.extra_mame_args
         # Redirect MAME output to a per-port file. An unread PIPE here can fill
         # and deadlock MAME before it serves the socket (esp. with many envs).
         self._mame_out = open(os.path.join(logdir, f"mame_{self.port}.out"), "w")
@@ -772,12 +806,66 @@ class DonkeyKongEnv(gym.Env):
             self._exchange(self.A_SAVE)
         self._hold(self.A_NOOP, 3)
         self._has_state = True
+        if self._bw_chains is not None:
+            # Backward curriculum swaps chain states onto this slot file, so
+            # keep a pristine copy of the bottom start; load_state_file puts
+            # it back after each swap, keeping "load slot" == "bottom".
+            shutil.copyfile(self._slot_sta_path(), self._bottom_sta_path())
+            self._bottom_backup_ok = True
 
     def _load_state(self):
         state = pix = None
         for _ in range(3):                   # load is scheduled; let it complete
             state, pix = self._exchange(self.A_LOAD)
         state, pix = self._hold(self.A_NOOP, 2)
+        return state, pix
+
+    def set_backward_level(self, level: int):
+        """Trainer hook (env_method): allow starts this many cells back from
+        each chain's end. Level 0 = final cell only (nearest the goal)."""
+        self._bw_level = int(level)
+
+    def _slot_sta_path(self):
+        statedir = os.path.abspath(os.path.join(os.path.dirname(self.bridge),
+                                                "..", "artifacts", "states"))
+        return os.path.join(statedir, "dkong", f"dk_{self.port}.sta")
+
+    def _bottom_sta_path(self):
+        return self._slot_sta_path().replace(f"dk_{self.port}",
+                                             f"bottom_{self.port}")
+
+    def load_state_file(self, sta_path: str):
+        """Load an arbitrary .sta through this port's slot — the ONE primitive
+        every slot-swap consumer must use (backward curriculum, go_explore
+        restores, replays). Swaps the file in, loads it, then puts the bottom
+        backup straight back (the loads already consumed the swapped file),
+        so the invariant "slot file == bottom start" survives; see the
+        slot-clobber bug in HANDOFF.md for why that matters."""
+        if not os.path.exists(sta_path):
+            # Deliberately NOT an OSError: reset()'s except treats OSError as
+            # "MAME died" and would relaunch MAME forever; a missing state
+            # file is a config error that must fail fast and readably.
+            raise RuntimeError(f"state file missing: {sta_path}")
+        shutil.copyfile(sta_path, self._slot_sta_path())
+        self._has_state = True
+        state, pix = self._load_state()
+        if self._bottom_backup_ok:
+            shutil.copyfile(self._bottom_sta_path(), self._slot_sta_path())
+        return state, pix
+
+    def _load_backward_start(self):
+        """Start from a random winner-chain cell within the walk-back window
+        [n-1-_bw_level, n-1]. Returns (state, pix), or (None, None) if the
+        snapshot is unresponsive (caller falls back to the bottom start)."""
+        chain = self._bw_chains[int(self.np_random.integers(len(self._bw_chains)))]
+        n = len(chain)
+        lo = max(0, n - 1 - self._bw_level)
+        pos = int(self.np_random.integers(lo, n))
+        self.load_state_file(chain[pos]["sta"])
+        ok, state, pix = self._is_responsive()
+        if not ok:
+            return None, None
+        self._bw_start = (pos, n, chain[pos]["height"])
         return state, pix
 
     def _load_curriculum(self, idx):
@@ -847,6 +935,7 @@ class DonkeyKongEnv(gym.Env):
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         self._start_type = "bottomup"
+        self._bw_start = None
         try:
             if self._proc is None:           # first reset: launch persistent MAME
                 self._launch_mame()
@@ -859,24 +948,34 @@ class DonkeyKongEnv(gym.Env):
                     # isn't an input event and would break .inp playback).
                     self._save_state()
             elif self._has_state:            # fast path: instant state reload
-                # Self-curriculum: with prob p_curric, start partway up the board
-                # from an expert state (so the agent practices the upper board +
-                # finish); else start from the bottom. Bad (frozen) curriculum
-                # snapshots are detected and fall back to the bottom start.
-                # Wall-zone curriculum: restrict to the lowest 5 states
-                # (heights 35-52), which start Mario mid-traverse with live
-                # barrels. Upper states confound height metrics.
-                n_wall = min(5, self._n_curric)
-                if n_wall and self.np_random.random() < self._p_curric:
-                    idx = int(self.np_random.integers(n_wall))
-                    self._load_curriculum(idx)
-                    ok, state, pix = self._is_responsive()
-                    if not ok:
+                if self._bw_chains is not None:
+                    # Backward-algorithm curriculum: with prob p_curric start
+                    # from a winner-chain state (walk-back window set by the
+                    # trainer via set_backward_level); else bottom start.
+                    state = pix = None
+                    if self.np_random.random() < self._p_curric:
+                        state, pix = self._load_backward_start()
+                        if state is not None:
+                            self._start_type = "curriculum"
+                    if state is None:
                         state, pix = self._load_state()
-                    else:
-                        self._start_type = "curriculum"
                 else:
-                    state, pix = self._load_state()
+                    # Legacy self-curriculum: with prob p_curric, start partway
+                    # up from an expert-demo state. Bad (frozen) snapshots are
+                    # detected and fall back to the bottom start. Wall-zone:
+                    # restrict to the lowest 5 states (heights 35-52), which
+                    # start Mario mid-traverse with live barrels.
+                    n_wall = min(5, self._n_curric)
+                    if n_wall and self.np_random.random() < self._p_curric:
+                        idx = int(self.np_random.integers(n_wall))
+                        self._load_curriculum(idx)
+                        ok, state, pix = self._is_responsive()
+                        if not ok:
+                            state, pix = self._load_state()
+                        else:
+                            self._start_type = "curriculum"
+                    else:
+                        state, pix = self._load_state()
                 # Per-episode barrel-freeze: 50% of episodes disable all barrels
                 # and the fireball so the agent can freely explore the left traverse
                 # and ladder-climb without danger. The remaining 50% run live.
@@ -911,7 +1010,8 @@ class DonkeyKongEnv(gym.Env):
         return {"state": state,
                 "max_height": max(0, self.BASE_Y - self._min_y),
                 "cleared": int(self._max_screen > 1),
-                "start_type": self._start_type}
+                "start_type": self._start_type,
+                "bw_start": self._bw_start}   # (pos, chain_len, height) | None
 
     def step(self, action: int):
         try:

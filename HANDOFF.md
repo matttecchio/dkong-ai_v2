@@ -358,6 +358,63 @@ that the new objective has been learned.
 Watch `climb/height_mean_bottomup` — this is the honest bottom-up signal.
 `climb/height_mean_curric` will be higher (starts partway up) and that's expected.
 
+**Run 26 OUTCOME (2026-07-03, 40M steps): FLAT.** `height_mean_bottomup` oscillated
+35-42 with no trend; clear_rate 0 throughout; entropy/KL/score all converged-flat at
+lr 2e-5. Decisive new fact from the metric split: `height_mean_curric` ≈ 42-45 while
+curriculum spawns average height ~44 — since max-height ≥ spawn height, the agent gains
+~0-1px from mid-traverse spawns, i.e. it dies almost instantly in barrel traffic at the
+wall. The deficit is **dodge-survival skill in traffic**, not route knowledge.
+Eval @40.5M (5 eps, live barrels): max heights 4-54, scores 0-100.
+
+---
+
+## 11b. Go-Explore pivot (2026-07-03) — CURRENT DIRECTION
+
+`dkong_ai/go_explore.py` — classic policy-free Go-Explore phase 1 (no NN, no GPU,
+CPU-only, ~1100 steps/s with 6 workers on ports 5200+). Archive of cells keyed
+`(mario_x//8, height//8, has_hammer)`, each an immutable 2KB MAME save-state
+(`artifacts/go_explore/cells/cell_N.sta`) + exact action-byte trajectory from its
+parent. Workers loop: select under-visited cell (count/height/chain-length weights) →
+restore (copy .sta onto slot `dk_<port>.sta` + fixed prologue 3×LOAD, 2×NOOP,
+UNFREEZE — **no bridge changes**) → ~100 sticky-random steps → snapshot every new cell.
+Snapshot command bytes are appended to the trajectory so `restore(parent)+bytes` lands
+frame-exactly on the child state (generational stitching). Mid-death-animation cells
+retire via early-death stats. Success = `screen_id` leaves 1 with lives>0 → winning
+byte trajectory saved in `archive.json`, auto-verified by deterministic replay.
+
+Validated (2026-07-03): 150-step restore determinism PASS; cross-port .sta round-trip
+PASS. Launch: `python -m dkong_ai.go_explore --rom-dir ./roms --workers 6`
+(`--validate` self-test; archive resumes from `archive.json`).
+
+**Phase 1 RESULTS (2026-07-03)**: two archives, both with verified bottom-up
+live-barrel clears (screen_id 1→4, all lives intact) — `artifacts/go_explore_run1/`
+(6 workers, ~11 min to first winner, 47 winners) and `artifacts/go_explore/`
+(18 workers, seed 7, first winner at 6 min, 418 winners, ~2,970 steps/s CPU-only).
+What 26 PPO runs / 250M+ steps never did, random search + state banking did in
+minutes — the wall was pure exploration, not capability.
+Winner videos: `dkong_ai/replay_winner.py` replays a winner's ancestor chain
+seamlessly (each restore lands on the state the machine is already in) with MAME
+`-aviwrite` → ffmpeg mp4. See `artifacts/recordings/first_clear_run{1,2}.mp4`.
+A true .inp is impossible for stitched winners (playback replays inputs only).
+
+**Phase 2 (backward algorithm) — BUILT, RUNNING as run 27**:
+- `dkong_ai/export_chains.py`: archives → `artifacts/backward/{manifest.json,*.sta}`;
+  dedupes winners by distinct final cell; always overwrites state files; refuses to
+  write an empty manifest.
+- `mame_env.py`: `backward_manifest` ctor param (requires record=False, empty
+  manifest disables with a warning); `load_state_file()` is THE primitive for
+  loading an arbitrary .sta through the slot — it restores the `bottom_<port>.sta`
+  backup after the load so "slot file == bottom start" always holds (slot-clobber
+  bug class); missing files raise RuntimeError (fail-fast, not OSError→recover
+  storm); `set_backward_level(k)` widens the start window [n-1-k, n-1].
+- `train.py`: `--backward-dir` + `BackwardCallback` (walk back one cell when
+  rolling curric clear rate ≥ 0.5 over 64 episodes); logs `climb/backward_level`,
+  `climb/backward_clear_rate`, `climb/clear_rate_bottomup` (the honest metric).
+- Run 27 (TB `RecurrentPPO_13`): warm-start run26_last, lr 5e-5, p_curric 0.8,
+  live barrels. Level 0→1 at 336K steps (first trained-policy live-barrel clears
+  in project history); watch backward_level walk toward ~26 and
+  clear_rate_bottomup off 0.
+
 ---
 
 ## 12. Critical bugs fixed (do not reintroduce)

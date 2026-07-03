@@ -25,6 +25,7 @@ class ClimbMetricsCallback(BaseCallback):
         self._heights, self._clears, self._scores = [], [], []
         self._heights_bt: list[float] = []   # bottomup episodes only
         self._heights_cu: list[float] = []   # curriculum episodes only
+        self._clears_bt: list[int] = []      # honest bottom-up clear signal
         self.window = window
         self.best_height = 0
 
@@ -49,6 +50,8 @@ class ClimbMetricsCallback(BaseCallback):
             else:
                 self._heights_bt.append(h)
                 self._heights_bt = self._heights_bt[-self.window:]
+                self._clears_bt.append(info.get("cleared", 0))
+                self._clears_bt = self._clears_bt[-self.window:]
         if self._heights:
             self.logger.record("climb/height_mean", sum(self._heights) / len(self._heights))
             self.logger.record("climb/height_best", self.best_height)
@@ -60,15 +63,57 @@ class ClimbMetricsCallback(BaseCallback):
         if self._heights_cu:
             self.logger.record("climb/height_mean_curric",
                                sum(self._heights_cu) / len(self._heights_cu))
+        if self._clears_bt:
+            self.logger.record("climb/clear_rate_bottomup",
+                               sum(self._clears_bt) / len(self._clears_bt))
         return True
 
 
-def make_env(rom_dir, port, frameskip):
+class BackwardCallback(BaseCallback):
+    """Backward-algorithm walk-back (Go-Explore phase 2).
+
+    Episodes flagged start_type=="curriculum" begin from winner-chain states
+    near the goal. When the rolling clear rate over those episodes reaches
+    `threshold`, allow starts one cell deeper toward the bottom (raise the
+    envs' backward level). The start window is [n-1-level, n-1], so earlier
+    skills keep getting rehearsed as the frontier walks back."""
+
+    def __init__(self, window=64, threshold=0.5):
+        super().__init__()
+        self.window = window
+        self.threshold = threshold
+        self.level = 0
+        self._results: list[int] = []
+
+    def _on_step(self) -> bool:
+        for info in self.locals.get("infos", []):
+            if info.get("episode") is None:
+                continue
+            if info.get("start_type") == "curriculum":
+                self._results.append(info.get("cleared", 0))
+        if self._results:
+            rate = sum(self._results) / len(self._results)
+            self.logger.record("climb/backward_clear_rate", rate)
+            if len(self._results) >= self.window:
+                if rate >= self.threshold:
+                    self.level += 1
+                    self.training_env.env_method("set_backward_level",
+                                                 self.level)
+                    print(f"[backward] level -> {self.level} "
+                          f"(clear rate {rate:.2f})", flush=True)
+                    self._results = []
+                else:
+                    self._results = self._results[-self.window:]
+        self.logger.record("climb/backward_level", self.level)
+        return True
+
+
+def make_env(rom_dir, port, frameskip, backward_manifest=None):
     def _thunk():
         # record=False -> fast save-state resets (no per-episode .inp; use eval.py
         # with recording for watchable playback of a trained policy).
         env = DonkeyKongEnv(rom_dir=rom_dir, port=port, frameskip=frameskip,
-                            record=False)
+                            record=False, backward_manifest=backward_manifest)
         return Monitor(env, info_keywords=("max_height", "cleared", "start_type"))
     return _thunk
 
@@ -104,6 +149,14 @@ def main():
                          "checkpoint into a fresh model; rest is randomly initialised")
     ap.add_argument("--n-epochs", type=int, default=4,
                     help="PPO epochs per rollout (default 4; reduce to 3 to lower clip_fraction)")
+    ap.add_argument("--backward-dir", default=None,
+                    help="Go-Explore phase-2: dir with manifest.json + winner-chain "
+                         ".sta states (from export_chains); curriculum episodes then "
+                         "start from chain cells and walk back as clear rate rises")
+    ap.add_argument("--bw-window", type=int, default=64,
+                    help="curriculum episodes per walk-back decision")
+    ap.add_argument("--bw-threshold", type=float, default=0.5,
+                    help="clear rate needed to walk the start back one cell")
     args = ap.parse_args()
 
     if args.p_no_barrels is not None:
@@ -111,8 +164,16 @@ def main():
     if args.p_curric is not None:
         DonkeyKongEnv._p_curric = args.p_curric
 
+    bw_manifest = None
+    if args.backward_dir:
+        import os as _os
+        bw_manifest = _os.path.abspath(
+            _os.path.join(args.backward_dir, "manifest.json"))
+        print(f"backward curriculum: {bw_manifest}")
+
     # One MAME instance per env, each on its own socket port.
-    thunks = [make_env(args.rom_dir, args.base_port + i, args.frameskip)
+    thunks = [make_env(args.rom_dir, args.base_port + i, args.frameskip,
+                       bw_manifest)
               for i in range(args.n_envs)]
     # Turn SIGTERM into a normal exception so the finally-block cleanup (which
     # shuts MAME down) runs on `kill <pid>`, not just on Ctrl-C / completion.
@@ -131,6 +192,9 @@ def main():
                               save_path=os.path.join("artifacts/checkpoints", run_name),
                               name_prefix=run_name)
     callbacks = [ckpt, ClimbMetricsCallback()]
+    if args.backward_dir:
+        callbacks.append(BackwardCallback(window=args.bw_window,
+                                          threshold=args.bw_threshold))
     if args.lstm:
         from sb3_contrib import RecurrentPPO
         AlgoClass   = RecurrentPPO
