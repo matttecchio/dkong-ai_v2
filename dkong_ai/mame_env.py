@@ -748,7 +748,13 @@ class DonkeyKongEnv(gym.Env):
                      and self._reward_max_h < self.HEIGHT_TIMEOUT_H)
         if timed_out:
             r -= self.HEIGHT_TIMEOUT_PENALTY
-        done = (died and s["lives"] == 0) or cleared or timed_out
+        # Single-life episodes: ANY death terminates. Multi-life episodes were
+        # a relic of 19s intro resets (fewer intros per env-step); with 0.03s
+        # save-state resets they only hurt — especially backward-curriculum
+        # starts, where dying at the top silently respawned Mario at the
+        # BOTTOM and the episode continued as a mislabeled, unclearable
+        # bottom-up run that drowned the frontier gradient.
+        done = died or cleared or timed_out
         return r, done
 
     # ---- gym API ---------------------------------------------------------
