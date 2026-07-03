@@ -84,6 +84,7 @@ class BackwardCallback(BaseCallback):
         self.threshold = threshold
         self.level = 0
         self._results: list[int] = []
+        self._frontier: list[int] = []   # episodes started at the deepest tier
 
     def _on_step(self) -> bool:
         for info in self.locals.get("infos", []):
@@ -91,6 +92,15 @@ class BackwardCallback(BaseCallback):
                 continue
             if info.get("start_type") == "curriculum":
                 self._results.append(info.get("cleared", 0))
+                bw = info.get("bw_start")
+                if bw:
+                    pos, n, _h = bw
+                    if pos == max(0, n - 1 - self.level):
+                        self._frontier.append(info.get("cleared", 0))
+                        self._frontier = self._frontier[-self.window:]
+        if self._frontier:
+            self.logger.record("climb/backward_clear_frontier",
+                               sum(self._frontier) / len(self._frontier))
         if self._results:
             rate = sum(self._results) / len(self._results)
             self.logger.record("climb/backward_clear_rate", rate)
@@ -102,6 +112,7 @@ class BackwardCallback(BaseCallback):
                     print(f"[backward] level -> {self.level} "
                           f"(clear rate {rate:.2f})", flush=True)
                     self._results = []
+                    self._frontier = []   # tracks a new tier now
                 else:
                     self._results = self._results[-self.window:]
         self.logger.record("climb/backward_level", self.level)

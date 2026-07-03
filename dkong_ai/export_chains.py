@@ -31,6 +31,14 @@ def main():
     ap.add_argument("--out", default="artifacts/backward")
     ap.add_argument("--per-archive", type=int, default=8,
                     help="max winners exported per archive")
+    ap.add_argument("--verify-states", action="store_true",
+                    help="load every exported state in a scratch MAME and drop "
+                         "unresponsive ones (frozen cutscene/transition "
+                         "snapshots always fall back to bottom starts in "
+                         "training — pure waste)")
+    ap.add_argument("--rom-dir", default="./roms",
+                    help="ROM dir for --verify-states")
+    ap.add_argument("--verify-port", type=int, default=5301)
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -64,6 +72,27 @@ def main():
             chains.append({"cells": cells})
         print(f"[export] {adir}: {len(picked)} winners "
               f"(of {len(arch.winners)}, {len(seen_parents)} distinct exits)")
+
+    if args.verify_states and chains:
+        from .mame_env import DonkeyKongEnv
+        env = DonkeyKongEnv(args.rom_dir, port=args.verify_port, record=False)
+        env._p_curric = 0.0
+        env.P_NO_BARRELS = 0.0
+        try:
+            env.reset()
+            bad = set()
+            for name in sorted({c["sta"] for ch in chains for c in ch["cells"]}):
+                env.load_state_file(os.path.join(args.out, name))
+                ok, _, _ = env._is_responsive()
+                if not ok:
+                    bad.add(name)
+                    print(f"[export] DROP unresponsive state {name}")
+        finally:
+            env.close()
+        for ch in chains:
+            ch["cells"] = [c for c in ch["cells"] if c["sta"] not in bad]
+        chains = [ch for ch in chains if ch["cells"]]
+        print(f"[export] state verification: {len(bad)} unresponsive dropped")
 
     if not chains:
         raise SystemExit("[export] no winners in any archive — refusing to "
