@@ -109,7 +109,12 @@ class BackwardCallback(BaseCallback):
         # keep rehearsing) until it recovers past CONSOL_OFF. Run 27k showed
         # why: rehearsal slid 0.92->0.64 over 3M steps as the tower grew
         # faster than it hardened.
-        self.CONSOL_ON, self.CONSOL_OFF = 0.65, 0.75
+        # Calibration (run 27m): with ~37 promoted tiers the rehearsal rate
+        # sits at a STATIONARY ~0.70 — DK's stochasticity ceiling, not decay.
+        # Thresholds must sit BELOW that equilibrium or the governor flaps
+        # (freeze<->resume with no promotions between, observed at 0.65/0.75).
+        # Fire only on real decay.
+        self.CONSOL_ON, self.CONSOL_OFF = 0.60, 0.68
         self._consolidating = False
         self.levels_path: str | None = None   # set by main(): persistence
 
@@ -285,6 +290,18 @@ def main():
         bw_manifest = _os.path.abspath(
             _os.path.join(args.backward_dir, "manifest.json"))
         print(f"backward curriculum: {bw_manifest}")
+
+    # Refuse to start on occupied bridge ports: the bridge is the socket
+    # SERVER, so a second trainer's envs would silently connect to the FIRST
+    # trainer's MAME instances and corrupt both runs' rollouts (2026-07-05:
+    # an overlapped restart did exactly that for ~7 minutes).
+    import socket as _socket
+    for i in range(args.n_envs):
+        with _socket.socket() as _s:
+            if _s.connect_ex(("127.0.0.1", args.base_port + i)) == 0:
+                raise SystemExit(
+                    f"port {args.base_port + i} already has a listener — "
+                    f"another trainer is (still) running; refusing to start")
 
     # One MAME instance per env, each on its own socket port.
     thunks = [make_env(args.rom_dir, args.base_port + i, args.frameskip,
