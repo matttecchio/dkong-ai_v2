@@ -89,6 +89,8 @@ class BackwardCallback(BaseCallback):
         self.levels = [0] * n_chains
         self._results: list[int] = []
         self._frontier: list[list[int]] = [[] for _ in range(n_chains)]
+        self._rehearsal: list[int] = []   # non-frontier curriculum episodes:
+                                          # consolidation of PROMOTED tiers
 
     def _on_step(self) -> bool:
         pushed = False
@@ -110,7 +112,13 @@ class BackwardCallback(BaseCallback):
                 continue
             ci, pos, n, _h = bw
             if pos != max(0, n - 1 - self.levels[ci]):
-                continue                      # rehearsal draw, not frontier
+                # Rehearsal draw from an already-promoted tier. Its rolling
+                # clear rate is the consolidation signal: rising = the tower
+                # keeps hardening behind the frontier; sagging = pause the
+                # walk-back and train in place before advancing further.
+                self._rehearsal.append(cleared)
+                self._rehearsal = self._rehearsal[-self.window:]
+                continue
             f = self._frontier[ci]
             f.append(cleared)
             del f[:-self.chain_window]
@@ -132,6 +140,9 @@ class BackwardCallback(BaseCallback):
         if rates:
             self.logger.record("climb/backward_clear_frontier",
                                sum(rates) / len(rates))
+        if self._rehearsal:
+            self.logger.record("climb/backward_clear_rehearsal",
+                               sum(self._rehearsal) / len(self._rehearsal))
         self.logger.record("climb/backward_level",
                            sum(self.levels) / len(self.levels))
         self.logger.record("climb/backward_level_max", max(self.levels))
