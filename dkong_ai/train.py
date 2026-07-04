@@ -70,56 +70,65 @@ class ClimbMetricsCallback(BaseCallback):
 
 
 class BackwardCallback(BaseCallback):
-    """Backward-algorithm walk-back (Go-Explore phase 2).
+    """Backward-algorithm walk-back (Go-Explore phase 2), per-chain.
 
     Episodes flagged start_type=="curriculum" begin from winner-chain states
-    near the goal. When the rolling clear rate over those episodes reaches
-    `threshold`, allow starts one cell deeper toward the bottom (raise the
-    envs' backward level). The start window is [n-1-level, n-1], so earlier
-    skills keep getting rehearsed as the frontier walks back."""
+    near the goal. Each chain advances INDEPENDENTLY: when the rolling clear
+    rate of a chain's frontier tier (its deepest allowed cell, which gets 50%
+    of that chain's draws) reaches `threshold`, that chain's starts move one
+    cell deeper. One awkward cell stalls only its own chain; the walk-back
+    flows down the easiest route first — one route to the bottom is enough.
+    The start window is [n-1-level, n-1], so mastered tiers keep rehearsing."""
 
-    def __init__(self, window=64, threshold=0.5):
+    def __init__(self, n_chains, window=64, threshold=0.5):
         super().__init__()
+        self.n_chains = n_chains
         self.window = window
+        self.chain_window = max(16, window // 4)
         self.threshold = threshold
-        self.level = 0
+        self.levels = [0] * n_chains
         self._results: list[int] = []
-        self._frontier: list[int] = []   # episodes started at the deepest tier
+        self._frontier: list[list[int]] = [[] for _ in range(n_chains)]
 
     def _on_step(self) -> bool:
+        pushed = False
         for info in self.locals.get("infos", []):
             if info.get("episode") is None:
                 continue
-            if info.get("start_type") == "curriculum":
-                self._results.append(info.get("cleared", 0))
-                bw = info.get("bw_start")
-                if bw:
-                    pos, n, _h = bw
-                    if pos == max(0, n - 1 - self.level):
-                        self._frontier.append(info.get("cleared", 0))
-                        self._frontier = self._frontier[-self.window:]
+            if info.get("start_type") != "curriculum":
+                continue
+            cleared = info.get("cleared", 0)
+            self._results.append(cleared)
+            bw = info.get("bw_start")
+            if not bw:
+                continue
+            ci, pos, n, _h = bw
+            if pos != max(0, n - 1 - self.levels[ci]):
+                continue                      # rehearsal draw, not frontier
+            f = self._frontier[ci]
+            f.append(cleared)
+            del f[:-self.chain_window]
+            if (len(f) >= self.chain_window
+                    and sum(f) / len(f) >= self.threshold):
+                self.levels[ci] += 1
+                self._frontier[ci] = []       # new tier, fresh jury
+                pushed = True
+                print(f"[backward] chain {ci} -> level {self.levels[ci]} "
+                      f"(frontier clear rate {sum(f) / len(f):.2f})",
+                      flush=True)
+        if pushed:
+            self.training_env.env_method("set_backward_levels", self.levels)
         if self._results:
             self.logger.record("climb/backward_clear_rate",
                                sum(self._results) / len(self._results))
             self._results = self._results[-self.window:]
-        # Advance on the FRONTIER tier's own clear rate, not the combined
-        # window average: the combined gate dilutes with every level (mastered
-        # tiers ~0.55, fresh tier ~0 → ceiling 0.55*2/(k+1)) and structurally
-        # stalls around level 3 regardless of learning.
-        if len(self._frontier) >= self.window // 2:
-            frate = sum(self._frontier) / len(self._frontier)
-            self.logger.record("climb/backward_clear_frontier", frate)
-            if frate >= self.threshold:
-                self.level += 1
-                self.training_env.env_method("set_backward_level", self.level)
-                print(f"[backward] level -> {self.level} "
-                      f"(frontier clear rate {frate:.2f})", flush=True)
-                self._results = []
-                self._frontier = []   # tracks a new tier now
-        elif self._frontier:
+        rates = [sum(f) / len(f) for f in self._frontier if f]
+        if rates:
             self.logger.record("climb/backward_clear_frontier",
-                               sum(self._frontier) / len(self._frontier))
-        self.logger.record("climb/backward_level", self.level)
+                               sum(rates) / len(rates))
+        self.logger.record("climb/backward_level",
+                           sum(self.levels) / len(self.levels))
+        self.logger.record("climb/backward_level_max", max(self.levels))
         return True
 
 
@@ -208,7 +217,10 @@ def main():
                               name_prefix=run_name)
     callbacks = [ckpt, ClimbMetricsCallback()]
     if args.backward_dir:
-        callbacks.append(BackwardCallback(window=args.bw_window,
+        import json as _json
+        with open(bw_manifest) as _f:
+            n_chains = len(_json.load(_f)["chains"])
+        callbacks.append(BackwardCallback(n_chains, window=args.bw_window,
                                           threshold=args.bw_threshold))
     if args.lstm:
         from sb3_contrib import RecurrentPPO

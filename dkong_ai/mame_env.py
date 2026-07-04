@@ -100,6 +100,7 @@ class DonkeyKongEnv(gym.Env):
         # expert-demo curric_<idx> states.
         self._bw_chains: list[list[dict]] | None = None
         self._bw_level = 0
+        self._bw_levels: list[int] | None = None   # per-chain (preferred)
         self._bw_start: tuple | None = None
         self._bottom_backup_ok = False   # bottom_<port>.sta from THIS instance
         if backward_manifest:
@@ -831,6 +832,13 @@ class DonkeyKongEnv(gym.Env):
         each chain's end. Level 0 = final cell only (nearest the goal)."""
         self._bw_level = int(level)
 
+    def set_backward_levels(self, levels):
+        """Per-chain walk-back levels (list aligned with the manifest's
+        chains). Lets each route descend independently: one hard/awkward
+        frontier cell stalls only its own chain, and the walk-back flows
+        down the easiest route first — one route to the bottom is enough."""
+        self._bw_levels = [int(x) for x in levels]
+
     def _slot_sta_path(self):
         statedir = os.path.abspath(os.path.join(os.path.dirname(self.bridge),
                                                 "..", "artifacts", "states"))
@@ -863,9 +871,12 @@ class DonkeyKongEnv(gym.Env):
         """Start from a random winner-chain cell within the walk-back window
         [n-1-_bw_level, n-1]. Returns (state, pix), or (None, None) if the
         snapshot is unresponsive (caller falls back to the bottom start)."""
-        chain = self._bw_chains[int(self.np_random.integers(len(self._bw_chains)))]
+        ci = int(self.np_random.integers(len(self._bw_chains)))
+        chain = self._bw_chains[ci]
         n = len(chain)
-        lo = max(0, n - 1 - self._bw_level)
+        level = (self._bw_levels[ci] if self._bw_levels is not None
+                 else self._bw_level)
+        lo = max(0, n - 1 - level)
         # Half the draws drill the frontier tier (deepest allowed cell); the
         # rest rehearse the whole window uniformly. Pure-uniform sampling
         # starves the frontier of practice as the window grows (1/(k+1) of
@@ -878,7 +889,7 @@ class DonkeyKongEnv(gym.Env):
         ok, state, pix = self._is_responsive()
         if not ok:
             return None, None
-        self._bw_start = (pos, n, chain[pos]["height"])
+        self._bw_start = (ci, pos, n, chain[pos]["height"])
         return state, pix
 
     def _load_curriculum(self, idx):
@@ -999,7 +1010,9 @@ class DonkeyKongEnv(gym.Env):
                 # The save-state restores a FIXED barrel/RNG state; advance a
                 # random few frames so each episode's barrel pattern differs
                 # (generalization across DK's RNG, not one fixed start).
-                n = int(self.np_random.integers(0, 16))
+                # 0-47 frames (~0.8s) — wide enough that a policy can't
+                # overfit one barrel phase per curriculum cell.
+                n = int(self.np_random.integers(0, 48))
                 if n:
                     state, pix = self._hold(self.A_NOOP, n)
             else:                            # recording path: clean soft-reset+intro
@@ -1024,7 +1037,7 @@ class DonkeyKongEnv(gym.Env):
                 "max_height": max(0, self.BASE_Y - self._min_y),
                 "cleared": int(self._max_screen > 1),
                 "start_type": self._start_type,
-                "bw_start": self._bw_start}   # (pos, chain_len, height) | None
+                "bw_start": self._bw_start}   # (chain, pos, len, height)|None
 
     def step(self, action: int):
         try:
