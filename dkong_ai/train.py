@@ -4,6 +4,7 @@
     python -m dkong_ai.train --rom-dir /path/to/roms --lstm --stack 2  # LSTM run
 """
 import argparse
+import json
 import os
 import signal
 
@@ -97,6 +98,34 @@ class BackwardCallback(BaseCallback):
         self._frontier: list[list[int]] = [[] for _ in range(n_chains)]
         self._rehearsal: list[int] = []   # non-frontier curriculum episodes:
                                           # consolidation of PROMOTED tiers
+        # Consolidation with hysteresis: while the rehearsal clear rate sags
+        # below CONSOL_ON, promotions FREEZE (frontiers keep drilling, tiers
+        # keep rehearsing) until it recovers past CONSOL_OFF. Run 27k showed
+        # why: rehearsal slid 0.92->0.64 over 3M steps as the tower grew
+        # faster than it hardened.
+        self.CONSOL_ON, self.CONSOL_OFF = 0.65, 0.75
+        self._consolidating = False
+        self.levels_path: str | None = None   # set by main(): persistence
+
+    def _on_training_start(self) -> None:
+        # Resume walk-back levels across restarts — every restart used to
+        # re-burn hours of frontier grind. Delete the file to start over.
+        if self.levels_path and os.path.exists(self.levels_path):
+            with open(self.levels_path) as f:
+                saved = json.load(f).get("levels", [])
+            if len(saved) == self.n_chains:
+                self.levels = [int(x) for x in saved]
+                self.training_env.env_method("set_backward_levels", self.levels)
+                print(f"[backward] resumed levels {self.levels}", flush=True)
+            else:
+                print(f"[backward] levels file chain count mismatch "
+                      f"({len(saved)} != {self.n_chains}) — starting at 0",
+                      flush=True)
+
+    def _save_levels(self):
+        if self.levels_path:
+            with open(self.levels_path, "w") as f:
+                json.dump({"levels": self.levels}, f)
 
     def _on_step(self) -> bool:
         pushed = False
@@ -128,7 +157,8 @@ class BackwardCallback(BaseCallback):
             f = self._frontier[ci]
             f.append(cleared)
             del f[:-self.chain_window]
-            if (len(f) >= self.chain_window
+            if (not self._consolidating
+                    and len(f) >= self.chain_window
                     and sum(f) / len(f) >= self.threshold):
                 self.levels[ci] += 1
                 self._frontier[ci] = []       # new tier, fresh jury
@@ -138,6 +168,20 @@ class BackwardCallback(BaseCallback):
                       flush=True)
         if pushed:
             self.training_env.env_method("set_backward_levels", self.levels)
+            self._save_levels()
+        if len(self._rehearsal) >= self.window:
+            rate = sum(self._rehearsal) / len(self._rehearsal)
+            if not self._consolidating and rate < self.CONSOL_ON:
+                self._consolidating = True
+                print(f"[backward] CONSOLIDATING: rehearsal {rate:.2f} < "
+                      f"{self.CONSOL_ON} — promotions frozen until it "
+                      f"recovers past {self.CONSOL_OFF}", flush=True)
+            elif self._consolidating and rate > self.CONSOL_OFF:
+                self._consolidating = False
+                print(f"[backward] consolidation done: rehearsal {rate:.2f} "
+                      f"> {self.CONSOL_OFF} — promotions resume", flush=True)
+        self.logger.record("climb/backward_consolidating",
+                           int(self._consolidating))
         if self._results:
             self.logger.record("climb/backward_clear_rate",
                                sum(self._results) / len(self._results))
@@ -269,8 +313,13 @@ def main():
             print("WARNING: backward manifest has no chains — "
                   "BackwardCallback disabled")
         else:
-            callbacks.append(BackwardCallback(n_chains, window=args.bw_window,
-                                              threshold=args.bw_threshold))
+            bw_cb = BackwardCallback(n_chains, window=args.bw_window,
+                                     threshold=args.bw_threshold)
+            # Persist walk-back levels next to the manifest so restarts
+            # resume the descent instead of re-earning it.
+            bw_cb.levels_path = os.path.join(args.backward_dir,
+                                             "levels.json")
+            callbacks.append(bw_cb)
     if args.lstm:
         from sb3_contrib import RecurrentPPO
         AlgoClass   = RecurrentPPO
