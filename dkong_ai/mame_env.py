@@ -911,6 +911,11 @@ class DonkeyKongEnv(gym.Env):
         st = s0
         for a in (0b00100, 0b00100, 0b00010, 0b00001, 0b00100):  # up,up,right,left,up
             st, pix = self._exchange(a)
+            if not st["is_dead"]:
+                # 0x6200 is 1=ALIVE, 0=dead/inactive (polarity is inverted
+                # vs the field name). A death tumble moves x/y without input,
+                # so without this check a dying Mario "passes" the probe.
+                return False, st, pix
             if st["mario_x"] != x0 or st["mario_y"] != y0:
                 return True, st, pix
         return False, st, pix
@@ -1027,11 +1032,18 @@ class DonkeyKongEnv(gym.Env):
                 # differs (generalization across DK's RNG, not one fixed
                 # start). UNITS: exchanges (frameskip frames each) — at
                 # frameskip 4, 0-20 exchanges = 0-80 frames ≈ up to 1.3s.
-                # Wide enough to vary barrel phase; short enough that Mario
-                # isn't left standing in traffic until a start is pre-doomed.
-                n = int(self.np_random.integers(0, 21))
-                if n:
-                    state, pix = self._hold(self.A_NOOP, n)
+                # BOTTOM STARTS ONLY: idling at the spawn is safe (no barrel
+                # reaches it for ~5s). For curriculum cells it was a death
+                # sentence — winner-chain states on the top girder sit in the
+                # barrel-spawn lane, and holding NOOP there killed Mario
+                # DURING reset (game respawns him at the bottom on a stored
+                # life -> ghost episode: max_height frozen at start height,
+                # ~1% frontier clears, walk-back stalled). Curriculum draws
+                # get their diversity from action sampling + 12 chains.
+                if self._start_type != "curriculum":
+                    n = int(self.np_random.integers(0, 21))
+                    if n:
+                        state, pix = self._hold(self.A_NOOP, n)
             else:                            # recording path: clean soft-reset+intro
                 self._exchange(self.A_RESET)
                 state, pix = self._start_game()

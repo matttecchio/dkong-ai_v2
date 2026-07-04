@@ -13,7 +13,10 @@ ADDR = {
     "lives":        0x6228,
     "level":        0x6229,
     "screen_id":    0x6227,   # 1=barrels 2=pie 3=elevator 4=rivet
-    "is_dead":      0x6200,
+    "is_dead":      0x6200,   # INVERTED: 1=alive, 0=dead/inactive (verified
+                              # 2026-07-04: probes; corpses read 0). Death is
+                              # detected via lives drop in mame_env._reward —
+                              # never gate on this name's face value.
     "is_jumping":   0x6216,
     "jump_dir":     0x6211,
     "has_hammer":   0x6217,
