@@ -971,6 +971,13 @@ class DonkeyKongEnv(gym.Env):
                     # it (~0.04s vs ~1.5s). Disabled when recording (a state load
                     # isn't an input event and would break .inp playback).
                     self._save_state()
+                # Apply the per-episode barrel mode here too — otherwise each
+                # worker's FIRST episode always runs bridge-default (live)
+                # barrels regardless of P_NO_BARRELS.
+                self._no_barrels = self.np_random.random() < self.P_NO_BARRELS
+                state, pix = self._exchange(
+                    self.A_FREEZE_BARRELS if self._no_barrels
+                    else self.A_UNFREEZE_BARRELS)
             elif self._has_state:            # fast path: instant state reload
                 if self._bw_chains is not None:
                     # Backward-algorithm curriculum: with prob p_curric start
@@ -1037,7 +1044,8 @@ class DonkeyKongEnv(gym.Env):
                 "max_height": max(0, self.BASE_Y - self._min_y),
                 "cleared": int(self._max_screen > 1),
                 "start_type": self._start_type,
-                "bw_start": self._bw_start}   # (chain, pos, len, height)|None
+                "bw_start": self._bw_start,   # (chain, pos, len, height)|None
+                "no_barrels": self._no_barrels}
 
     def step(self, action: int):
         try:

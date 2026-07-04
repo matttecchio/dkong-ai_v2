@@ -97,6 +97,12 @@ class BackwardCallback(BaseCallback):
                 continue
             if info.get("start_type") != "curriculum":
                 continue
+            if info.get("no_barrels"):
+                # Barrel-frozen episodes are far easier; letting them into the
+                # gate would advance levels the live-barrel policy hasn't
+                # earned. (Current runs use --p-no-barrels 0.0, so this is a
+                # guard for configs that re-enable freeze episodes.)
+                continue
             cleared = info.get("cleared", 0)
             self._results.append(cleared)
             bw = info.get("bw_start")
@@ -220,8 +226,15 @@ def main():
         import json as _json
         with open(bw_manifest) as _f:
             n_chains = len(_json.load(_f)["chains"])
-        callbacks.append(BackwardCallback(n_chains, window=args.bw_window,
-                                          threshold=args.bw_threshold))
+        if n_chains == 0:
+            # Mirror the env's behavior (it disables the curriculum with a
+            # warning); an empty levels list would crash the callback's
+            # mean/max logging on the first step.
+            print("WARNING: backward manifest has no chains — "
+                  "BackwardCallback disabled")
+        else:
+            callbacks.append(BackwardCallback(n_chains, window=args.bw_window,
+                                              threshold=args.bw_threshold))
     if args.lstm:
         from sb3_contrib import RecurrentPPO
         AlgoClass   = RecurrentPPO

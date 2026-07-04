@@ -62,6 +62,9 @@ def main():
         raise SystemExit(f"no archive.json in {args.archive_dir}")
     if not arch.winners:
         raise SystemExit("archive has no winners yet")
+    if not 0 <= args.winner < len(arch.winners):
+        raise SystemExit(f"--winner {args.winner} out of range: archive has "
+                         f"{len(arch.winners)} winners (0-{len(arch.winners) - 1})")
     w = arch.winners[args.winner]
 
     recdir = os.path.join(_repo_dir(), "artifacts", "recordings")
