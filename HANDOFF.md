@@ -3,7 +3,8 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-02, Run 25 ended at ~42M steps; **Run 26 starting**.
+Last updated: 2026-07-04, **Run 27i active** — the first run whose
+`--p-curric`/`--p-no-barrels` actually reach the workers (spawn bug, §12).
 
 ---
 
@@ -12,16 +13,23 @@ Last updated: 2026-07-02, Run 25 ended at ~42M steps; **Run 26 starting**.
 - **Full pipeline works and is robust**: MAME `dkong` driven from Python, a
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
-- **Run 25 ended at 42M steps**: `height_best=162` (4th girder), `height_mean≈38`
-  (reliably on the first ladder, trending up toward 44). `ep_rew_mean=-5.78`.
-  `explained_variance=0.962` (value function very well calibrated at this point).
-- **Run 26**: warm-starts from run25_last. Re-enables curriculum (`p_curric=0.15`)
-  to give the agent practice on the upper board. New `climb/height_mean_bottomup`
-  and `climb/height_mean_curric` TensorBoard metrics let you see both signal lines.
+- **Run 27 series = Go-Explore phase 2** (backward walk-back over 12 winner
+  chains, §11b). **Run 27i active** (TB `RecurrentPPO_20`): frontier-gated
+  per-chain walk-back, promotions at 0.81–1.00 against the 0.3 gate.
+- **2026-07-04, the spawn bug (§12)**: `--p-curric`/`--p-no-barrels` NEVER
+  reached the workers — every 27-series run before 27i trained at 15%
+  curriculum (not 80%) with 15% barrel-free episodes (not 0%). The barrel-free
+  bottom climbs faked `clear_rate_bottomup` 0.04→0.14; 425 controlled
+  live-barrel evals measured 0 clears. Fixed `da6b2dc`; the metric now
+  excludes `no_barrels` episodes.
 - All height metrics honest: gated on `is_jumping==0` so jump arcs don't inflate
-  `height_best`, `height_mean`, or the height milestone reward.
-- **Bottom-up with live barrels: still 0 clears** after 25 runs and ~300M+ steps,
-  but run 25 is the best sustained progress yet (LSTM broke the old height~54 wall).
+  `height_best`, `height_mean`, or the height milestone reward. Per-episode
+  audit trail: `logs/episodes/dk_<port>.monitor.csv` (start_y, start_screen,
+  end_screen, bw_pos, no_barrels) — check any surprising aggregate there first.
+- **Bottom-up with live barrels: still 0 clears** (~330M+ steps; honest 27g-era
+  baseline: mean height ~35 from live-barrel bottom starts). The policy CAN
+  clear the whole board barrel-free — the route is learned; barrel/fireball
+  handling is the gap the walk-back curriculum drills.
 
 ---
 
@@ -417,15 +425,43 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   `climb/backward_clear_rate`, `climb/clear_rate_bottomup` (the honest metric).
 - Run 27 history: 27 (slot-clobber found) → 27b (stalled: frozen states +
   multi-life noise) → 27c (verified manifest, thresh 0.3, frontier metric;
-  exposed the multi-life bug) → **27d ACTIVE** (TB `RecurrentPPO_15`,
-  single-life episodes): level 3 within 2M steps — walk-back genuinely
-  descending for the first time. Watch `climb/backward_level` toward ~26 and
-  `climb/clear_rate_bottomup` off 0. See §12 for the three curriculum bugs —
-  do not reintroduce.
+  exposed the multi-life bug) → 27d (single-life episodes: walk-back genuinely
+  descending for the first time) → 27e (frontier-gated promotion: advance on
+  the deepest tier's own clear rate, not the window-diluted mix) → 27f
+  (per-chain levels; widened post-load RNG jitter — with a units bug) → 27g
+  (jitter units fix `c0cc81a`: 0–20 exchanges, not 0–47 ≈ 3.1s of idling;
+  6 chains promoted; "bottom-up clears" 0.04→0.14 appeared — **phantoms**, see
+  §12 spawn bug) → 27h (per-episode CSV instrumentation `9d29df3`; caught the
+  phantom clears in 3 minutes: all `no_barrels=True`) → **27i ACTIVE**
+  (TB `RecurrentPPO_20`, spawn fix `da6b2dc`): first run at the real 80%
+  curriculum / 0% barrel-free (measured 76%/0% in worker CSVs); chains
+  re-promote within minutes of launch. Watch `climb/backward_level` and — now
+  trustworthy — `climb/clear_rate_bottomup` off 0. See §12 for the curriculum
+  bugs — do not reintroduce.
 
 ---
 
 ## 12. Critical bugs fixed (do not reintroduce)
+
+### Spawn ate the CLI env params → phantom bottom-up clears (fixed run 27i, 2026-07-04)
+
+**The bug**: `main()` applied `--p-curric`/`--p-no-barrels` by mutating
+`DonkeyKongEnv` CLASS attributes, but `SubprocVecEnv(start_method="spawn")`
+workers re-import the module — all 16 envs silently reverted to the defaults
+(0.15 curriculum, 0.15 barrel-free). Every 27-series run before 27i trained on
+the wrong episode mix, and the barrel-free bottom climbs (trivial without
+hazards) were counted by `ClimbMetricsCallback` into `clear_rate_bottomup`:
+the "honest metric" rose 0.04→0.14 in 27g while 425 controlled live-barrel
+bottom starts across three eval modes produced 0 clears. No aggregate log
+line could reveal this; the per-episode CSVs exposed it in minutes — every
+phantom row read `start_y=240, end_screen=4, no_barrels=True`.
+**Fix** (`da6b2dc`): the values ride into workers as `make_env` parameters and
+are set as INSTANCE attributes inside the thunk (which executes in the worker);
+`clear_rate_bottomup`/`height_mean_bottomup` additionally exclude `no_barrels`
+episodes. **Rule**: config that must reach a spawn worker travels in the
+pickled thunk (instance state), never via launcher-side class/global mutation.
+Verify after any env-config change: the curriculum fraction observed in
+`logs/episodes/dk_*.monitor.csv` must match the CLI within a few percent.
 
 ### Multi-life episodes drowned the backward curriculum (fixed run 27d, 2026-07-04)
 
@@ -685,6 +721,20 @@ track barrel state across the ~3s traverse window.
 - **start_type in info**: `_info()` returns `"start_type"` but it's only meaningful
   at episode end (when the callback reads it). The value from `step()` reflects the
   start type set during the last `reset()`, which is correct.
+- **Spawn workers don't see launcher-side class/global mutations** — full
+  writeup in §12. Applies to ANY "set it globally, then build SubprocVecEnv"
+  pattern, not just the two params it bit us on.
+- **First reset skips the RNG jitter**: a fresh env's first episode starts from
+  the exact post-intro state; only episode 2+ resets add the 0–20 exchange
+  jitter. One-episode-per-env eval loops therefore hammer ONE fixed barrel
+  seed and badly misestimate clear rates (0/60 at a nominal 8% looked like a
+  policy bug). Measure with a persistent env across many episodes, or inject
+  recorded NOOP steps at episode start in record mode.
+- **Training-faithful video exists**: `.inp` recording can't survive state-load
+  resets, but MAME `-aviwrite` captures the rendered screen and doesn't care —
+  `DonkeyKongEnv(..., record=False, extra_mame_args=["-snapshot_directory",
+  dir, "-aviwrite", name])` films snapshot-start episodes (works headless with
+  `-video none`; raw AVI ≈ 10 MB/s of game time, convert with ffmpeg).
 
 ---
 

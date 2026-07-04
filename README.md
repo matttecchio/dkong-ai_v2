@@ -133,6 +133,13 @@ MAME with the cheatfind plugin for RAM work).
   level-advance height reset doesn't corrupt it.
 - `climb/clear_rate` — fraction of recent episodes that cleared the board
   (`screen_id` 1→2). **The definitive "reached the top" signal.**
+- `climb/clear_rate_bottomup` — clears among **live-barrel bottom-start**
+  episodes only: excludes curriculum starts and `no_barrels` episodes (the
+  latter faked this metric in run 27g — see HANDOFF §12, spawn bug). This is
+  the milestone metric.
+- Per-episode ground truth: `logs/episodes/dk_<port>.monitor.csv` (reward, len,
+  max_height, cleared, start_type, start_y, start_screen, end_screen, bw_pos,
+  no_barrels). **Audit any surprising aggregate against these rows first.**
 
 ## How resets work (and the recording tradeoff)
 
