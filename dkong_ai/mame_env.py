@@ -950,6 +950,11 @@ class DonkeyKongEnv(gym.Env):
         # Per-episode progress trackers (BASE_Y is the start-row mario_y).
         self._min_y = state["mario_y"] if state["mario_y"] else self.BASE_Y
         self._max_screen = state["screen_id"]
+        # Ground truth of where the episode really began, for the per-episode
+        # monitor CSVs: a "bottomup" row with start_y far above BASE_Y, or a
+        # cleared row whose start_screen != 1, is a mislabeled/phantom episode.
+        self._start_y = state["mario_y"]
+        self._start_screen = state["screen_id"]
         # Height already paid by the milestone reward (start height -> no pay).
         self._reward_max_h = max(0, self.BASE_Y - self._min_y)
         self._visited = set()                # novelty bonus: cells seen this episode
@@ -1047,7 +1052,11 @@ class DonkeyKongEnv(gym.Env):
                 "cleared": int(self._max_screen > 1),
                 "start_type": self._start_type,
                 "bw_start": self._bw_start,   # (chain, pos, len, height)|None
-                "no_barrels": self._no_barrels}
+                "no_barrels": self._no_barrels,
+                "start_y": self._start_y,
+                "start_screen": self._start_screen,
+                "end_screen": state["screen_id"],
+                "bw_pos": self._bw_start[1] if self._bw_start else -1}
 
     def step(self, action: int):
         try:

@@ -4,6 +4,7 @@
     python -m dkong_ai.train --rom-dir /path/to/roms --lstm --stack 2  # LSTM run
 """
 import argparse
+import os
 import signal
 
 from stable_baselines3 import PPO
@@ -155,7 +156,15 @@ def make_env(rom_dir, port, frameskip, backward_manifest=None):
         # with recording for watchable playback of a trained policy).
         env = DonkeyKongEnv(rom_dir=rom_dir, port=port, frameskip=frameskip,
                             record=False, backward_manifest=backward_manifest)
-        return Monitor(env, info_keywords=("max_height", "cleared", "start_type"))
+        # Per-episode CSV: ground truth for auditing the aggregate metrics.
+        # clear_rate_bottomup rose while every controlled bottom-start eval
+        # scored 0/425 — these rows are how we catch a phantom clear in the
+        # act (start_y/start_screen say where the episode REALLY began).
+        os.makedirs("logs/episodes", exist_ok=True)
+        return Monitor(env, filename=f"logs/episodes/dk_{port}",
+                       info_keywords=("max_height", "cleared", "start_type",
+                                      "start_y", "start_screen", "end_screen",
+                                      "bw_pos", "no_barrels"))
     return _thunk
 
 
