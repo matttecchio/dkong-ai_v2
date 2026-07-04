@@ -48,6 +48,11 @@ class ClimbMetricsCallback(BaseCallback):
             if info.get("start_type") == "curriculum":
                 self._heights_cu.append(h)
                 self._heights_cu = self._heights_cu[-self.window:]
+            elif info.get("no_barrels"):
+                # Barrel-free bottom episodes are trivial climbs; counting
+                # them here is how clear_rate_bottomup faked 0.04-0.14 in
+                # run 27g while live-barrel evals measured 0/425.
+                pass
             else:
                 self._heights_bt.append(h)
                 self._heights_bt = self._heights_bt[-self.window:]
@@ -150,12 +155,24 @@ class BackwardCallback(BaseCallback):
         return True
 
 
-def make_env(rom_dir, port, frameskip, backward_manifest=None):
+def make_env(rom_dir, port, frameskip, backward_manifest=None,
+             p_no_barrels=None, p_curric=None):
     def _thunk():
         # record=False -> fast save-state resets (no per-episode .inp; use eval.py
         # with recording for watchable playback of a trained policy).
         env = DonkeyKongEnv(rom_dir=rom_dir, port=port, frameskip=frameskip,
                             record=False, backward_manifest=backward_manifest)
+        # Set per-instance INSIDE the thunk: it runs in the worker process.
+        # Mutating DonkeyKongEnv class attrs in main() looks equivalent but is
+        # silently undone by SubprocVecEnv's spawn start method (workers
+        # re-import the module, reverting to class defaults) — that bug ran
+        # the whole 27 series at 15% curriculum / 15% barrel-free instead of
+        # the CLI values, and the barrel-free bottom climbs faked
+        # clear_rate_bottomup 0.04-0.14.
+        if p_no_barrels is not None:
+            env.P_NO_BARRELS = p_no_barrels
+        if p_curric is not None:
+            env._p_curric = p_curric
         # Per-episode CSV: ground truth for auditing the aggregate metrics.
         # clear_rate_bottomup rose while every controlled bottom-start eval
         # scored 0/425 — these rows are how we catch a phantom clear in the
@@ -209,11 +226,9 @@ def main():
                     help="clear rate needed to walk the start back one cell")
     args = ap.parse_args()
 
-    if args.p_no_barrels is not None:
-        DonkeyKongEnv.P_NO_BARRELS = args.p_no_barrels
-    if args.p_curric is not None:
-        DonkeyKongEnv._p_curric = args.p_curric
-
+    # NOTE: do NOT set these as DonkeyKongEnv class attributes here — spawn
+    # workers re-import the module and revert them. They travel to the
+    # workers as make_env parameters instead.
     bw_manifest = None
     if args.backward_dir:
         import os as _os
@@ -223,7 +238,8 @@ def main():
 
     # One MAME instance per env, each on its own socket port.
     thunks = [make_env(args.rom_dir, args.base_port + i, args.frameskip,
-                       bw_manifest)
+                       bw_manifest, p_no_barrels=args.p_no_barrels,
+                       p_curric=args.p_curric)
               for i in range(args.n_envs)]
     # Turn SIGTERM into a normal exception so the finally-block cleanup (which
     # shuts MAME down) runs on `kill <pid>`, not just on Ctrl-C / completion.

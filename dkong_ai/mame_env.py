@@ -66,9 +66,12 @@ def _die_with_parent():
 class DonkeyKongEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    # _p_curric is a class-level default (like P_NO_BARRELS) overridden by
-    # train.py before env construction. Must NOT become an instance attribute
-    # or CLI --p-curric will be silently ignored.
+    # _p_curric is a class-level default (like P_NO_BARRELS). Override it by
+    # setting an INSTANCE attribute on each constructed env (train.py does
+    # this inside the make_env thunk so it happens in the worker process).
+    # Mutating the CLASS attribute in the launcher process does NOT work
+    # under SubprocVecEnv spawn: workers re-import this module and see the
+    # default again — the bug that ran the 27 series at 15%/15%.
     _p_curric = 0.15
 
     def __init__(self, rom_dir: str, port: int = 5000, frameskip: int = 4,
