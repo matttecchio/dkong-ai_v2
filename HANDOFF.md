@@ -325,11 +325,16 @@ that the new objective has been learned.
 | 23 | lr=2e-5, n_epochs=3, full LSTM warm-start, upper-board rewards | ~1M clean | 58 | ~27 | 0 | stopped: jump-farming bug found |
 | 24 | + is_jumping gate on climb bonuses | ~500K | 58 | ~21 | 0 | stopped: height milestone also unfixed |
 | 25 | + is_jumping gate on height milestone + _min_y | **42M** | **162** | **38** | **0** | **ended cleanly; best sustained progress** |
-| **26** | **warm-start run25, p_curric=0.15, new curriculum metric segmentation** | **—** | **—** | **—** | **—** | **STARTING** |
+| 26 | warm-start run25, p_curric=0.15, curriculum metric segmentation | 40M | 193 (once @7M) | 36-38 flat | 0 | converged-flat at lr 2e-5; curric spawns gained ~0px → dodge-skill deficit proven |
+| — | **GO-EXPLORE PIVOT** (phase 1: no NN, CPU random search + state banking) | 7.8M+0.9M explore | **192 (top)** | n/a | **418+47 verified winners** | first-ever bottom-up live-barrel clears; 11 min to first winner |
+| 27 | **phase 2 backward algorithm**, warm-start run26, lr 5e-5, p_curric 0.8 | ~1M | — | — | curric 0.53@L0 | level 0→1 @336K — first trained-policy live-barrel clears; restarted: slot-clobber bug |
+| 27b | + slot backup fix (honest bottomup labels) | ~7M | — | ~35 | curric ~0.3 | stalled level 1: 20% of curric states frozen + tier-1 "blind spots" |
+| 27c | + verified manifest (13 frozen dropped), thresh 0.3, frontier metric | 18M | — | ~35 | frontier ~0 | stalled level 2 17M steps → exposed the REAL bug ↓ |
+| **27d** | **single-life episodes (`done = died or ...`)** | **active** | — | ~43 honest | **level 3 in 2M steps** | multi-life episodes were the phase-2 wall; walk-back moving |
 
 ---
 
-## 11. Current run — Run 26
+## 11. Run 26 — the last pure-RL run (superseded by Go-Explore, §11b)
 
 **Warm-start**: `artifacts/ppo_dkong_run25_last.zip`.
 **Save**: `artifacts/ppo_dkong_run26`. **Stack**: 2.
@@ -410,14 +415,48 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
 - `train.py`: `--backward-dir` + `BackwardCallback` (walk back one cell when
   rolling curric clear rate ≥ 0.5 over 64 episodes); logs `climb/backward_level`,
   `climb/backward_clear_rate`, `climb/clear_rate_bottomup` (the honest metric).
-- Run 27 (TB `RecurrentPPO_13`): warm-start run26_last, lr 5e-5, p_curric 0.8,
-  live barrels. Level 0→1 at 336K steps (first trained-policy live-barrel clears
-  in project history); watch backward_level walk toward ~26 and
-  clear_rate_bottomup off 0.
+- Run 27 history: 27 (slot-clobber found) → 27b (stalled: frozen states +
+  multi-life noise) → 27c (verified manifest, thresh 0.3, frontier metric;
+  exposed the multi-life bug) → **27d ACTIVE** (TB `RecurrentPPO_15`,
+  single-life episodes): level 3 within 2M steps — walk-back genuinely
+  descending for the first time. Watch `climb/backward_level` toward ~26 and
+  `climb/clear_rate_bottomup` off 0. See §12 for the three curriculum bugs —
+  do not reintroduce.
 
 ---
 
 ## 12. Critical bugs fixed (do not reintroduce)
+
+### Multi-life episodes drowned the backward curriculum (fixed run 27d, 2026-07-04)
+
+**The bug**: `done = (died and s["lives"] == 0)` — episodes packed all 3 lives.
+A relic of 19s intro resets (fewer intros per env-step). With 0.03s save-state
+resets it was pure harm, and for backward-curriculum starts it was fatal: an
+episode starting near Pauline that died once RESPAWNED AT THE BOTTOM and continued
+as a mislabeled, unclearable bottom-up run. The frontier tier showed ~0% clears
+for 18M steps (runs 27/27b/27c) not because the states were unlearnable but
+because one mistake converted the whole episode into noise. Also: every metric in
+runs 1-27c was best-over-3-lives, not per-life.
+**Fix**: `done = died or cleared or timed_out` (single-life). Telemetry signature
+that exposed it: frozen ~50-step death animation → mario_y=0 sentinel → Mario at
+height 9 with the episode still running.
+
+### Slot-clobber: curriculum swaps corrupted "bottom" resets (fixed run 27b, 2026-07-03)
+
+**The bug**: loading a curriculum state = copy .sta onto slot `dk_<port>.sta` +
+A_LOAD; but a bottom start = "load the slot" — so after one curriculum episode,
+every "bottomup" episode silently started near the top (`clear_rate_bottomup`
+read 0.74!). **Fix**: `load_state_file()` is THE primitive for loading any .sta
+through the slot — it restores the `bottom_<port>.sta` backup right after the
+load consumes the swap. Never copy onto `dk_<port>.sta` any other way.
+
+### Frozen curriculum snapshots (fixed 2026-07-04)
+
+**The bug**: 13/65 exported winner-chain states (20%) were snapshotted during
+cutscene/transition freezes; they always fail `_is_responsive` and silently fall
+back to bottom starts — wasted curriculum draws. **Fix**: `export_chains
+--verify-states` loads every state in a scratch MAME and drops unresponsive ones.
+Always export with this flag.
 
 ### Jump-farming of climb bonuses (fixed runs 23–25, 2026-07-01/02)
 
@@ -563,33 +602,33 @@ No equivalent `lad143` for the first ladder (x=143). Adding it would give an exp
 
 ## 14. Recommended next steps (for Fable / new session)
 
-In priority order:
+Go-Explore is in (phase 1 solved exploration; phase 2 backward-algorithm training
+is run 27d, active). In priority order:
 
-1. **Watch run 26 stabilize**: After warm-start regression (~2-5M steps), watch
-   `climb/height_mean_bottomup`. If it stalls at ~38 as run 25 did, the curriculum
-   isn't helping and it's not a reward problem — it's an exploration problem.
+1. **Watch run 27d's walk-back**: `climb/backward_level` should keep rising
+   (reached 3 in 2M steps post-single-life-fix; chains are ~27 cells, so ~26 =
+   starts include the true bottom). `climb/backward_clear_frontier` is the
+   learning edge; `climb/clear_rate_bottomup` going nonzero is the finish line.
+   Monitor scripts pattern: grep `[backward] level` in the run log.
 
-2. **Go-Explore** (highest-leverage, ~1 week of work): maintain an archive of
-   (x, height) cells reached across all episodes; on episode start, reset to the
-   frontier cell with lowest known height_mean. This makes hard-to-reach states
-   much more frequently practiced. The existing curriculum infrastructure makes
-   this tractable — curriculum states are already snapshots, Go-Explore would just
-   dynamically update which snapshot to reload.
+2. **If a tier stalls** (frontier ~0 for several million steps): probe per-cell
+   clear rates offline (pin `env._bw_chains` to a single cell + level 0 — see
+   memory/session notes, scratchpad `probe_cells.py` pattern) and check whether
+   the blocking cells share a location. Levers, in order: weight window sampling
+   toward low-clear cells; bump `--ent-coef`; regenerate chains from the OTHER
+   archive's routes (12 chains exist across 2 independently-seeded archives).
 
-3. **Potential-based shaping** (complements Go-Explore): define Φ(s) = arc-length
-   along the expert corridor, reward `r_shape = γΦ(s') - Φ(s)`. Policy-invariant
-   (can't be farmed), provides dense gradient all the way to Pauline without
-   changing the optimal policy.
+3. **When bottom-up clears appear**: eval + record (`eval.py --port 5100`),
+   celebrate, then next milestones: consistency (clear_rate_bottomup > 0.5),
+   then the next boards (screen_id 4 = rivets on L1) — go_explore phase 1 can be
+   re-run FROM a rivets start state to build board-2 chains (the machinery is
+   board-agnostic).
 
-4. **lad143 feature**: add barrel-distance-to-first-ladder (x=143) as a RAM feature
-   alongside lad53. Explicit "barrel approaching my ladder" signal for timing.
-   Changes RAM_FEATURE_DIM 62→68 — breaks warm-start from any prior run. Do this
-   at the start of a fresh run, not as a mid-run change.
+4. **lad143 feature** (only at a fresh-run boundary): barrel-distance-to-first-
+   ladder alongside lad53. Changes RAM_FEATURE_DIM 62→68 — breaks warm-start.
 
-5. **Deferred (lower priority)**:
-   - VecNormalize (observation normalization — adds complexity to save/load flows)
-   - Config dataclass (code quality, doesn't affect agent behavior)
-   - Curriculum metric segmentation already done (run 26)
+5. **Deferred**: VecNormalize; config dataclass; `--tb-name` flag for clearer
+   TensorBoard run labels (SB3 default names runs `RecurrentPPO_N`).
 
 ---
 
@@ -652,15 +691,27 @@ track barrel state across the ~3s traverse window.
 ## 17. File map
 
 `dkong_ai/`:
-- `mame_env.py` — env: MAME launch, socket bridge, obs build, reward, curriculum.
-  `_info()` returns `{"state", "max_height", "cleared", "start_type"}`.
+- `mame_env.py` — env: MAME launch, socket bridge, obs build, reward, curricula.
+  `_info()` returns `{"state", "max_height", "cleared", "start_type", "bw_start"}`.
+  Key primitives: `load_state_file()` (the ONLY sanctioned slot-swap loader),
+  `set_backward_level()`, ctor params `backward_manifest`, `extra_mame_args`.
 - `memory_map.py` — all confirmed RAM addresses + score decode. 47 WATCH_ORDER entries.
 - `dk_policy.py` — `DkFeaturesExtractor` (CNN+RAM MLP) + `DkFrameStackWrapper`.
-- `train.py` — RecurrentPPO training. Callback logs `climb/height_mean_bottomup`
-  and `climb/height_mean_curric` in addition to the existing metrics. Flags:
-  `--n-envs`, `--stack`, `--gamma`, `--ent-coef`, `--init-from`, `--p-no-barrels`,
-  `--p-curric`, `--save`, `--timesteps`, `--lr`, `--n-epochs`, `--lstm`,
-  `--lstm-hidden`, `--transfer-features-from`.
+- `go_explore.py` — **phase 1**: policy-free exploration archive (cells = save-states
+  + byte trajectories), workers, `--validate` determinism self-test, winner
+  verification. Ports 5200+. TensorBoard `GoExplore_N`.
+- `export_chains.py` — archives → `artifacts/backward/` manifest for phase 2.
+  ALWAYS use `--verify-states` (drops frozen snapshots).
+- `replay_winner.py` — render a winner chain to video (`--avi x.avi`, auto-mp4
+  via ffmpeg) or watch live (`--watch`). Port 5300.
+- `tb_bridge.py` — one-off: backfill pre-native go-explore logs into TensorBoard.
+- `train.py` — RecurrentPPO training. Callbacks log `climb/height_mean_bottomup`,
+  `climb/height_mean_curric`, `climb/clear_rate_bottomup`, and (backward mode)
+  `climb/backward_level`, `climb/backward_clear_rate`, `climb/backward_clear_frontier`.
+  Flags: `--n-envs`, `--stack`, `--gamma`, `--ent-coef`, `--init-from`,
+  `--p-no-barrels`, `--p-curric`, `--save`, `--timesteps`, `--lr`, `--n-epochs`,
+  `--lstm`, `--lstm-hidden`, `--transfer-features-from`, `--backward-dir`,
+  `--bw-window`, `--bw-threshold`.
 - `eval.py` — eval + record .inp. Flags: `--model`, `--stack`, `--port`,
   `--episodes`, `--p-no-barrels`, `--p-curric`.
 - `diag.py` — death/peak position diagnostic (RecurrentPPO-aware, stack=2).

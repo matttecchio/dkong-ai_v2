@@ -7,11 +7,18 @@ Train an agent to play arcade **Donkey Kong** (`dkong`) through MAME. First goal
 > full project state, what's been tried and why, the current training run, and
 > next steps. This README is the reference; HANDOFF is the story + status.
 
+- **Approach (current):** **Go-Explore** — phase 1 (`dkong_ai/go_explore.py`) is a
+  policy-free exploration archive over MAME save-states that found the project's
+  first-ever bottom-up clears (465 verified winners across two archives); phase 2
+  (`train.py --backward-dir`) robustifies them with the backward algorithm:
+  RecurrentPPO starting near Pauline, walking the start back down the proven
+  routes as the clear rate rises.
 - **Observation:** Dict — `image`: 84×84×4 (2-frame stack, grayscale + threat/ladder map);
   `ram`: 62 normalised features (barrel positions, velocities, edge proximity, fireball, hammer).
 - **Reward (from RAM):** height-milestone + exploration novelty + expert-route
   corridor + waypoint milestones + climb bonus + de-weighted score + death/clear.
-  All height rewards gated on `is_jumping==0`. See `dkong_ai/mame_env.py:_reward` and HANDOFF.
+  All height rewards gated on `is_jumping==0`. Episodes are **single-life** (any
+  death terminates). See `dkong_ai/mame_env.py:_reward` and HANDOFF.
 - **Algorithm:** RecurrentPPO / LSTM (`sb3_contrib.RecurrentPPO`, `MultiInputLstmPolicy`),
   GPU, 16 parallel envs.
 
