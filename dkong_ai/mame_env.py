@@ -1015,11 +1015,13 @@ class DonkeyKongEnv(gym.Env):
                             else self.A_UNFREEZE_BARRELS)
                 state, pix = self._exchange(mode_cmd)
                 # The save-state restores a FIXED barrel/RNG state; advance a
-                # random few frames so each episode's barrel pattern differs
-                # (generalization across DK's RNG, not one fixed start).
-                # 0-47 frames (~0.8s) — wide enough that a policy can't
-                # overfit one barrel phase per curriculum cell.
-                n = int(self.np_random.integers(0, 48))
+                # random number of idle steps so each episode's barrel pattern
+                # differs (generalization across DK's RNG, not one fixed
+                # start). UNITS: exchanges (frameskip frames each) — at
+                # frameskip 4, 0-20 exchanges = 0-80 frames ≈ up to 1.3s.
+                # Wide enough to vary barrel phase; short enough that Mario
+                # isn't left standing in traffic until a start is pre-doomed.
+                n = int(self.np_random.integers(0, 21))
                 if n:
                     state, pix = self._hold(self.A_NOOP, n)
             else:                            # recording path: clean soft-reset+intro
