@@ -92,6 +92,12 @@ class BackwardCallback(BaseCallback):
         self.n_chains = n_chains
         self.window = window
         self.chain_window = max(16, window // 4)
+        # Rehearsal drives the consolidation governor; at window=64 its
+        # easy/hard tier mix swings the rate +/-0.1 by draw luck alone and
+        # the governor flaps (freeze/resume with no promotion in between,
+        # observed run 27l). 4x window steadies it without touching the
+        # frontier jury size.
+        self.rehearsal_window = window * 4
         self.threshold = threshold
         self.levels = [0] * n_chains
         self._results: list[int] = []
@@ -152,7 +158,7 @@ class BackwardCallback(BaseCallback):
                 # keeps hardening behind the frontier; sagging = pause the
                 # walk-back and train in place before advancing further.
                 self._rehearsal.append(cleared)
-                self._rehearsal = self._rehearsal[-self.window:]
+                self._rehearsal = self._rehearsal[-self.rehearsal_window:]
                 continue
             f = self._frontier[ci]
             f.append(cleared)
@@ -169,7 +175,7 @@ class BackwardCallback(BaseCallback):
         if pushed:
             self.training_env.env_method("set_backward_levels", self.levels)
             self._save_levels()
-        if len(self._rehearsal) >= self.window:
+        if len(self._rehearsal) >= self.rehearsal_window:
             rate = sum(self._rehearsal) / len(self._rehearsal)
             if not self._consolidating and rate < self.CONSOL_ON:
                 self._consolidating = True
