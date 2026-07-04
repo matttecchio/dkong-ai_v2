@@ -866,7 +866,14 @@ class DonkeyKongEnv(gym.Env):
         chain = self._bw_chains[int(self.np_random.integers(len(self._bw_chains)))]
         n = len(chain)
         lo = max(0, n - 1 - self._bw_level)
-        pos = int(self.np_random.integers(lo, n))
+        # Half the draws drill the frontier tier (deepest allowed cell); the
+        # rest rehearse the whole window uniformly. Pure-uniform sampling
+        # starves the frontier of practice as the window grows (1/(k+1) of
+        # draws), which is exactly the tier that needs the gradient.
+        if self.np_random.random() < 0.5:
+            pos = lo
+        else:
+            pos = int(self.np_random.integers(lo, n))
         self.load_state_file(chain[pos]["sta"])
         ok, state, pix = self._is_responsive()
         if not ok:

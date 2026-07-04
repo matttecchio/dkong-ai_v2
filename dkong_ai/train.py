@@ -98,23 +98,27 @@ class BackwardCallback(BaseCallback):
                     if pos == max(0, n - 1 - self.level):
                         self._frontier.append(info.get("cleared", 0))
                         self._frontier = self._frontier[-self.window:]
-        if self._frontier:
+        if self._results:
+            self.logger.record("climb/backward_clear_rate",
+                               sum(self._results) / len(self._results))
+            self._results = self._results[-self.window:]
+        # Advance on the FRONTIER tier's own clear rate, not the combined
+        # window average: the combined gate dilutes with every level (mastered
+        # tiers ~0.55, fresh tier ~0 → ceiling 0.55*2/(k+1)) and structurally
+        # stalls around level 3 regardless of learning.
+        if len(self._frontier) >= self.window // 2:
+            frate = sum(self._frontier) / len(self._frontier)
+            self.logger.record("climb/backward_clear_frontier", frate)
+            if frate >= self.threshold:
+                self.level += 1
+                self.training_env.env_method("set_backward_level", self.level)
+                print(f"[backward] level -> {self.level} "
+                      f"(frontier clear rate {frate:.2f})", flush=True)
+                self._results = []
+                self._frontier = []   # tracks a new tier now
+        elif self._frontier:
             self.logger.record("climb/backward_clear_frontier",
                                sum(self._frontier) / len(self._frontier))
-        if self._results:
-            rate = sum(self._results) / len(self._results)
-            self.logger.record("climb/backward_clear_rate", rate)
-            if len(self._results) >= self.window:
-                if rate >= self.threshold:
-                    self.level += 1
-                    self.training_env.env_method("set_backward_level",
-                                                 self.level)
-                    print(f"[backward] level -> {self.level} "
-                          f"(clear rate {rate:.2f})", flush=True)
-                    self._results = []
-                    self._frontier = []   # tracks a new tier now
-                else:
-                    self._results = self._results[-self.window:]
         self.logger.record("climb/backward_level", self.level)
         return True
 
