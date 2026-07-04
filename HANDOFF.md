@@ -3,8 +3,8 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-04, **Run 27j active** — spawn bug fixed (params
-reach workers, §12) AND jitter-death at curriculum cells fixed (§12).
+Last updated: 2026-07-04, **Run 27k active** — spawn bug + jitter-death
+fixed (§12); densified curriculum (`--densify`) through the top-girder band.
 
 ---
 
@@ -14,9 +14,11 @@ reach workers, §12) AND jitter-death at curriculum cells fixed (§12).
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
 - **Run 27 series = Go-Explore phase 2** (backward walk-back over 12 winner
-  chains, §11b). **Run 27j active** (TB `RecurrentPPO_21`): frontier-gated
-  per-chain walk-back; first run where death-band frontier cells (top girder,
-  y=72-80) start alive instead of dying during the reset jitter (§12).
+  chains, §11b). **Run 27k active** (TB `RecurrentPPO_22`): frontier-gated
+  per-chain walk-back on `artifacts/backward_dense` — 199 states, choke-band
+  cell spacing 4-8px (27j evidence: 20-step gaps across the top-girder barrel
+  lane held frontier clears at a flat 2.5%; `export_chains --densify 130:190:5`
+  turns the cliff into a staircase).
 - **2026-07-04, the spawn bug (§12)**: `--p-curric`/`--p-no-barrels` NEVER
   reached the workers — every 27-series run before 27i trained at 15%
   curriculum (not 80%) with 15% barrel-free episodes (not 0%). The barrel-free
