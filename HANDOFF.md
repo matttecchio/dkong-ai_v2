@@ -3,8 +3,8 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-04, **Run 27i active** — the first run whose
-`--p-curric`/`--p-no-barrels` actually reach the workers (spawn bug, §12).
+Last updated: 2026-07-04, **Run 27j active** — spawn bug fixed (params
+reach workers, §12) AND jitter-death at curriculum cells fixed (§12).
 
 ---
 
@@ -14,8 +14,9 @@ Last updated: 2026-07-04, **Run 27i active** — the first run whose
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
 - **Run 27 series = Go-Explore phase 2** (backward walk-back over 12 winner
-  chains, §11b). **Run 27i active** (TB `RecurrentPPO_20`): frontier-gated
-  per-chain walk-back, promotions at 0.81–1.00 against the 0.3 gate.
+  chains, §11b). **Run 27j active** (TB `RecurrentPPO_21`): frontier-gated
+  per-chain walk-back; first run where death-band frontier cells (top girder,
+  y=72-80) start alive instead of dying during the reset jitter (§12).
 - **2026-07-04, the spawn bug (§12)**: `--p-curric`/`--p-no-barrels` NEVER
   reached the workers — every 27-series run before 27i trained at 15%
   curriculum (not 80%) with 15% barrel-free episodes (not 0%). The barrel-free
@@ -148,7 +149,7 @@ ORDER MUST MATCH between both files):
 | screen_id | 0x6227 | 1=barrels 2=pie 3=elevator 4=rivet |
 | mario_y | 0x6205 | smaller=higher; start≈240, top≈58 |
 | mario_x | 0x6203 | +right |
-| is_dead | 0x6200 | **UNRELIABLE** — use lives for death |
+| is_dead | 0x6200 | **INVERTED**: 1=alive, 0=dead — use lives for death |
 | game_start | 0x622C | 1 once game is underway |
 | score_100..100k | 0x7721/41/61/81 | tile RAM digits; digit = byte low nibble |
 | barrel0..5_st/x/y | 0x6700+ stride 0x20 | status (0=inactive,1=rolling,2=deploying) |
