@@ -463,6 +463,30 @@ pickled thunk (instance state), never via launcher-side class/global mutation.
 Verify after any env-config change: the curriculum fraction observed in
 `logs/episodes/dk_*.monitor.csv` must match the CLI within a few percent.
 
+### Jitter-death at curriculum cells: the walk-back stall (fixed run 27j, 2026-07-04)
+
+**The bug**: the post-load RNG jitter (`_hold(A_NOOP, 0-20)`) idled Mario up
+to 1.3s at the restored cell. Top-girder cells (y=72-80, heights ~160-164)
+sit in the barrel-spawn lane; winners passed through IN MOTION, and an idling
+Mario dies DURING reset. The game burns a stored life (the .sta carries
+lives) and respawns him at the bottom — a ghost episode labeled curriculum:
+`max_height` frozen at the start height (the dead-load position sets
+`_min_y`), ~98-step median (one bottom life), ~1% frontier clears. Cells
+above barrel reach (y<=64) were immune — which is exactly why 6 chains
+promoted at 0.81-1.00 while 6 stalled at 0 for the whole of 27g-27i.
+Compounding it: `_is_responsive` only checked x/y change, and a death tumble
+moves without input, so dying cells passed the probe. And RAM 0x6200
+("is_dead") is INVERTED — 1=alive, 0=dead — so naive flag checks read
+corpses as alive; death detection must use the lives drop (it does).
+**Fix** (`4740dde`): jitter applies to bottom starts only (idling at the
+spawn is safe for ~5s; curriculum diversity comes from action sampling + 12
+chains); `_is_responsive` fails any probe step with the alive flag down;
+0x6200 polarity documented in memory_map.py.
+**Diagnosis chain worth remembering**: per-cell clear table from the episode
+CSVs (bimodal 0-3% vs 85-100% split at one girder) -> per-step trace (Mario
+frozen, inputs ignored) -> -aviwrite frames (sprite absent, game running) ->
+input-drive probe (corpse tumble follows nothing; respawn at x=60,y=240).
+
 ### Multi-life episodes drowned the backward curriculum (fixed run 27d, 2026-07-04)
 
 **The bug**: `done = (died and s["lives"] == 0)` — episodes packed all 3 lives.
