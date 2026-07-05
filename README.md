@@ -137,9 +137,13 @@ MAME with the cheatfind plugin for RAM work).
   episodes only: excludes curriculum starts and `no_barrels` episodes (the
   latter faked this metric in run 27g — see HANDOFF §12, spawn bug). This is
   the milestone metric.
+- `climb/glitch_kill_rate` — fraction of recent episodes ended by the
+  broken-ladder guard (off-ladder climbing = the x=99 exploit = instant
+  death). Should decay toward 0 as the policy unlearns the glitch.
 - Per-episode ground truth: `logs/episodes/dk_<port>.monitor.csv` (reward, len,
   max_height, cleared, start_type, start_y, start_screen, end_screen, bw_pos,
-  no_barrels). **Audit any surprising aggregate against these rows first.**
+  no_barrels, glitch_kill). **Audit any surprising aggregate against these
+  rows first.**
 
 ## How resets work (and the recording tradeoff)
 

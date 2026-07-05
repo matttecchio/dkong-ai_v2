@@ -3,8 +3,9 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-04, **Run 27k active** — spawn bug + jitter-death
-fixed (§12); densified curriculum (`--densify`) through the top-girder band.
+Last updated: 2026-07-05, **Run 27q active** — x=99 broken-ladder glitch
+guarded (§12); consolidation governor + level persistence; honest bottom
+baseline reset to ~26.
 
 ---
 
@@ -14,11 +15,18 @@ fixed (§12); densified curriculum (`--densify`) through the top-girder band.
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
 - **Run 27 series = Go-Explore phase 2** (backward walk-back over 12 winner
-  chains, §11b). **Run 27k active** (TB `RecurrentPPO_22`): frontier-gated
-  per-chain walk-back on `artifacts/backward_dense` — 199 states, choke-band
-  cell spacing 4-8px (27j evidence: 20-step gaps across the top-girder barrel
-  lane held frontier clears at a flat 2.5%; `export_chains --densify 130:190:5`
-  turns the cliff into a staircase).
+  chains, §11b). **Run 27q active** (TB `RecurrentPPO_29`): frontier-gated
+  per-chain walk-back on `artifacts/backward_dense` (199 states, choke-band
+  spacing 4-8px via `export_chains --densify 130:190:5`), 70%% frontier draw
+  share, consolidation governor (promotions freeze on real rehearsal decay,
+  band 0.60/0.68 under the measured ~0.70 equilibrium), walk-back levels
+  persist across restarts (`<backward-dir>/levels.json`).
+- **2026-07-05, the x=99 glitch (§12)**: policy AND go-explore winners climbed
+  a broken ladder stub with frame-perfect inputs (user spotted it on film;
+  census: 20/20 bottom episodes). Guard now ends off-ladder climbing as a
+  death; `climb/glitch_kill_rate` tracks unlearning. Honest bottom baseline
+  reset ~40 -> ~26. Winner routes below h~80 are tainted — if the walk-back
+  stalls there, re-run phase 1 with the guard (it lives in the env).
 - **2026-07-04, the spawn bug (§12)**: `--p-curric`/`--p-no-barrels` NEVER
   reached the workers — every 27-series run before 27i trained at 15%
   curriculum (not 80%) with 15% barrel-free episodes (not 0%). The barrel-free
@@ -29,10 +37,14 @@ fixed (§12); densified curriculum (`--densify`) through the top-girder band.
   `height_best`, `height_mean`, or the height milestone reward. Per-episode
   audit trail: `logs/episodes/dk_<port>.monitor.csv` (start_y, start_screen,
   end_screen, bw_pos, no_barrels) — check any surprising aggregate there first.
-- **Bottom-up with live barrels: still 0 clears** (~330M+ steps; honest 27g-era
-  baseline: mean height ~35 from live-barrel bottom starts). The policy CAN
-  clear the whole board barrel-free — the route is learned; barrel/fireball
-  handling is the gap the walk-back curriculum drills.
+- **Bottom-up with live barrels: still 0 honest clears** (~350M+ steps;
+  glitch-guarded baseline: mean height ~26). The current grind: the "shelf"
+  tiers (heights 162-164) — a precision stop-and-grab at the x=147 ladder
+  under barrel pressure, ~2-5%% clear for ~20M steps. Suspected contributor
+  (user hypothesis, matches the known lad53-only feature gap): no engineered
+  "barrel about to descend this ladder" signal for x=147/131/67/143.
+  Staged next lever: per-ladder barrel-threat features (dim 62->~67,
+  warm-start via --transfer-features-from).
 
 ---
 
@@ -687,35 +699,24 @@ No equivalent `lad143` for the first ladder (x=143). Adding it would give an exp
 
 ## 14. Recommended next steps (for Fable / new session)
 
-Go-Explore is in (phase 1 solved exploration; phase 2 backward-algorithm training
-is run 27d, active). In priority order:
+Phase 2 (backward walk-back) is run 27q, active. In priority order:
 
-1. **Watch run 27d's walk-back**: `climb/backward_level` should keep rising
-   (reached 3 in 2M steps post-single-life-fix; chains are ~27 cells, so ~26 =
-   starts include the true bottom). `climb/backward_clear_frontier` is the
-   learning edge; `climb/clear_rate_bottomup` going nonzero is the finish line.
-   Monitor scripts pattern: grep `[backward] level` in the run log.
-
-2. **If a tier stalls** (frontier ~0 for several million steps): probe per-cell
-   clear rates offline (pin `env._bw_chains` to a single cell + level 0 — see
-   memory/session notes, scratchpad `probe_cells.py` pattern) and check whether
-   the blocking cells share a location. Levers, in order: weight window sampling
-   toward low-clear cells; bump `--ent-coef`; regenerate chains from the OTHER
-   archive's routes (12 chains exist across 2 independently-seeded archives).
-
-3. **When bottom-up clears appear**: eval + record (`eval.py --port 5100`),
-   celebrate, then next milestones: consistency (clear_rate_bottomup > 0.5),
-   then the next boards (screen_id 4 = rivets on L1) — go_explore phase 1 can be
-   re-run FROM a rivets start state to build board-2 chains (the machinery is
-   board-agnostic).
-
-4. **lad143 feature** (only at a fresh-run boundary): barrel-distance-to-first-
-   ladder alongside lad53. Changes RAM_FEATURE_DIM 62→68 — breaks warm-start.
-
-5. **Deferred**: VecNormalize; config dataclass; `--tb-name` flag for clearer
-   TensorBoard run labels (SB3 default names runs `RecurrentPPO_N`).
-
----
+1. **Watch `climb/glitch_kill_rate`** — should decay toward 0 as the policy
+   unlearns the x=99 beeline (started ~0.05). If it plateaus high, the bottom
+   policy has nothing better — strengthens the phase-1 re-run case.
+2. **Watch the shelf** (frontier tiers at heights 162-164, 70%% frontier
+   reps): promotions = the boost worked. Still flat after ~10M more steps ->
+   film it for the user (they asked to advise on stuck footage), then add
+   per-ladder barrel-threat features (the lad143/147 gap, §5) via
+   `--transfer-features-from`.
+3. **The h~45-80 "glitch leg"**: winners never demonstrated a legit route
+   (x=53 ladder is the honest path). If the walk-back stalls there flat,
+   re-run go_explore phase 1 (the guard is inherited from the env) and
+   re-export chains with `--densify`.
+4. **Restart hygiene**: SIGTERM, loop-wait until the trainer AND all MAMEs
+   are dead (a 25s sleep once overlapped two trainers on shared bridges —
+   §16); the port guard now refuses such starts. Levels resume from
+   `levels.json`; delete it to reset the walk-back.
 
 ## 15. Why the wall persisted (history) + LSTM rationale
 
