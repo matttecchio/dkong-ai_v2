@@ -446,6 +446,28 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
 
 ## 12. Critical bugs fixed (do not reintroduce)
 
+### The x=99 broken-ladder glitch: superhuman exploit in winners AND policy (guarded run 27o, 2026-07-05)
+
+**The find** (spotted by the user watching footage): Mario climbing a broken
+ladder stub with frame-perfect up/down inputs — a TAS-grade exploit no human
+performs. Census: 20/20 bottom-start episodes rode the x=99 stub (710
+glitch-climb steps). Worse, winner-route arithmetic (chain 0: h=43@x=93 ->
+h=80@x=180 in ~20 macro-steps, impossible via the legit x=53/x=143 ladders)
+shows the go-explore winners ALSO used it — the curriculum's lower legs
+encode the exploit, and height_mean_bottomup's rise (31->49) was partly
+glitch-driven.
+**Guard** (`35c3399`): in `_reward`, 3+ consecutive climb steps (y falling,
+x pinned, alive, no jump arc, screen 1) outside any `COMPLETE_LADDERS`
+envelope ends the episode with the death penalty. Verified: kills the
+exploit in ~22 steps, zero false positives on legit ladder climbs.
+`glitch_kill` is exported per episode (info + CSVs).
+**Consequences**: honest bottom-up baselines reset (expect height_mean to
+CRASH first, then recover via legit routes); the walk-back below h~80 must
+find real connections (x=53 ladder) the winners never demonstrated — if it
+stalls flat there, phase 1 (go_explore) must be re-run with the guard
+active so winners are legit. The guard lives in env.step()/_reward, so any
+phase-1 re-run through env.step inherits it automatically.
+
 ### Spawn ate the CLI env params → phantom bottom-up clears (fixed run 27i, 2026-07-04)
 
 **The bug**: `main()` applied `--p-curric`/`--p-no-barrels` by mutating
