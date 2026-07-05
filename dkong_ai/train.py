@@ -28,6 +28,7 @@ class ClimbMetricsCallback(BaseCallback):
         self._heights_bt: list[float] = []   # bottomup episodes only
         self._heights_cu: list[float] = []   # curriculum episodes only
         self._clears_bt: list[int] = []      # honest bottom-up clear signal
+        self._glitch: list[int] = []         # episodes ended by the ladder guard
         self.window = window
         self.best_height = 0
 
@@ -45,6 +46,8 @@ class ClimbMetricsCallback(BaseCallback):
             self._heights = self._heights[-self.window:]
             self._clears  = self._clears[-self.window:]
             self._scores  = self._scores[-self.window:]
+            self._glitch.append(int(info.get("glitch_kill", 0)))
+            self._glitch = self._glitch[-self.window:]
             self.best_height = max(self.best_height, h)
             if info.get("start_type") == "curriculum":
                 self._heights_cu.append(h)
@@ -73,6 +76,11 @@ class ClimbMetricsCallback(BaseCallback):
         if self._clears_bt:
             self.logger.record("climb/clear_rate_bottomup",
                                sum(self._clears_bt) / len(self._clears_bt))
+        if self._glitch:
+            # Fraction of recent episodes ended by the broken-ladder guard.
+            # Should DECAY as the policy unlearns the x=99 exploit.
+            self.logger.record("climb/glitch_kill_rate",
+                               sum(self._glitch) / len(self._glitch))
         return True
 
 
