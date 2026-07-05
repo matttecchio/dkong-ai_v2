@@ -910,11 +910,15 @@ class DonkeyKongEnv(gym.Env):
         level = (self._bw_levels[ci] if self._bw_levels is not None
                  else self._bw_level)
         lo = max(0, n - 1 - level)
-        # Half the draws drill the frontier tier (deepest allowed cell); the
+        # Most draws drill the frontier tier (deepest allowed cell); the
         # rest rehearse the whole window uniformly. Pure-uniform sampling
         # starves the frontier of practice as the window grows (1/(k+1) of
         # draws), which is exactly the tier that needs the gradient.
-        if self.np_random.random() < 0.5:
+        # 0.5 -> 0.7 (2026-07-05): the shelf tiers (x=147 ladder-grab
+        # precision) sat at 2-5% for ~20M steps — the failing skill needs
+        # reps more than the mastered tower needs extra rehearsal; the
+        # consolidation governor guards the tower side.
+        if self.np_random.random() < 0.7:
             pos = lo
         else:
             pos = int(self.np_random.integers(lo, n))
