@@ -39,6 +39,14 @@ def main():
     ap.add_argument("--rom-dir", default="./roms",
                     help="ROM dir for --verify-states / --densify")
     ap.add_argument("--verify-port", type=int, default=5301)
+    ap.add_argument("--prune-descents", type=int, default=None, metavar="PX",
+                    help="drop cells more than PX below the running height "
+                         "max along the trajectory. Winner detours DOWN the "
+                         "board put near-unclearable low cells inside "
+                         "promoted walk-back windows (run 27q: 1.9%% clears "
+                         "over 1.1k rehearsal draws at h<=155 deadlocked the "
+                         "consolidation governor). The walk-back needs the "
+                         "ascent skeleton, not the scenic route. Try 15.")
     ap.add_argument("--densify", default=None, metavar="LO:HI:K",
                     help="insert extra cells through a hard height band: for "
                          "each chain leg touching heights [LO,HI], replay the "
@@ -152,6 +160,20 @@ def main():
         for ch in chains:
             for cell in ch["cells"]:
                 cell.pop("_leg", None)
+
+    if args.prune_descents is not None and chains:
+        dropped = 0
+        for ch in chains:
+            kept, hmax = [], -1
+            for cell in ch["cells"]:
+                if cell["height"] >= hmax - args.prune_descents:
+                    kept.append(cell)
+                    hmax = max(hmax, cell["height"])
+                else:
+                    dropped += 1
+            ch["cells"] = kept
+        print(f"[export] prune-descents {args.prune_descents}px: "
+              f"{dropped} detour cells dropped")
 
     if args.verify_states and chains:
         bad = set()
