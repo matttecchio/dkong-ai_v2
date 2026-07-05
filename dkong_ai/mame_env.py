@@ -66,6 +66,19 @@ def _die_with_parent():
 class DonkeyKongEnv(gym.Env):
     metadata = {"render_modes": []}
 
+    # Barrel-board ladders that span a full girder gap (x, y_top, y_bottom in
+    # game pixels). Used by the channel-1 ladder map AND the broken-ladder
+    # glitch guard in _reward: climbing anywhere else is physically possible
+    # only via the frame-perfect broken-ladder exploit (x=99 stub et al.),
+    # which the go-explore winners and then the policy both discovered.
+    COMPLETE_LADDERS = [
+        (143, 175, 224),  # floor → 2nd girder, right side
+        ( 53, 155, 196),  # 2nd → 3rd girder, FAR LEFT (critical)
+        (131, 118, 158),  # 3rd → 4th girder, right-ish
+        ( 67,  85, 125),  # 4th → 5th girder, left
+        (147,  48, 100),  # top section to Pauline
+    ]
+
     # _p_curric is a class-level default (like P_NO_BARRELS). Override it by
     # setting an INSTANCE attribute on each constructed env (train.py does
     # this inside the make_env thunk so it happens in the worker process).
@@ -337,13 +350,7 @@ class DonkeyKongEnv(gym.Env):
         Derived from live tilemap analysis (0x7400-0x7800) — core ladder tile
         codes C0-C7 / D0-D7 in contiguous column runs identify each segment."""
         m = np.zeros((84, 84), dtype=np.uint8)
-        COMPLETE_LADDERS = [
-            (143, 175, 224),  # floor → 2nd girder, right side
-            ( 53, 155, 196),  # 2nd → 3rd girder, FAR LEFT (critical)
-            (131, 118, 158),  # 3rd → 4th girder, right-ish
-            ( 67,  85, 125),  # 4th → 5th girder, left
-            (147,  48, 100),  # top section to Pauline
-        ]
+        COMPLETE_LADDERS = DonkeyKongEnv.COMPLETE_LADDERS
         # Short stubs that hang from a girder but don't connect below.
         # Barrels can fall through these; Mario cannot climb them.
         # Positions from tilemap core-code run analysis (col*8 ≈ x, row*8 ≈ y).
@@ -735,6 +742,29 @@ class DonkeyKongEnv(gym.Env):
                         and s["mario_y"] is not None
                         and s["mario_y"] < self.BASE_Y - self.HAMMER_WALL_H_LO):
                     r -= self.HAMMER_WALL_COST
+        # Broken-ladder glitch guard: sustained climbing (y falling, x pinned,
+        # not a jump arc, alive — 0x6200 is 1=alive) anywhere outside a
+        # complete ladder's envelope is the frame-perfect broken-ladder
+        # exploit (all 20/20 probed bottom episodes rode the x=99 stub).
+        # Three consecutive glitch-climb steps end the episode as a death:
+        # the exploit simply doesn't exist in our version of the game.
+        glitch_killed = False
+        if (not died and not cleared and s["screen_id"] == 1
+                and s.get("is_dead", 0) == 1 and not s.get("is_jumping", 0)
+                and s["mario_y"] and p["mario_y"]
+                and s["mario_y"] < p["mario_y"]
+                and s["mario_x"] == p["mario_x"]
+                and not any(abs(s["mario_x"] - lx) <= 6
+                            and yt - 6 <= s["mario_y"] <= yb + 6
+                            for lx, yt, yb in self.COMPLETE_LADDERS)):
+            self._glitch_streak += 1
+            if self._glitch_streak >= 3:
+                glitch_killed = True
+                self._glitch_kill = True
+        else:
+            self._glitch_streak = 0
+        if glitch_killed:
+            r -= 10.0
         if died:
             r -= 10.0
             # Extra penalty when the agent never left the farming zone this episode.
@@ -758,7 +788,7 @@ class DonkeyKongEnv(gym.Env):
         # starts, where dying at the top silently respawned Mario at the
         # BOTTOM and the episode continued as a mislabeled, unclearable
         # bottom-up run that drowned the frontier gradient.
-        done = died or cleared or timed_out
+        done = died or cleared or timed_out or glitch_killed
         return r, done
 
     # ---- gym API ---------------------------------------------------------
@@ -968,6 +998,8 @@ class DonkeyKongEnv(gym.Env):
         self._visited = set()                # novelty bonus: cells seen this episode
         self._wp_hit = set()                 # waypoint milestones fired this episode
         self._episode_steps = 0              # for height-timeout termination
+        self._glitch_streak = 0              # consecutive off-ladder climb steps
+        self._glitch_kill = False            # episode ended by the glitch guard
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -1071,7 +1103,8 @@ class DonkeyKongEnv(gym.Env):
                 "start_y": self._start_y,
                 "start_screen": self._start_screen,
                 "end_screen": state["screen_id"],
-                "bw_pos": self._bw_start[1] if self._bw_start else -1}
+                "bw_pos": self._bw_start[1] if self._bw_start else -1,
+                "glitch_kill": int(self._glitch_kill)}
 
     def step(self, action: int):
         try:

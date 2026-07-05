@@ -236,7 +236,7 @@ def make_env(rom_dir, port, frameskip, backward_manifest=None,
         return Monitor(env, filename=f"logs/episodes/dk_{port}",
                        info_keywords=("max_height", "cleared", "start_type",
                                       "start_y", "start_screen", "end_screen",
-                                      "bw_pos", "no_barrels"))
+                                      "bw_pos", "no_barrels", "glitch_kill"))
     return _thunk
 
 
