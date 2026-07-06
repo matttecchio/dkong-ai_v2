@@ -3,9 +3,12 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-05, **Run 27q active** — x=99 broken-ladder glitch
-guarded (§12); consolidation governor + level persistence; honest bottom
-baseline reset to ~26.
+Last updated: 2026-07-06, **Run 27u active** — the c446 choke cracked on all
+five trunk chains (surgical rungs via new `densify_stuck.py`, §11b); frontier
+draw share reverted 0.7→0.5 (it was decaying adjacent tiers 43%→5%);
+consolidation governor recalibrated 0.60/0.68→0.40/0.48 (pooled equilibrium
+moves with tower difficulty); dead run-1 chains replaced from a fresh
+verified phase-1 archive (`backward_dense4`).
 
 ---
 
@@ -15,12 +18,14 @@ baseline reset to ~26.
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
 - **Run 27 series = Go-Explore phase 2** (backward walk-back over 12 winner
-  chains, §11b). **Run 27q active** (TB `RecurrentPPO_29`): frontier-gated
-  per-chain walk-back on `artifacts/backward_dense` (199 states, choke-band
-  spacing 4-8px via `export_chains --densify 130:190:5`), 70%% frontier draw
-  share, consolidation governor (promotions freeze on real rehearsal decay,
-  band 0.60/0.68 under the measured ~0.70 equilibrium), walk-back levels
-  persist across restarts (`<backward-dir>/levels.json`).
+  chains, §11b). **Run 27u active** (TB `RecurrentPPO_33`): frontier-gated
+  per-chain walk-back on `artifacts/backward_dense4` (4 fresh run-3 chains in
+  slots 0-3 + the live a1 chains at levels [2,11,15,16,9,6,1,2]), 0.5
+  frontier draw share, consolidation governor at 0.40/0.48, walk-back levels
+  persist across restarts (`<backward-dir>/levels.json`). Chains 5-9 have all
+  gated through the long-stuck c446/c446_d4 complex and converged at c433
+  (h174) — the current hard cell; `densify_stuck.py` is the proven lever if
+  it stays flat.
 - **2026-07-05, the x=99 glitch (§12)**: policy AND go-explore winners climbed
   a broken ladder stub with frame-perfect inputs (user spotted it on film;
   census: 20/20 bottom episodes). Guard now ends off-ladder climbing as a
@@ -453,6 +458,36 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   re-promote within minutes of launch. Watch `climb/backward_level` and — now
   trustworthy — `climb/clear_rate_bottomup` off 0. See §12 for the curriculum
   bugs — do not reintroduce.
+- 27j–27q (2026-07-04/05): jitter-death fix, governor + level persistence,
+  x=99 glitch guard, honest baseline reset, `backward_dense`/`dense2`
+  (choke-band `--densify 130:190:5`, `--prune-descents 15`), frontier share
+  0.5→0.7. Ended stuck: 27q/27r walled at the c446 pool (h167-168, ~8% over
+  4k draws) with promotions frozen.
+- **27r post-mortem (2026-07-05 eve)** — the triple deadlock, found via
+  per-cell CSV audit (`bw_pos` isolates tiers): (1) 0.7 frontier share ground
+  an ~8% cell with 70% of draws; (2) that gradient DECAYED the adjacent
+  mastered tier 43%→5% (states 4 macro-steps apart — interference), even a
+  once-passed tier regressed; (3) pooled rehearsal pinned ~0.55 < CONSOL_OFF
+  0.68 → promotions frozen the entire run. Freezing stops promotion, not
+  decay; only rehearsal share stops decay.
+- **27s (dense3)**: new `densify_stuck.py` minted doom-screened rungs INSIDE
+  the c446 gap (j=1-3 of each successor leg) + share back to 0.5. Six
+  advances in 35 min — chains 5 and 9 passed c446 itself — then the governor
+  re-froze on COMPOSITION (each hard promotion enters rehearsal at ~0.3,
+  pooled equilibrium sank to ~0.47-0.57; per-cell audit showed every tier
+  RISING while frozen). Tier decay reversed (5%→30%) — the share, not the
+  freeze, was the protection.
+- **27t**: governor recalibrated 0.40/0.48 (thresholds must track the
+  tower's difficulty mix). 9 more advances, zero freezes: all five trunk
+  chains cleared c446 AND c446_d4, converging at c433 (h174).
+- **27u ACTIVE (dense4)**: run-1 (a0) chains 0-3 were a write-off —
+  un-densifiable (their archive predates a bridge change; byte-replay
+  desyncs) and mislabeled (a0_c469.sta actually loads at h161/x203, not its
+  recorded h176 — snapshots can catch Mario below the reach-height). A fresh
+  90-min phase-1 run (`artifacts/go_explore_run3`, `--validate` PASSED first,
+  4 workers alongside training, 166 winners) replaced them: 4 verified
+  chains at level 0, live a1 levels carried over via `levels.json` remap.
+  Level-0 frontier cleared at gate rate immediately.
 
 ---
 
@@ -699,24 +734,35 @@ No equivalent `lad143` for the first ladder (x=143). Adding it would give an exp
 
 ## 14. Recommended next steps (for Fable / new session)
 
-Phase 2 (backward walk-back) is run 27q, active. In priority order:
+Phase 2 (backward walk-back) is run 27u, active. In priority order:
 
-1. **Watch `climb/glitch_kill_rate`** — should decay toward 0 as the policy
-   unlearns the x=99 beeline (started ~0.05). If it plateaus high, the bottom
-   policy has nothing better — strengthens the phase-1 re-run case.
-2. **Watch the shelf** (frontier tiers at heights 162-164, 70%% frontier
-   reps): promotions = the boost worked. Still flat after ~10M more steps ->
-   film it for the user (they asked to advise on stuck footage), then add
-   per-ladder barrel-threat features (the lad143/147 gap, §5) via
-   `--transfer-features-from`.
-3. **The h~45-80 "glitch leg"**: winners never demonstrated a legit route
-   (x=53 ladder is the honest path). If the walk-back stalls there flat,
-   re-run go_explore phase 1 (the guard is inherited from the env) and
-   re-export chains with `--densify`.
-4. **Restart hygiene**: SIGTERM, loop-wait until the trainer AND all MAMEs
+1. **c433 (h174), shared frontier of chains 5-9** — the current hard cell
+   (frontier window ~0.005 pre-restart). If flat for a few hours:
+   `python -m dkong_ai.densify_stuck --src artifacts/backward_dense4
+   --out artifacts/backward_dense5 --archive artifacts/go_explore_run3
+   --archive artifacts/go_explore --stuck a1_c433.sta` (its legs are a1 =
+   replay-verified mintable; rungs land at j=1-3 of the c446/c445 legs).
+   That exact play cracked c446 in 35 minutes after 2 days stuck.
+2. **Watch the new chains 0-3 ladder up** — they validate the dense4 swap.
+   Fresh easy tiers should also lift pooled rehearsal away from the 0.40
+   governor trigger. If the governor STILL freezes on composition, stop
+   chasing thresholds: normalize rehearsal per-tier (mean of per-tier rates,
+   not pooled draws) in `BackwardCallback`.
+3. **Chains 10/11 parked at c445_d23** — small pool; densify more of the
+   c433→c445 leg if they're still flat once c433 cracks.
+4. **Watch `climb/glitch_kill_rate`** — should decay toward 0 as the policy
+   unlearns the x=99 beeline (started ~0.05).
+5. **Restart hygiene**: SIGTERM, loop-wait until the trainer AND all MAMEs
    are dead (a 25s sleep once overlapped two trainers on shared bridges —
    §16); the port guard now refuses such starts. Levels resume from
-   `levels.json`; delete it to reset the walk-back.
+   `levels.json`; delete it to reset the walk-back. When REPLACING chains,
+   rewrite `levels.json` to match slot-for-slot (count mismatch silently
+   resets ALL levels to 0).
+6. **a0-class archives**: before ever minting rungs from an archive, replay
+   one known leg and compare landing height (`densify_stuck` does this
+   per-leg and skips desynced legs). Snapshot heights in manifests can be
+   ~15px below the recorded reach-height (save lands a few frames later —
+   Mario may be falling); trust the loaded state, not the label.
 
 ## 15. Why the wall persisted (history) + LSTM rationale
 
@@ -801,6 +847,11 @@ track barrel state across the ~3s traverse window.
   + byte trajectories), workers, `--validate` determinism self-test, winner
   verification. Ports 5200+. TensorBoard `GoExplore_N`.
 - `export_chains.py` — archives → `artifacts/backward/` manifest for phase 2.
+- `densify_stuck.py` — surgical walk-back rungs: replays a stuck frontier
+  cell's successor legs from the archive true-parent (prune-descents makes
+  manifest-adjacent ≠ archive parent-child), clean-frame filter, 6-trial
+  doom screen, splices a new backward dir with `levels.json` kept valid
+  (levels are end-relative; frontier pointers land on the easiest new rung).
   ALWAYS use `--verify-states` (drops frozen snapshots).
 - `replay_winner.py` — render a winner chain to video (`--avi x.avi`, auto-mp4
   via ffmpeg) or watch live (`--watch`). Port 5300.
