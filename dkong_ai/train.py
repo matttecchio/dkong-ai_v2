@@ -122,7 +122,13 @@ class BackwardCallback(BaseCallback):
         # Thresholds must sit BELOW that equilibrium or the governor flaps
         # (freeze<->resume with no promotions between, observed at 0.65/0.75).
         # Fire only on real decay.
-        self.CONSOL_ON, self.CONSOL_OFF = 0.60, 0.68
+        # Recalibrated 0.60/0.68 -> 0.40/0.48 (run 27s): once the tower
+        # contains the hard h160-178 band, each promotion enters rehearsal at
+        # its ~0.3 gate rate and the pooled equilibrium drops to ~0.47-0.57 —
+        # 0.60/0.68 froze promotions for 12M+ steps on composition, not decay
+        # (per-cell CSV audit showed every tier RISING while frozen). The
+        # equilibrium moves with tower difficulty; thresholds must track it.
+        self.CONSOL_ON, self.CONSOL_OFF = 0.40, 0.48
         self._consolidating = False
         self.levels_path: str | None = None   # set by main(): persistence
 

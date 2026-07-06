@@ -918,7 +918,14 @@ class DonkeyKongEnv(gym.Env):
         # precision) sat at 2-5% for ~20M steps — the failing skill needs
         # reps more than the mastered tower needs extra rehearsal; the
         # consolidation governor guards the tower side.
-        if self.np_random.random() < 0.7:
+        # 0.7 -> 0.5 (2026-07-05 eve, run27r post-mortem): at 0.7 the governor
+        # did NOT guard the tower — 70% of draws grinding an ~8% frontier
+        # (c446 pool) decayed the adjacent promoted tier 43%->5% in 2.4M steps
+        # (gradient interference: the states are 4 macro-steps apart), which
+        # pinned pooled rehearsal at ~0.55 < CONSOL_OFF 0.68, freezing
+        # promotions for the whole run. Freezing stops promotion, not decay;
+        # only rehearsal share does. Deadlock breaker, not a tuning taste.
+        if self.np_random.random() < 0.5:
             pos = lo
         else:
             pos = int(self.np_random.integers(lo, n))
