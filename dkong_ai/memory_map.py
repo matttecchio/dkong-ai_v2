@@ -31,7 +31,9 @@ ADDR = {
     "score_10k":    0x7761,
     "score_100k":   0x7781,
     # Barrel object array: 6 slots at 0x6700, stride 0x20.
-    # Per slot: +0x00=status (0=inactive,1=rolling,2=deploying), +0x03=x, +0x05=y.
+    # Per slot: +0x00=status (0=inactive,1=rolling,2=deploying), +0x01=crazy
+    # (wild barrel bouncing vertically down the board), +0x02=blue (rolls into
+    # the oil drum -> fireball), +0x03=x, +0x05=y.
     # Confirmed from Don Hodges 2008 Z80 disassembly; same coord system as mario_y.
     "barrel0_st": 0x6700, "barrel0_x": 0x6703, "barrel0_y": 0x6705,
     "barrel1_st": 0x6720, "barrel1_x": 0x6723, "barrel1_y": 0x6725,
@@ -39,6 +41,12 @@ ADDR = {
     "barrel3_st": 0x6760, "barrel3_x": 0x6763, "barrel3_y": 0x6765,
     "barrel4_st": 0x6780, "barrel4_x": 0x6783, "barrel4_y": 0x6785,
     "barrel5_st": 0x67A0, "barrel5_x": 0x67A3, "barrel5_y": 0x67A5,
+    "barrel0_crazy": 0x6701, "barrel0_blue": 0x6702,
+    "barrel1_crazy": 0x6721, "barrel1_blue": 0x6722,
+    "barrel2_crazy": 0x6741, "barrel2_blue": 0x6742,
+    "barrel3_crazy": 0x6761, "barrel3_blue": 0x6762,
+    "barrel4_crazy": 0x6781, "barrel4_blue": 0x6782,
+    "barrel5_crazy": 0x67A1, "barrel5_blue": 0x67A2,
     # Fireballs (flame enemies that chase Mario): 5 slots at 0x6400, stride 0x20.
     # +0x00=status (0=inactive,1=active), +0x03=x, +0x05=y.
     # Barrel stage typically has 1 active; track all 5 for completeness.
@@ -50,6 +58,11 @@ ADDR = {
     # Hammer sprite at #6A1C-#6A1F. Pattern: +0=X, +3=Y. has_hammer=0x6217.
     "hammer_x": 0x6A1C, "hammer_y": 0x6A1F, "has_hammer": 0x6217,
     "is_jumping": 0x6216,
+    # Internal difficulty (1-5): starts at the level number, ramps on a timer
+    # within each board; indexes the game's barrel-steering/fireball aggression
+    # tables. TRACKED ONLY (episode CSV/TB) — deliberately NOT in the RAM
+    # observation vector yet; fold into the next obs-space change.
+    "difficulty": 0x6380,
 }
 
 # Bytes the bridge ships each step, in this order (must match bridge WATCH_ADDRS).
@@ -69,6 +82,15 @@ WATCH_ORDER = [
     "fireball4_st", "fireball4_x", "fireball4_y",
     "hammer_x", "hammer_y", "has_hammer",
     "is_jumping",
+    # Appended (order-stable): barrel type flags. crazy = wild barrel bouncing
+    # vertically down the board; blue = heads for the oil drum (spawns fireball).
+    "barrel0_crazy", "barrel0_blue",
+    "barrel1_crazy", "barrel1_blue",
+    "barrel2_crazy", "barrel2_blue",
+    "barrel3_crazy", "barrel3_blue",
+    "barrel4_crazy", "barrel4_blue",
+    "barrel5_crazy", "barrel5_blue",
+    "difficulty",
 ]
 
 WATCH_ADDRS = [ADDR[name] for name in WATCH_ORDER]

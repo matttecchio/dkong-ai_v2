@@ -83,6 +83,14 @@ local WATCH_ADDRS = {
   -- Hammer sprite (#6A1C-#6A1F): +0=X, +3=Y. has_hammer at 0x6217.
   0x6A1C, 0x6A1F, 0x6217,  -- hammer x, hammer y, has_hammer
   0x6216,                   -- is_jumping (non-zero while Mario is in a jump arc)
+  -- Appended: barrel type flags, +1=crazy (wild/bouncing), +2=blue (oil-drum).
+  0x6701, 0x6702,  -- barrel 0 crazy, blue
+  0x6721, 0x6722,  -- barrel 1
+  0x6741, 0x6742,  -- barrel 2
+  0x6761, 0x6762,  -- barrel 3
+  0x6781, 0x6782,  -- barrel 4
+  0x67A1, 0x67A2,  -- barrel 5
+  0x6380,          -- internal difficulty 1-5 (aggression table index)
 }
 
 -- Training-wheels barrel-freeze: Python sends 0xF8 to disable barrels+fireball

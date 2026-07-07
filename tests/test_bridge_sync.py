@@ -1,7 +1,7 @@
 """Mechanical enforcement of the WATCH_ORDER / WATCH_ADDRS invariant.
 
 Both memory_map.WATCH_ORDER (Python) and the WATCH_ADDRS table in scripts/bridge.lua
-(Lua) must list exactly the same 47 RAM addresses in the same order. A mismatch silently
+(Lua) must list exactly the same 59 RAM addresses in the same order. A mismatch silently
 corrupts every RAM observation: wrong feature in wrong slot with no runtime error.
 
 Run with: python -m pytest tests/test_bridge_sync.py
@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 BRIDGE_LUA = ROOT / "scripts" / "bridge.lua"
-EXPECTED_COUNT = 47
+EXPECTED_COUNT = 60
 
 
 def _parse_lua_addrs():
@@ -52,13 +52,19 @@ def test_watch_order_matches_bridge():
     assert not mismatches, "WATCH_ORDER / WATCH_ADDRS mismatch:\n" + "\n".join(mismatches)
 
 
-def test_is_jumping_is_last():
+def test_appended_entries_positions():
+    """Entries are append-only (order-stable): is_jumping stayed at index 46
+    where run-24's fix put it, and the 12 barrel type flags follow it."""
     from dkong_ai.memory_map import WATCH_ORDER, ADDR
-    assert WATCH_ORDER[-1] == "is_jumping", (
-        f"Expected 'is_jumping' as last WATCH_ORDER entry, got '{WATCH_ORDER[-1]}'"
+    assert WATCH_ORDER[46] == "is_jumping", (
+        f"Expected 'is_jumping' at WATCH_ORDER[46], got '{WATCH_ORDER[46]}'"
+    )
+    expected_tail = [f"barrel{i}_{kind}" for i in range(6)
+                     for kind in ("crazy", "blue")] + ["difficulty"]
+    assert WATCH_ORDER[47:] == expected_tail, (
+        f"Expected barrel type flags + difficulty after is_jumping, "
+        f"got {WATCH_ORDER[47:]}"
     )
     lua_addrs = _parse_lua_addrs()
-    assert lua_addrs[-1] == ADDR["is_jumping"], (
-        f"Expected 0x{ADDR['is_jumping']:04x} as last bridge WATCH_ADDR, "
-        f"got 0x{lua_addrs[-1]:04x}"
-    )
+    assert lua_addrs[46] == ADDR["is_jumping"]
+    assert lua_addrs[-1] == ADDR["difficulty"]

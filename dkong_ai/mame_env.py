@@ -394,7 +394,7 @@ class DonkeyKongEnv(gym.Env):
     # edge_dist: normalised [0,1] distance to the girder edge the barrel is heading
     # toward (0 = at edge / about to fall, 1 = far away). Paired with the fall-zone
     # image overlay so the agent can anticipate barrels appearing from above.
-    RAM_FEATURE_DIM = 62
+    RAM_FEATURE_DIM = 74   # 2 mario + 6 barrels x 9 + 5 fireballs x 3 + 3 hammer
     LAD53_X = 53    # x of the critical left ladder (2nd→3rd girder)
 
     # Girder edge lookup: (barrel_y_lo, barrel_y_hi, x_left, x_right, landing_y).
@@ -438,9 +438,16 @@ class DonkeyKongEnv(gym.Env):
                             edge_dist = float(np.clip(
                                 (x_right - bx) / self.EDGE_PROX, 0.0, 1.0))
                         break
+                # Type flags straight from the game's barrel object: the wild
+                # (crazy) barrel bounces vertically down the board, so every
+                # rolling-barrel prior (edge_dist, fall zones, lad53) is wrong
+                # for it; blue barrels end in the oil drum -> fireball spawn.
+                crazy = float(state.get(f"barrel{i}_crazy", 0) > 0)
+                blue  = float(state.get(f"barrel{i}_blue", 0) > 0)
             else:
-                dx = dy = vx = vy = lad53 = edge_dist = 0.0
-            feats.extend([dx, dy, vx, vy, lad53, edge_dist, float(st > 0)])
+                dx = dy = vx = vy = lad53 = edge_dist = crazy = blue = 0.0
+            feats.extend([dx, dy, vx, vy, lad53, edge_dist, float(st > 0),
+                          crazy, blue])
         for i in range(5):
             fst = state.get(f"fireball{i}_st", 0)
             if fst:
@@ -543,8 +550,21 @@ class DonkeyKongEnv(gym.Env):
     # threshold must be >20 to actually fire. 15 was too low and never triggered.
     CORNER_H_MAX   = 25
     CORNER_X_LEFT  = 30
-    CORNER_X_RIGHT = 160
+    # 160 -> 156 (2026-07-07): FIRST_CLIMB zone ends at 155, so x in (155,160]
+    # was a 5px no-penalty safe harbor beside the ladder base — and eval film
+    # showed the policy camping exactly there. The box now starts where the
+    # climb zone ends.
+    CORNER_X_RIGHT = 156
     CORNER_COST    = 0.20
+
+    # Broken-ladder stub tax (2026-07-07): the x=99 stub's lower rungs are
+    # legal ladder tiles, so the glitch guard can't fire on them — eval film
+    # showed ritual re-climbing (8.4%% of bottom-ups still END via the guard).
+    # Loitering in the stub zone now costs per step; the legit floor ladder
+    # (x=143) is bonus-paid, so the gradient points away from the stub.
+    STUB_X_LO, STUB_X_HI = 92, 106
+    STUB_H_LO, STUB_H_HI = 10, 40
+    STUB_COST = 0.08
 
     # Score-gating zone: block barrel-jump score reward only when camping
     # (height<65, x>115, AND not moving left). Traversing left through the zone
@@ -656,6 +676,10 @@ class DonkeyKongEnv(gym.Env):
                         and (s["mario_x"] < self.CORNER_X_LEFT
                              or s["mario_x"] > self.CORNER_X_RIGHT)):
                     r -= self.CORNER_COST
+                # Broken-ladder stub tax: see STUB_* constants.
+                if (self.STUB_H_LO <= height <= self.STUB_H_HI
+                        and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI):
+                    r -= self.STUB_COST
                 # Dense traverse progress: +TRAVERSE_PROGRESS per pixel moved
                 # left on the 2nd girder. Gives gradient on every failed attempt
                 # (not just when the agent survives all the way to x=53).
@@ -709,10 +733,15 @@ class DonkeyKongEnv(gym.Env):
                 cell = (s["mario_x"] // self.CELL, height // self.CELL)
                 if cell not in self._visited:
                     self._visited.add(cell)
-                    r += 0.2
-                    tx = self._target_x(height)
-                    if tx is not None:
-                        r += 0.3 * max(0.0, 1.0 - abs(s["mario_x"] - tx) / 48.0)
+                    # No novelty/corridor pay inside the broken-stub zone —
+                    # it was a small per-episode bounty for visiting the
+                    # glitch ladder's neighbourhood.
+                    if not (self.STUB_H_LO <= height <= self.STUB_H_HI
+                            and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI):
+                        r += 0.2
+                        tx = self._target_x(height)
+                        if tx is not None:
+                            r += 0.3 * max(0.0, 1.0 - abs(s["mario_x"] - tx) / 48.0)
             # Score gains, de-weighted. Guard ignores <=0 (incl. the pre-game
             # 3700->0 reset) and implausible jumps (artifact / glitch).
             # Score is GATED in the camp zone: no score reward when height < 65
@@ -1004,6 +1033,7 @@ class DonkeyKongEnv(gym.Env):
         # cleared row whose start_screen != 1, is a mislabeled/phantom episode.
         self._start_y = state["mario_y"]
         self._start_screen = state["screen_id"]
+        self._difficulty_start = state.get("difficulty", 0)
         # Height already paid by the milestone reward (start height -> no pay).
         self._reward_max_h = max(0, self.BASE_Y - self._min_y)
         self._visited = set()                # novelty bonus: cells seen this episode
@@ -1115,7 +1145,13 @@ class DonkeyKongEnv(gym.Env):
                 "start_screen": self._start_screen,
                 "end_screen": state["screen_id"],
                 "bw_pos": self._bw_start[1] if self._bw_start else -1,
-                "glitch_kill": int(self._glitch_kill)}
+                "glitch_kill": int(self._glitch_kill),
+                # Internal difficulty (1-5, tracked-only): curriculum states
+                # inherit game time from their phase-1 trajectories, so deep
+                # cells start at HIGHER difficulty than the bottom start —
+                # these columns expose that confound per episode.
+                "difficulty_start": self._difficulty_start,
+                "difficulty_end": state.get("difficulty", 0)}
 
     def step(self, action: int):
         try:
