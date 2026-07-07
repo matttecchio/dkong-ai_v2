@@ -173,13 +173,15 @@ MAME with the cheatfind plugin for RAM work).
 
 **Full project state, run history, models, and next steps: [`HANDOFF.md`](HANDOFF.md).**
 
-In short (run 27u active, Go-Explore phase 2): phase-1 random exploration with
+In short (run 27z active, Go-Explore phase 2): phase-1 random exploration with
 state banking cleared the board in minutes (what 26 PPO runs / 250M+ steps never
-did), and the policy is now walking the start point backward down 12 verified
-winner routes. The long-stuck c446 choke (top-girder barrel lane) fell to
-surgical rung densification (`densify_stuck.py`) after fixing two structural
-deadlocks: a 0.7 frontier draw share that decayed adjacent skills via gradient
-interference, and a consolidation governor calibrated for an easier tier mix.
-All five trunk chains now rehearse the c446 complex and drill c433 (h174).
-Still 0 honest bottom-up clears with live barrels — the walk-back has ~35
-cells to descend.
+did), and the policy is walking the start point backward down 12 verified
+winner routes. The c446 and c433 chokes both fell to surgical rung
+densification (`densify_stuck.py`) after fixing two structural deadlocks
+(frontier draw share, governor calibration). The agent now sees barrel TYPE
+(wild/blue flags from RAM) in a 74-feature obs, and internal difficulty
+(0x6380) is logged per episode — curriculum states inherit difficulty 3, the
+worst wild-barrel regime. Heads are relearning since the obs change. Target,
+set by our resident world-class player: ≥90% barrel-board clears, then the
+same pipeline board-by-board toward the kill screen (screen 117). Still 0
+honest bottom-up clears — the walk-back descends while the floor waits for it.

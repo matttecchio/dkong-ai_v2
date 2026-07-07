@@ -3,12 +3,16 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-06, **Run 27u active** — the c446 choke cracked on all
-five trunk chains (surgical rungs via new `densify_stuck.py`, §11b); frontier
-draw share reverted 0.7→0.5 (it was decaying adjacent tiers 43%→5%);
-consolidation governor recalibrated 0.60/0.68→0.40/0.48 (pooled equilibrium
-moves with tower difficulty); dead run-1 chains replaced from a fresh
-verified phase-1 archive (`backward_dense4`).
+Last updated: 2026-07-08, **Run 27z active** — obs now 74 features (barrel
+crazy/blue TYPE FLAGS from RAM +1/+2), internal DIFFICULTY (0x6380) tracked
+per episode (curriculum states inherit difficulty 3 = the worst wild-barrel
+regime, per our world-class-player user), floor reward tweaks live (corner
+notch closed, x=99 stub tax), c433 choke rung-densified (`backward_dense5`).
+Heads are FRESH since the obs change (27w) — relearning in progress; the 27y
+lr+floor-share bundle FAILED and was reverted (one dial at a time!).
+TARGETS (user, world-class DK player): ≥90% barrel-board clears, eventually
+kill screen (L22/screen 117); post-L4 barrels+springs ≈ 100%, pies/rivets
+tolerate genuine no-win scenarios.
 
 ---
 
@@ -18,14 +22,15 @@ verified phase-1 archive (`backward_dense4`).
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
 - **Run 27 series = Go-Explore phase 2** (backward walk-back over 12 winner
-  chains, §11b). **Run 27u active** (TB `RecurrentPPO_33`): frontier-gated
-  per-chain walk-back on `artifacts/backward_dense4` (4 fresh run-3 chains in
-  slots 0-3 + the live a1 chains at levels [2,11,15,16,9,6,1,2]), 0.5
-  frontier draw share, consolidation governor at 0.40/0.48, walk-back levels
-  persist across restarts (`<backward-dir>/levels.json`). Chains 5-9 have all
-  gated through the long-stuck c446/c446_d4 complex and converged at c433
-  (h174) — the current hard cell; `densify_stuck.py` is the proven lever if
-  it stays flat.
+  chains, §11b). **Run 27z active** (TB `RecurrentPPO_38`): frontier-gated
+  per-chain walk-back on `artifacts/backward_dense5` (dense4 + rungs around
+  the c433 choke), levels [2,5,5,1,2,12,16,16,9,10,1,2], 0.5 frontier draw
+  share, governor 0.40/0.48, lr 5e-5, p_curric 0.8, levels persist in
+  `<backward-dir>/levels.json`. Chains 5-9 are through the c446 complex;
+  c433 rungs gated on chains 5/6 pre-obs-change. Heads relearning since the
+  74-feature obs change — rehearsal cycling toward 0.48, floor policy in a
+  known reward-topology "poverty trap" until the walk-back reaches floor
+  cells (do NOT bump floor draw share — 27y proved it erodes the tower).
 - **2026-07-05, the x=99 glitch (§12)**: policy AND go-explore winners climbed
   a broken ladder stub with frame-perfect inputs (user spotted it on film;
   census: 20/20 bottom episodes). Guard now ends off-ladder climbing as a
@@ -480,14 +485,42 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
 - **27t**: governor recalibrated 0.40/0.48 (thresholds must track the
   tower's difficulty mix). 9 more advances, zero freezes: all five trunk
   chains cleared c446 AND c446_d4, converging at c433 (h174).
-- **27u ACTIVE (dense4)**: run-1 (a0) chains 0-3 were a write-off —
+- **27u (dense4)**: run-1 (a0) chains 0-3 were a write-off —
   un-densifiable (their archive predates a bridge change; byte-replay
   desyncs) and mislabeled (a0_c469.sta actually loads at h161/x203, not its
   recorded h176 — snapshots can catch Mario below the reach-height). A fresh
   90-min phase-1 run (`artifacts/go_explore_run3`, `--validate` PASSED first,
   4 workers alongside training, 166 winners) replaced them: 4 verified
   chains at level 0, live a1 levels carried over via `levels.json` remap.
-  Level-0 frontier cleared at gate rate immediately.
+  Level-0 frontier cleared at gate rate immediately; 10 advances first hour.
+  Then chains 4-8 walled at c433 (h174) ~11h.
+- **27v (dense5)**: `densify_stuck` rungs at the c433 choke (c446_d1-3 on the
+  chains 4-9 legs, c445_d1-3 for 10/11; level-remap rule: chains whose
+  frontier sits BELOW an insertion need +m on their saved level). Chains 5/6
+  gated their rungs within hours.
+- **27w**: obs 62→74 — barrel TYPE flags (crazy/wild +0x01, blue +0x02) per
+  slot; WATCH 47→59; bundled floor tweaks: CORNER_X_RIGHT 160→156 (closed a
+  5px no-penalty harbor beside the x=143 ladder), x=99 stub tax 0.08/step,
+  novelty bonus excluded in the stub zone (film review had shown ritual stub
+  climbs — 8.4%% of bottom-ups ended via the glitch guard — and corner
+  camping). CNN transferred (11 layers); RAM MLP/LSTM/heads FRESH.
+- **27x**: internal difficulty (0x6380, 1-5) tracked-only: WATCH 59→60,
+  difficulty_start/difficulty_end in episode CSVs, NOT in obs. VERIFIED:
+  bottom start = 1, curriculum states = 3 (wild-barrel regime lore from the
+  user: 3-4 = worst/most erratic wilds, 5 = predictable + static neutral-jump
+  counter → the curriculum drills the WORST regime; re-snapshot LATER in game
+  time is the lever if a cell's hardness proves difficulty-driven).
+  Relearn was slow (clip 0.03-0.08 at lr 5e-5 = timid for fresh heads).
+- **27y — FAILED EXPERIMENT (reverted, keep the lesson)**: lr→1e-4 +
+  p_curric→0.6 bundled; rehearsal ERODED 0.41→0.35 in 2h, floor unmoved
+  (the floor "poverty trap" is reward topology, not gradient volume: fresh
+  heads near spawn face penalties in most directions and the only paid
+  behavior — x=143 ladder ascent — lies beyond an unrewarded traffic
+  crossing). Floor-death gradient at 40%% share interferes with tier skills
+  (the 0.7-frontier-share disease, from below). ONE DIAL AT A TIME.
+- **27z ACTIVE**: reverted to lr 5e-5 / p_curric 0.8; slow-positive crawl
+  resumed. Floor stays dumb until the walk-back reaches floor cells — by
+  design.
 
 ---
 
@@ -734,35 +767,56 @@ No equivalent `lad143` for the first ladder (x=143). Adding it would give an exp
 
 ## 14. Recommended next steps (for Fable / new session)
 
-Phase 2 (backward walk-back) is run 27u, active. In priority order:
+Phase 2 (backward walk-back) is run 27z, active. In priority order:
 
-1. **c433 (h174), shared frontier of chains 5-9** — the current hard cell
-   (frontier window ~0.005 pre-restart). If flat for a few hours:
-   `python -m dkong_ai.densify_stuck --src artifacts/backward_dense4
-   --out artifacts/backward_dense5 --archive artifacts/go_explore_run3
-   --archive artifacts/go_explore --stuck a1_c433.sta` (its legs are a1 =
-   replay-verified mintable; rungs land at j=1-3 of the c446/c445 legs).
-   That exact play cracked c446 in 35 minutes after 2 days stuck.
-2. **Watch the new chains 0-3 ladder up** — they validate the dense4 swap.
-   Fresh easy tiers should also lift pooled rehearsal away from the 0.40
-   governor trigger. If the governor STILL freezes on composition, stop
-   chasing thresholds: normalize rehearsal per-tier (mean of per-tier rates,
-   not pooled draws) in `BackwardCallback`.
-3. **Chains 10/11 parked at c445_d23** — small pool; densify more of the
-   c433→c445 leg if they're still flat once c433 cracks.
-4. **Watch `climb/glitch_kill_rate`** — should decay toward 0 as the policy
-   unlearns the x=99 beeline (started ~0.05).
-5. **Restart hygiene**: SIGTERM, loop-wait until the trainer AND all MAMEs
-   are dead (a 25s sleep once overlapped two trainers on shared bridges —
-   §16); the port guard now refuses such starts. Levels resume from
-   `levels.json`; delete it to reset the walk-back. When REPLACING chains,
-   rewrite `levels.json` to match slot-for-slot (count mismatch silently
-   resets ALL levels to 0).
-6. **a0-class archives**: before ever minting rungs from an archive, replay
+1. **Let the relearn finish** (heads fresh since the 27w obs change):
+   rehearsal cycling toward 0.48, then advances resume. Do NOT bump lr or
+   floor share to hurry it — 27y proved both dials erode the tower when the
+   heads are fresh. ONE DIAL AT A TIME, and judge by outcomes (rehearsal /
+   per-cell CSV rates), not proxies (clip/KL stayed "acceptable" through the
+   27y erosion).
+2. **Walk-back to the floor is the plan of record**: the floor policy sits
+   in a reward-topology poverty trap (bottom-ups ~h3-5) and is EXPECTED to
+   stay there until chains descend to floor cells and clear-value propagates
+   down. Judge floor progress by chain levels, not height_mean_bottomup.
+3. **difficulty_start correlation** (per-cell clear rate vs inherited
+   difficulty, columns in logs/episodes CSVs): if a stuck cell is
+   difficulty-3-driven (worst wild regime), re-snapshot it LATER in game
+   time (difficulty 5 wilds are predictable and counterable — user lore),
+   via a longer byte-prefix replay in `densify_stuck`-style tooling.
+4. **THE NEXT-OBS-CHANGE BUNDLE** (do together, once, at the transition to
+   the "master toward 90%" phase after first honest clears): (a) difficulty/5
+   into the RAM obs (regime-conditional play is required for the 90% target);
+   (b) capacity bump LSTM 256→512 + RAM MLP 64→128 (interference reduction —
+   the recurring tier-decay disease is small-net weight sharing); (c) any
+   validated floor-reward surgery. Expect ~10-30%% fps cost and a fresh-heads
+   relearn — plan it, don't stumble into it.
+5. **Chains 10/11** — if still parked once relearn completes, their c445
+   rungs (d1-3, d5, d23) are already in dense5; probe before adding more.
+6. **Restart hygiene**: capture the trainer PID as a NUMBER first
+   (`pgrep -a -f dkong_ai.train | grep -v "bash -c"`), `kill -TERM <pid>`,
+   wait on `kill -0`, verify `pgrep -c -x mame` hits 0 before relaunching —
+   pgrep/pkill patterns match your own shell's command line (bit us TWICE:
+   a stuck wait-gate and a surviving trainer → two trainers writing the same
+   checkpoint/levels paths for 4 minutes). Levels resume from `levels.json`;
+   delete it to reset the walk-back. When REPLACING chains, rewrite
+   `levels.json` slot-for-slot (count mismatch silently resets ALL levels).
+   When INSERTING cells, chains whose frontier is BELOW the insertion point
+   need their saved level bumped by the insert count.
+7. **a0-class archives**: before ever minting rungs from an archive, replay
    one known leg and compare landing height (`densify_stuck` does this
    per-leg and skips desynced legs). Snapshot heights in manifests can be
    ~15px below the recorded reach-height (save lands a few frames later —
    Mario may be falling); trust the loaded state, not the label.
+
+**Targets (from the user — a world-class DK player; treat their DK claims as
+ground truth):** ≥90%% barrel-board completion is the bar ("solved" ≠ 50%%);
+endgame = kill screen (L22 board 1; screen 117 last completable). Reliability
+budget: post-L4 barrel + springboard boards ≈ 100%% (difficulty-5 regimes are
+deterministic); pie/rivet boards have genuine no-win scenarios — never gate
+or grind toward 100%% there. Note: the L1 barrel board we train (difficulty
+1→3, random wilds) may cap BELOW post-L4 barrel boards. Future infra for the
+kill-screen goal: multi-board episodes (env currently terminates on clear).
 
 ## 15. Why the wall persisted (history) + LSTM rationale
 
