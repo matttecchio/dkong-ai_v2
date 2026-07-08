@@ -6,7 +6,8 @@ are hard to react to; explicit relative positions from RAM are not.
 
 Architecture:
   - NatureCNN(n_stack×2, 84, 84) → 256-dim image features  (spatial/structural)
-  - Linear(62→64→64)             →  64-dim RAM features    (barrel/fireball/hammer)
+  - Linear(74→64→64)             →  64-dim RAM features    (barrel/fireball/hammer
+                                     positions/velocities + crazy/blue type flags)
   - Concat(256+64=320)           → PPO/RecurrentPPO policy/value heads
 
 DkFrameStackWrapper stacks the 'image' channel n times (matching SB3's

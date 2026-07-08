@@ -143,8 +143,9 @@ class DonkeyKongEnv(gym.Env):
         self._ladder_map = self._build_ladder_map()  # static; barrel board never changes
 
         # Dict obs: "image" = 84×84×2 (pixels + threat/ladder/fall-zone map, stacked ×n
-        # by DkFrameStackWrapper); "ram" = 62 normalised RAM features giving
-        # explicit barrel/fireball/hammer positions, velocities, and edge proximity.
+        # by DkFrameStackWrapper); "ram" = 74 normalised RAM features giving
+        # explicit barrel/fireball/hammer positions, velocities, edge proximity,
+        # and barrel type flags (crazy/wild, blue).
         self.observation_space = spaces.Dict({
             "image": spaces.Box(0, 255, (84, 84, 2), dtype=np.uint8),
             "ram":   spaces.Box(-1.0, 1.0, (self.RAM_FEATURE_DIM,), dtype=np.float32),
@@ -383,9 +384,10 @@ class DonkeyKongEnv(gym.Env):
                         m[row, col] = 128
         return m[..., None]  # (84, 84, 1)
 
-    # RAM feature layout (62 values, all in [-1, 1]):
+    # RAM feature layout (74 values, all in [-1, 1]):
     #   [mario_x/255, mario_y/240]                                              —  2
-    #   [Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active] × 6        — 42
+    #   [Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active,
+    #    crazy, blue]                            × 6 barrels                   — 54
     #   [Δx/128, Δy/120, active]                × 5 fireballs                  — 15
     #   [Δx/128, Δy/120, has_hammer]            × 1 hammer pickup              —  3
     # vx/vy: per-step velocity (frameskip=4). Horiz max ~2px/frame → norm by 8;
@@ -1145,6 +1147,10 @@ class DonkeyKongEnv(gym.Env):
                 "start_screen": self._start_screen,
                 "end_screen": state["screen_id"],
                 "bw_pos": self._bw_start[1] if self._bw_start else -1,
+                # Chain id alongside pos: (bw_pos, start_y) audits get
+                # contaminated by cross-chain position collisions + height
+                # label lag — this column makes per-cell attribution exact.
+                "bw_chain": self._bw_start[0] if self._bw_start else -1,
                 "glitch_kill": int(self._glitch_kill),
                 # Internal difficulty (1-5, tracked-only): curriculum states
                 # inherit game time from their phase-1 trajectories, so deep

@@ -90,17 +90,23 @@ def main():
     minted: dict[tuple, dict | None] = {}   # (ai, leg_idx, j) -> cell | None
 
     def mint_leg(ai: int, leg_idx: int, a_path: str, j_lo: int, j_hi: int,
-                 check_j: int | None, check_h: int):
+                 check_j: int | None, check_sta: str):
         """Mint rungs j in [j_lo, j_hi) along leg -> leg_idx, replayed from
-        a_path. check_j/check_h: frame-exactness probe (replay to a known
-        point and compare heights) run once per leg before minting."""
+        a_path. Frame-exactness probe: replay to the successor's known point
+        and compare against the successor state's ACTUAL loaded height —
+        manifest height labels can lag the snapshot by 5-15px (a0 gotcha),
+        so the .sta itself is the only trustworthy anchor."""
         rec = archives[ai].by_idx[leg_idx]
         byts = rec["bytes"]
         st = replay(env, a_path, byts,
                     check_j if check_j is not None else len(byts) - 1)
-        if abs(_height(st) - check_h) > 2:
+        replay_h = _height(st)
+        st_true, _ = env.load_state_file(os.path.join(args.out, check_sta))
+        true_h = _height(st_true)
+        if abs(replay_h - true_h) > 2:
             print(f"[densify] LEG DESYNC a{ai} c{leg_idx}: replay lands "
-                  f"h{_height(st)} expected h{check_h} — leg skipped")
+                  f"h{replay_h}, successor {check_sta} loads h{true_h} "
+                  f"— leg skipped")
             return
         js = list(range(j_lo, j_hi))
         step = max(1, len(js) // MAX_RUNGS_PER_LEG)
@@ -132,26 +138,27 @@ def main():
             s_ai, s_idx, s_j = parse_name(cells[i + 1]["sta"])
             if s_ai != x_ai:
                 continue
-            if x_j is None and s_idx != x_idx:
-                # Stuck cell is a leg END; successor sits on the NEXT leg
-                # (original or its _dJ rung). Rungs: j in [1, J or leg end).
+            if s_idx != x_idx:
+                # Successor sits on a DIFFERENT leg (stuck cell is a leg end
+                # or a rung before a pruned adjacency). Rungs go on the
+                # successor's leg: j in [1, J or leg end).
                 # With --prune-descents exports the manifest-adjacent cell is
                 # not always the archive parent — replay the successor's
                 # bytes from its TRUE parent (whose .sta lives in the
                 # archive), or they land somewhere else entirely.
                 rec = archives[s_ai].by_idx[s_idx]
                 a_path = (os.path.join(args.out, c["sta"])
-                          if rec["parent"] == x_idx
+                          if rec["parent"] == x_idx and x_j is None
                           else archives[s_ai].sta_path(rec["parent"]))
                 j_hi = s_j if s_j is not None else len(rec["bytes"]) - 1
                 mint_leg(s_ai, s_idx, a_path, 1, j_hi,
-                         s_j, cells[i + 1]["height"])
-            elif x_j is not None and s_idx == x_idx and s_j is None:
-                # Stuck cell is a mid-leg rung _dJ; successor is the leg end.
+                         s_j, cells[i + 1]["sta"])
+            elif x_j is not None:
+                # Same leg: stuck rung _dJ → later rung _dJ2 or the leg end.
                 rec = archives[x_ai].by_idx[x_idx]
+                j_hi = s_j if s_j is not None else len(rec["bytes"]) - 1
                 mint_leg(x_ai, x_idx, archives[x_ai].sta_path(rec["parent"]),
-                         x_j + 1, len(rec["bytes"]) - 1, None,
-                         cells[i + 1]["height"])
+                         x_j + 1, j_hi, s_j, cells[i + 1]["sta"])
 
     # Doom screen: drop rungs where a do-little Mario nearly always dies at
     # once — those add gate noise no policy can learn through. Threshold is
