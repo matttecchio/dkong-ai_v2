@@ -173,15 +173,17 @@ MAME with the cheatfind plugin for RAM work).
 
 **Full project state, run history, models, and next steps: [`HANDOFF.md`](HANDOFF.md).**
 
-In short (run 27z active, Go-Explore phase 2): phase-1 random exploration with
-state banking cleared the board in minutes (what 26 PPO runs / 250M+ steps never
-did), and the policy is walking the start point backward down 12 verified
-winner routes. The c446 and c433 chokes both fell to surgical rung
-densification (`densify_stuck.py`) after fixing two structural deadlocks
-(frontier draw share, governor calibration). The agent now sees barrel TYPE
-(wild/blue flags from RAM) in a 74-feature obs, and internal difficulty
-(0x6380) is logged per episode — curriculum states inherit difficulty 3, the
-worst wild-barrel regime. Heads are relearning since the obs change. Target,
-set by our resident world-class player: ≥90% barrel-board clears, then the
-same pipeline board-by-board toward the kill screen (screen 117). Still 0
-honest bottom-up clears — the walk-back descends while the floor waits for it.
+In short (run 27ad active, Go-Explore phase 2): phase-1 random exploration
+with state banking cleared the board in minutes (what 26 PPO runs / 250M+
+steps never did), and the policy is walking the start point backward down 12
+routes: six explorer chains hardened by surgical rung densification
+(`densify_stuck.py`, 3-for-3 on stuck chokes) and five slots carrying a
+70-cell world-class route mined from a top player's .inp (a full run to 21-6
+— also our future source of genuine difficulty-5 states, which L1 boards
+physically cannot produce). The agent sees barrel type (wild/blue) in a
+74-feature obs; internal difficulty is logged per episode. Hard-won rule of
+the week: walk-back levels encode the policy's skill — reset them after any
+fresh-heads change, or the curriculum becomes impossible. Target, set by our
+resident world-class player: ≥90% barrel-board clears, then board-by-board
+toward the kill screen (screen 117). Still 0 honest bottom-up clears — the
+walk-back descends while the floor waits for it.
