@@ -423,15 +423,19 @@ def main():
         )
         if args.transfer_features_from:
             # Copy features_extractor weights (CNN + RAM MLP) from any saved
-            # model into the fresh model. Everything else (LSTM, heads) stays
-            # randomly initialised. Works across PPO→RecurrentPPO changes and
-            # from RecurrentPPO→RecurrentPPO (tries RecurrentPPO first).
+            # model into the fresh model, shape-matched layer by layer.
+            # Everything else (LSTM, heads) stays randomly initialised.
             print(f"transferring features_extractor weights from {args.transfer_features_from}")
-            try:
-                src = AlgoClass.load(args.transfer_features_from, device="cuda")
-            except Exception:
-                src = PPO.load(args.transfer_features_from, device="cuda")
-            src_sd = src.policy.state_dict()
+            # Read the checkpoint's raw state dict WITHOUT constructing the
+            # source model: AlgoClass.load() rebuilds the policy from the
+            # CURRENT DkFeaturesExtractor/constants, so after any capacity
+            # change the old weights no longer fit their own skeleton and
+            # load() raises (hit at run 28: RAM_HIDDEN 64->128 made
+            # run27_last unloadable). The zip's params need no skeleton.
+            from stable_baselines3.common.save_util import load_from_zip_file
+            _, _params, _ = load_from_zip_file(
+                args.transfer_features_from, device="cuda")
+            src_sd = _params["policy"]
             tgt_sd = model.policy.state_dict()
             transferred = {k: v for k, v in src_sd.items()
                            if k.startswith("features_extractor.")

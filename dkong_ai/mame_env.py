@@ -385,7 +385,11 @@ class DonkeyKongEnv(gym.Env):
     # edge_dist: normalised [0,1] distance to the girder edge the barrel is heading
     # toward (0 = at edge / about to fall, 1 = far away). Paired with the fall-zone
     # image overlay so the agent can anticipate barrels appearing from above.
-    RAM_FEATURE_DIM = 74   # 2 mario + 6 barrels x 9 + 5 fireballs x 3 + 3 hammer
+    RAM_FEATURE_DIM = 75   # 2 mario + 6 barrels x 9 + 5 fireballs x 3 + 3 hammer
+                           # + 1 difficulty (regime-conditional play: wild-barrel
+                           # behaviour differs sharply by 0x6380 regime, and the
+                           # diff-5 counter-move is unlearnable without knowing
+                           # the regime — user lore, see memory/gameplay tips)
     LAD53_X = 53    # x of the critical left ladder (2nd→3rd girder)
 
     # Girder edge lookup: (barrel_y_lo, barrel_y_hi, x_left, x_right, landing_y).
@@ -454,6 +458,7 @@ class DonkeyKongEnv(gym.Env):
         else:
             dx = dy = 0.0
         feats.extend([dx, dy, float(bool(has_h))])
+        feats.append(state.get("difficulty", 1) / 5.0)
         return np.array(feats, dtype=np.float32)
 
     # ---- reward shaping helpers -----------------------------------------
@@ -968,6 +973,8 @@ class DonkeyKongEnv(gym.Env):
             shutil.copyfile(self._bottom_sta_path(), self._slot_sta_path())
         return state, pix
 
+    BW_REHEARSAL_CAP = 8   # rehearse only the K cells above the frontier
+
     def _load_backward_start(self):
         """Start from a random winner-chain cell within the walk-back window
         [n-1-_bw_level, n-1]. Returns (state, pix), or (None, None) if the
@@ -996,7 +1003,16 @@ class DonkeyKongEnv(gym.Env):
         if self.np_random.random() < 0.5:
             pos = lo
         else:
-            pos = int(self.np_random.integers(lo, n))
+            # Rehearsal capped to the K cells just above the frontier
+            # (2026-07-10, run 28): uniform-over-all-passed spreads the
+            # maintenance budget over the whole tower, so per-cell volume
+            # ~50%/level -> starvation at deep levels — measured as the
+            # "hollow tower" (tiers gated at 0.31 decayed to 0-13% with
+            # ~20 draws/h each). Recently-passed cells are the fragile
+            # ones; the old deep cells are the near-top band, which every
+            # chain's window overlaps anyway.
+            hi = min(lo + self.BW_REHEARSAL_CAP, n - 1)
+            pos = int(self.np_random.integers(lo, hi + 1))
         self.load_state_file(chain[pos]["sta"])
         ok, state, pix = self._is_responsive()
         if not ok:
@@ -1080,6 +1096,7 @@ class DonkeyKongEnv(gym.Env):
         self._episode_steps = 0              # for height-timeout termination
         self._glitch_streak = 0              # consecutive off-ladder climb steps
         self._glitch_kill = False            # episode ended by the glitch guard
+        self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -1167,6 +1184,20 @@ class DonkeyKongEnv(gym.Env):
         except (ConnectionError, OSError):   # MAME died -> relaunch fresh
             state, pix = self._recover()
         self._begin_episode(state)
+        # LSTM spawn burn-in: a state-load drops the policy mid-traffic with a
+        # zeroed LSTM — it must act before it has read any barrel velocities.
+        # Establishment-wall signature across runs 27*: spawn, dodge-in-place
+        # ~9s, die with zero height gain. For the first BURN_IN steps the env
+        # executes NOOP regardless of the chosen action, so the LSTM fills
+        # with real observations before decisions count. ONLY below the
+        # mastered band: top-girder cells (h>=172) sit in the barrel-spawn
+        # lane where standing still kills (see the reset-jitter comment
+        # above), and they clear 90-100% without help. Trade-off: the ~8
+        # burn-in transitions store the CHOSEN action but executed NOOP —
+        # slight off-policy mislabeling, accepted at ~2% of episode steps.
+        if (self._start_type == "curriculum"
+                and state["mario_y"] > self.BASE_Y - 172):
+            self._burnin_left = self.BURN_IN_STEPS
         return self._preprocess(pix, state), self._info(state)
 
     BASE_Y = 240   # Mario's start-row y; height climbed = BASE_Y - min_y reached
@@ -1196,7 +1227,12 @@ class DonkeyKongEnv(gym.Env):
                 "difficulty_start": self._difficulty_start,
                 "difficulty_end": state.get("difficulty", 0)}
 
+    BURN_IN_STEPS = 8   # ~0.53s at frameskip 4; long enough to read velocities
+
     def step(self, action: int):
+        if self._burnin_left > 0:            # LSTM spawn burn-in (see reset)
+            self._burnin_left -= 1
+            action = 0                       # ACTIONS[0] = noop
         try:
             self._sock.sendall(bytes([ACTIONS[int(action)]]))
             ram, pix = self._read_obs()

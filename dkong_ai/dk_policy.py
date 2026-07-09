@@ -6,9 +6,15 @@ are hard to react to; explicit relative positions from RAM are not.
 
 Architecture:
   - NatureCNN(n_stack×2, 84, 84) → 256-dim image features  (spatial/structural)
-  - Linear(74→64→64)             →  64-dim RAM features    (barrel/fireball/hammer
-                                     positions/velocities + crazy/blue type flags)
-  - Concat(256+64=320)           → PPO/RecurrentPPO policy/value heads
+  - Linear(75→128→128)           → 128-dim RAM features    (barrel/fireball/hammer
+                                     positions/velocities + crazy/blue type flags
+                                     + difficulty regime)
+  - Concat(256+128=384)          → PPO/RecurrentPPO policy/value heads
+
+RAM_HIDDEN 64→128 (2026-07-10, run 28): interference reduction. Small shared
+nets are why passed curriculum tiers eroded 43→5% while training drilled
+adjacent cells — the run-27 walk-back stalled on a hollow tower, not a hard
+frontier. Paired with LSTM 256→512 (--lstm-hidden).
 
 DkFrameStackWrapper stacks the 'image' channel n times (matching SB3's
 VecFrameStack behaviour) while passing the 'ram' vector from the latest frame
@@ -25,7 +31,7 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, NatureC
 from stable_baselines3.common.vec_env import VecEnvWrapper
 
 CNN_OUT    = 256
-RAM_HIDDEN =  64
+RAM_HIDDEN = 128
 
 
 class DkFeaturesExtractor(BaseFeaturesExtractor):
