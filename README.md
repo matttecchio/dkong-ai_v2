@@ -173,17 +173,18 @@ MAME with the cheatfind plugin for RAM work).
 
 **Full project state, run history, models, and next steps: [`HANDOFF.md`](HANDOFF.md).**
 
-In short (run 27ad active, Go-Explore phase 2): phase-1 random exploration
+In short (run 27aj active, Go-Explore phase 2): phase-1 random exploration
 with state banking cleared the board in minutes (what 26 PPO runs / 250M+
 steps never did), and the policy is walking the start point backward down 12
-routes: six explorer chains hardened by surgical rung densification
-(`densify_stuck.py`, 3-for-3 on stuck chokes) and five slots carrying a
-70-cell world-class route mined from a top player's .inp (a full run to 21-6
-— also our future source of genuine difficulty-5 states, which L1 boards
-physically cannot produce). The agent sees barrel type (wild/blue) in a
-74-feature obs; internal difficulty is logged per episode. Hard-won rule of
-the week: walk-back levels encode the policy's skill — reset them after any
-fresh-heads change, or the curriculum becomes impossible. Target, set by our
-resident world-class player: ≥90% barrel-board clears, then board-by-board
-toward the kill screen (screen 117). Still 0 honest bottom-up clears — the
-walk-back descends while the floor waits for it.
+routes — six explorer chains and five slots carrying a world-class route
+mined from a top player's .inp (a full run to 21-6). The project's sharpest
+tool is now the video-to-expert loop: film the policy failing from a stuck
+state, let our world-class player watch three minutes, ship the fix within
+the hour. It has found what no metric could: the 000-bonus-timer wall inside
+pro-mined states (point-max play leaves late-route states seconds of clock),
+and a trio of behavioral bugs — untaxed mid-board broken-stub climbing, pacing
+against the top-rung invisible barrier (measured: hard stop at x=107), and
+dismounting the final ladder. Honest floor (clean bottom-up mean) has passed
+its all-time baseline at 39+. Target: ≥90% barrel-board clears, then
+board-by-board toward the kill screen (screen 117). Still 0 honest bottom-up
+clears — but the walls between here and the first one now have names.

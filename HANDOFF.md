@@ -3,15 +3,17 @@
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
-Last updated: 2026-07-08 night, **Run 27ad active** — the relearn saga is
-OVER (root cause: fresh heads inherited the mature policy's walk-back levels
-= impossible curriculum; LEVEL RESET → 42 advances in an hour, record
-rehearsal 0.828). Curriculum is `backward_dense7`: six healthy explorer
-chains on halved-gap rungs + five slots carrying a 70-cell WORLD-CLASS route
-chain mined from `demos/dkong.inp` (which turns out to be a top player's run
-to 21-6 — the entire future roadmap's curriculum in one file). Difficulty-5
-re-snapshotting is DEAD on L1 (bonus timer kills at diff 4 — probed); the
-WC .inp's L5+ boards are the difficulty-5 source when needed.
+Last updated: 2026-07-09 night, **Run 27aj active** — the video-to-expert
+loop is now the project's sharpest tool: film the policy failing → the user
+(world-class player) diagnoses in one viewing → fix ships within the hour.
+Round 1 found the 000-BONUS-TIMER wall (pro point-max play leaves late-route
+states with seconds of clock; nine time-starved WC cells pruned, §11b).
+Round 2 found three behavioral bugs at the mid-board wall: untaxed mid-board
+stub ritual-climbing, pacing at the top-rung INVISIBLE BARRIER (measured:
+hard stop at x=107), and dismounting the final ladder — all three fixed in
+27aj (generalized stub tax, top dead-end tax, final-ladder commitment).
+Honest floor (CLEAN bottom-up mean, excluding self-punishing glitch-guard
+deaths) is at 39+, past the old all-time baseline. Still 0 honest clears.
 TARGETS (user, world-class DK player): ≥90% barrel-board clears, eventually
 kill screen (L22/screen 117); post-L4 barrels+springs ≈ 100%, pies/rivets
 tolerate genuine no-win scenarios.
@@ -546,7 +548,7 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   (0xF8 + NOOP) does tick 0x6380 (3→4 in ~18s) but the bonus timer kills at
   ~29s from deep cells, still at difficulty 4 (still-hard wilds). Usable
   difficulty 5 does not exist on L1 boards; trivial on L5+ (starts at 5).
-- **27ad ACTIVE (dense7)**: `demos/dkong.inp` revealed to be a world-class
+- **27ad (dense7)**: `demos/dkong.inp` revealed to be a world-class
   run to 21-6. `scripts/wc_mine.lua` replayed its L1 barrel board, banking
   a state every 45 frames → 162 mined, curated to 70 (running-max descent
   prune — pros milk points, so the raw line wanders; responsiveness + doom
@@ -554,6 +556,37 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   (h4→h177, difficulty 1-4 — pro pacing burns the L1 timer, per the user).
   The same .inp holds L5+ barrel boards at genuine difficulty 5, springs,
   pies, rivets — future curriculum source for the whole roadmap.
+- **27ae (dense8) — THE 000-TIMER DISCOVERY**: the WC slots' shared frontier
+  wc_151 sat at 0.01%% over 14.6k draws (25%% of all curriculum wasted). A
+  35s video of the segment (`wc_right_pocket.mp4`) + the user's one viewing
+  solved it: the pro's right-corner point-run ends at BONUS 000 — a grace
+  window of a few seconds where death lands only while STANDING. Cold starts
+  there are speedruns against an expired clock, not skill drills. The whole
+  late-route band wc_132..wc_151 carries 0.6-15s of timer (frame proxy:
+  000 ≈ frame 7900) — physically unclearable.
+- **27af-27ah (dense9-11)**: pruned the time-starved band; probed the
+  boundary: 16s (wc_130) 0/4105, 20s (wc_125) 0/3312 → jumped with margin to
+  wc_115 (27.6s). Death-time distribution EXONERATED the timer there
+  (failures die at 0-13s, only 7/3043 reach the timer window) → at h131 the
+  enemy is mid-board barrel traffic. Timer-viability boundary is
+  POLICY-SPEED-DEPENDENT — trimmed cells re-splice when the policy speeds
+  up. Also: judge the floor by CLEAN bottom-up mean (glitch-guard deaths cap
+  at h11 and DRAG the pooled mean down; guard is working, ~25%% attempt rate
+  is self-punishing noise). Clean floor crossed 39 (old all-time base: 38).
+- **27aj ACTIVE — film-review round 2 fixes**: filmed 16 policy attempts
+  from the stuck cells (aviwrite + eval-style venv + `load_state_file`
+  between episodes → `stuck_midboard_attempts.mp4`). User diagnosed three
+  behavioral bugs in one viewing: (1) ritual-climbing UNTAXED mid-board
+  broken stubs (the floor-stub disease, one flight up) → stub tax
+  generalized to all 7 BROKEN_STUBS (now a class constant shared by threat
+  map + reward); (2) pacing against the top-rung INVISIBLE BARRIER toward
+  Kong (measured empirically: hard stop at x=107) → top dead-end tax
+  0.08/step at mario_y≤80 & x<133 (5th girder y≥85 stays untaxed);
+  (3) mounting the final ladder then dismounting → UPPER_CLIMB_BONUS
+  0.30→0.50, IDLE 0.05→0.15, H_HI 192→200 (cover the clear trigger).
+  ep_rew not comparable across the change. ALSO: deploy-race lesson — never
+  run two kill+launch chains concurrently (two trainers, PIDs 3 apart, 32
+  MAMEs; identify duplicates via /proc/PID/fd/1 → log path).
 
 ---
 
@@ -802,33 +835,39 @@ No equivalent `lad143` for the first ladder (x=143). Adding it would give an exp
 
 Phase 2 (backward walk-back) is run 27ad, active. In priority order:
 
-1. **Let the machinery run.** All twelve chains now have viable content
-   (six healthy explorer chains on halved-gap rungs + five WC-route slots).
-   ONE DIAL AT A TIME, judge by outcomes (per-cell CSV rates via the new
-   `bw_chain` column), not proxies — 27y/27aa both failed on proxy-led
-   reasoning. Rungs via `densify_stuck` remain the proven unstick lever
-   (3-for-3: c446, c433, the shelf).
-2. **Walk-back to the floor is the plan of record**: the floor policy sits
+1. **FILM IT FIRST.** The single highest-value diagnostic is now proven
+   twice: record the policy failing from the stuck state (aviwrite +
+   eval-style venv + `load_state_file` between episodes) and have the user
+   watch it — one viewing has repeatedly beaten thousands of rollouts of
+   inference (000-timer wall; stub/barrier/final-ladder trio). Before any
+   dial or curriculum surgery on a stuck cell, make the 3-minute film.
+2. **One dial at a time; one deploy chain at a time (foreground).** Judge by
+   outcomes (per-cell CSV rates via `bw_chain`), not proxies — 27y/27aa
+   failed on proxy-led reasoning. Rungs via `densify_stuck` remain the
+   proven unstick lever for explorer cells; finer re-mining for WC cells.
+   Check remaining BONUS TIMER before trusting any pro-play state
+   (frame proxy; doom screens cannot see timer doom).
+3. **Walk-back to the floor is the plan of record**: the floor policy sits
    in a reward-topology poverty trap (bottom-ups ~h5-7, but drifting up for
    the first time ever) and is EXPECTED to lag until chains descend to floor
    cells. Judge floor progress by chain levels, not height_mean_bottomup.
-3. **After any fresh-heads change: RESET LEVELS TO 0** (delete
+4. **After any fresh-heads change: RESET LEVELS TO 0** (delete
    `<backward-dir>/levels.json`). Levels encode the POLICY's skill, not the
    project's progress — 27w-27ab lost ~30 hours to inherited levels.
-4. **THE NEXT-OBS-CHANGE BUNDLE** (do together, once, at the transition to
+5. **THE NEXT-OBS-CHANGE BUNDLE** (do together, once, at the transition to
    the "master toward 90%" phase after first honest clears): (a) difficulty/5
    into the RAM obs (regime-conditional play is required for the 90% target);
    (b) capacity bump LSTM 256→512 + RAM MLP 64→128 (interference reduction —
    the recurring tier-decay disease is small-net weight sharing); (c) any
    validated floor-reward surgery. Expect ~10-30%% fps cost, a fresh-heads
    relearn, and a LEVEL RESET (rule 3) — plan it, don't stumble into it.
-5. **Difficulty-varied curriculum**: the training curriculum is a
+6. **Difficulty-varied curriculum**: the training curriculum is a
    difficulty-3 monoculture (all curric draws inherit diff 3) and L1 cannot
    produce usable difficulty-5 states (bonus timer, probed). When regime
    training matters, mine the WC .inp's L5+ barrel boards
    (`wc_mine.lua`, level gate) — genuine difficulty-5 states from
    world-class play.
-6. **Restart hygiene**: capture the trainer PID as a NUMBER first
+7. **Restart hygiene**: capture the trainer PID as a NUMBER first
    (`pgrep -a -f dkong_ai.train | grep -v "bash -c"`), `kill -TERM <pid>`,
    wait on `kill -0`, verify `pgrep -c -x mame` hits 0 before relaunching —
    pgrep/pkill patterns match your own shell's command line (bit us TWICE:
@@ -838,7 +877,7 @@ Phase 2 (backward walk-back) is run 27ad, active. In priority order:
    `levels.json` slot-for-slot (count mismatch silently resets ALL levels).
    When INSERTING cells, chains whose frontier is BELOW the insertion point
    need their saved level bumped by the insert count.
-7. **a0-class archives**: before ever minting rungs from an archive, replay
+8. **a0-class archives**: before ever minting rungs from an archive, replay
    one known leg and compare landing height (`densify_stuck` does this
    per-leg and skips desynced legs). Snapshot heights in manifests can be
    ~15px below the recorded reach-height (save lands a few frames later —
