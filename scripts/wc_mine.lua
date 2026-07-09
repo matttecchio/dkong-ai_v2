@@ -6,6 +6,11 @@
 -- -state_directory artifacts/states; states land as wc_NNN in .../dkong/.
 local LOG = os.getenv("DK_WC_LOG") or "artifacts/wc_mine.log"
 local SNAP_EVERY = tonumber(os.getenv("DK_WC_EVERY") or "45")
+-- Optional frame window + name prefix: re-mine a specific segment finer
+-- (e.g. rungs between two coarse states) without clobbering wc_NNN names.
+local F_FROM = tonumber(os.getenv("DK_WC_FROM") or "0")
+local F_TO   = tonumber(os.getenv("DK_WC_TO") or "999999999")
+local PREFIX = os.getenv("DK_WC_PREFIX") or "wc"
 local mac = manager.machine
 local f = io.open(LOG, "w")
 local cpu, space = nil, nil
@@ -19,6 +24,8 @@ emu.register_frame_done(function()
     space = cpu.spaces["program"]
   end
   frames = frames + 1
+  if frames < F_FROM then return end
+  if frames > F_TO then done = true; f:write("done: past window\n"); f:flush(); return end
   local screen = space:readv_u8(0x6227)
   local level  = space:readv_u8(0x6229)
   if level > 1 then done = true; f:write("done: left level 1\n"); f:flush(); return end
@@ -31,7 +38,7 @@ emu.register_frame_done(function()
     since = 0
     local x = space:readv_u8(0x6203)
     local d = space:readv_u8(0x6380)
-    local name = string.format("wc_%03d", n)
+    local name = string.format("%s_%03d", PREFIX, n)
     local ok = pcall(function() mac:save(name) end)
     f:write(string.format("%s frame=%d x=%d y=%d h=%d diff=%d ok=%s\n",
             name, frames, x, y, 240 - y, d, tostring(ok)))

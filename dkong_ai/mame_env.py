@@ -352,18 +352,7 @@ class DonkeyKongEnv(gym.Env):
         codes C0-C7 / D0-D7 in contiguous column runs identify each segment."""
         m = np.zeros((84, 84), dtype=np.uint8)
         COMPLETE_LADDERS = DonkeyKongEnv.COMPLETE_LADDERS
-        # Short stubs that hang from a girder but don't connect below.
-        # Barrels can fall through these; Mario cannot climb them.
-        # Positions from tilemap core-code run analysis (col*8 ≈ x, row*8 ≈ y).
-        BROKEN_STUBS = [
-            ( 64, 144, 152),  # 4th→3rd gap at x≈64
-            (104,  56,  72),  # top area stub at x≈104
-            (120, 160, 184),  # 3rd→2nd partial at x≈120
-            (144, 104, 120),  # 5th→4th gap at x≈144
-            (160, 112, 136),  # through 4th girder at x≈160
-            (168, 176, 192),  # 3rd→2nd partial at x≈168
-            (200, 120, 152),  # through 4th girder at x≈200
-        ]
+        BROKEN_STUBS = DonkeyKongEnv.BROKEN_STUBS
         sx, sy = 84.0 / 256.0, 84.0 / 224.0
         for x_g, yt_g, yb_g in COMPLETE_LADDERS:
             x84 = int(round(x_g * sx))
@@ -520,9 +509,23 @@ class DonkeyKongEnv(gym.Env):
     # for the top ladder at x≈147 (5th girder → Pauline). Fills the reward
     # desert above height 144 where only the sparse height milestone fires.
     UPPER_CLIMB_X_LO, UPPER_CLIMB_X_HI = 137, 160   # top ladder ± tolerance
-    UPPER_CLIMB_H_LO, UPPER_CLIMB_H_HI = 138, 192   # 5th girder → Pauline
-    UPPER_CLIMB_BONUS      = 0.30
-    UPPER_LADDER_IDLE_COST = 0.05
+    # H_HI 192→200 (2026-07-09): cover the last rungs to the clear trigger.
+    # BONUS 0.30→0.50, IDLE 0.05→0.15 (user film review: Mario mounts the
+    # final ladder then stops/dismounts — "you're on the final ladder,
+    # climb it until it's over").
+    UPPER_CLIMB_H_LO, UPPER_CLIMB_H_HI = 138, 200   # 5th girder → past Pauline
+    UPPER_CLIMB_BONUS      = 0.50
+    UPPER_LADDER_IDLE_COST = 0.15
+
+    # Top-rung dead-end tax (2026-07-09, user film review): an INVISIBLE
+    # BARRIER stops Mario at x≈107 on the top walkway (measured empirically —
+    # 90 LEFT inputs from x155 pin at x107); Kong is unreachable, and the
+    # stretch left of the final-ladder mount zone is pure pacing waste. The
+    # top walkway sits at mario_y ≤ 80; the 5th girder below starts y ≥ 85,
+    # so the y-gate keeps legitimate mid-traverse untaxed.
+    TOP_DEADEND_X = 133
+    TOP_DEADEND_Y = 80
+    TOP_DEADEND_COST = 0.08
 
     # Dense leftward-progress reward on the 2nd girder: +TRAVERSE_PROGRESS per
     # pixel moved left while in the traverse zone. Provides gradient on EVERY
@@ -567,6 +570,25 @@ class DonkeyKongEnv(gym.Env):
     STUB_X_LO, STUB_X_HI = 92, 106
     STUB_H_LO, STUB_H_HI = 10, 40
     STUB_COST = 0.08
+
+    # Short stubs that hang from a girder but don't connect below.
+    # Barrels can fall through these; Mario cannot climb them.
+    # Positions from tilemap core-code run analysis (col*8 ≈ x, row*8 ≈ y).
+    # Used by the threat map AND by the generalized stub tax (2026-07-09:
+    # film review by the user showed the mid-board walls at h131/h163 were
+    # Mario ritual-climbing untaxed mid-board stubs instead of traversing to
+    # the complete ladder — the floor-stub disease, one flight up).
+    BROKEN_STUBS = (
+        ( 64, 144, 152),  # 4th→3rd gap at x≈64
+        (104,  56,  72),  # top area stub at x≈104
+        (120, 160, 184),  # 3rd→2nd partial at x≈120
+        (144, 104, 120),  # 5th→4th gap at x≈144
+        (160, 112, 136),  # through 4th girder at x≈160
+        (168, 176, 192),  # 3rd→2nd partial at x≈168
+        (200, 120, 152),  # through 4th girder at x≈200
+    )
+    STUB_X_TOL = 7        # |mario_x - stub_x| within which the tax applies
+    STUB_Y_PAD = 6        # stub y-span padding (mount/dismount frames)
 
     # Score-gating zone: block barrel-jump score reward only when camping
     # (height<65, x>115, AND not moving left). Traversing left through the zone
@@ -682,6 +704,21 @@ class DonkeyKongEnv(gym.Env):
                 if (self.STUB_H_LO <= height <= self.STUB_H_HI
                         and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI):
                     r -= self.STUB_COST
+                # Generalized mid-board stub tax: loitering at ANY broken
+                # stub costs the same rent. Small enough that a 1-2s
+                # dodge-mount stays worth it vs a death; large enough that
+                # ritual re-climbing (the h131/h163 walls) stops being free.
+                else:
+                    for sx_, yt_, yb_ in self.BROKEN_STUBS:
+                        if (abs(s["mario_x"] - sx_) <= self.STUB_X_TOL
+                                and yt_ - self.STUB_Y_PAD <= s["mario_y"]
+                                    <= yb_ + self.STUB_Y_PAD):
+                            r -= self.STUB_COST
+                            break
+                # Top-rung dead-end tax: see TOP_DEADEND_* constants.
+                if (s["mario_y"] and s["mario_y"] <= self.TOP_DEADEND_Y
+                        and s["mario_x"] < self.TOP_DEADEND_X):
+                    r -= self.TOP_DEADEND_COST
                 # Dense traverse progress: +TRAVERSE_PROGRESS per pixel moved
                 # left on the 2nd girder. Gives gradient on every failed attempt
                 # (not just when the agent survives all the way to x=53).
