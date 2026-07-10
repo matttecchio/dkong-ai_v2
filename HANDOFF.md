@@ -25,16 +25,24 @@ tolerate genuine no-win scenarios.
 - **Full pipeline works and is robust**: MAME `dkong` driven from Python, a
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
-- **Run 27 series = Go-Explore phase 2** (backward walk-back over 12 winner
-  chains, §11b). **Run 27z active** (TB `RecurrentPPO_38`): frontier-gated
-  per-chain walk-back on `artifacts/backward_dense5` (dense4 + rungs around
-  the c433 choke), levels [2,5,5,1,2,12,16,16,9,10,1,2], 0.5 frontier draw
-  share, governor 0.40/0.48, lr 5e-5, p_curric 0.8, levels persist in
-  `<backward-dir>/levels.json`. Chains 5-9 are through the c446 complex;
-  c433 rungs gated on chains 5/6 pre-obs-change. Heads relearning since the
-  74-feature obs change — rehearsal cycling toward 0.48, floor policy in a
-  known reward-topology "poverty trap" until the walk-back reaches floor
-  cells (do NOT bump floor draw share — 27y proved it erodes the tower).
+- **Run 28 ACTIVE** (TB `RecurrentPPO_51`, launched 2026-07-10): the
+  **capacity bundle** — LSTM 256→512, RAM MLP 64→128, difficulty in obs
+  (RAM 75), spawn burn-in (8 forced NOOPs at curriculum starts below h172),
+  rehearsal capped to the 8 tiers above the frontier, `backward_dense12`
+  (WC slots deduped 5→2; explorer chains 6/7/9 duplicated into the freed
+  slots), CNN transferred / heads fresh / **levels reset**. Motivated by the
+  **hollow-tower diagnosis** (§11b, 2026-07-10): all 12 chain frontiers had
+  converged on one establishment shelf (h163-168, 1.5-3% over ~1k draws
+  each) while previously-gated tiers decayed to 0-13% — interference at
+  small net size + rehearsal starvation from uncapped windows. Dials:
+  lr 5e-5, ent 0.01, p_curric 0.8, thresh 0.3, frontier share 0.5,
+  governor 0.40/0.48, levels persist in `<backward-dir>/levels.json`.
+- **Deployment is scripted**: `scripts/current_launch.sh` is THE canonical
+  launch command (edit dials there only); `scripts/auto_resume.sh` relaunches
+  from the newest checkpoint after a reboot/crash (guards: `.maintenance`
+  file for intentional stops, flock, 3-per-2h crashloop cap). Touch
+  `.maintenance` BEFORE any manual kill. Crontab entries (@reboot + 10-min
+  watchdog) designed but NOT yet installed — see §3.
 - **2026-07-05, the x=99 glitch (§12)**: policy AND go-explore winners climbed
   a broken ladder stub with frame-perfect inputs (user spotted it on film;
   census: 20/20 bottom episodes). Guard now ends off-ladder climbing as a
@@ -51,14 +59,14 @@ tolerate genuine no-win scenarios.
   `height_best`, `height_mean`, or the height milestone reward. Per-episode
   audit trail: `logs/episodes/dk_<port>.monitor.csv` (start_y, start_screen,
   end_screen, bw_pos, no_barrels) — check any surprising aggregate there first.
-- **Bottom-up with live barrels: still 0 honest clears** (~350M+ steps;
-  glitch-guarded baseline: mean height ~26). The current grind: the "shelf"
-  tiers (heights 162-164) — a precision stop-and-grab at the x=147 ladder
-  under barrel pressure, ~2-5%% clear for ~20M steps. Suspected contributor
-  (user hypothesis, matches the known lad53-only feature gap): no engineered
-  "barrel about to descend this ladder" signal for x=147/131/67/143.
-  Staged next lever: per-ladder barrel-threat features (dim 62->~67,
-  warm-start via --transfer-features-from).
+- **Bottom-up with live barrels: still 0 honest clears** (~400M+ steps).
+  Clean bottom-up floor (glitch-kills excluded — judge the floor ONLY by
+  this) hit an all-time record 48.6 the morning run 28 launched. The
+  establishment-wall signature to know: curriculum spawn → ~9s dodge-in-
+  place → death with ZERO height gain, while the same policy clears 90-100%
+  from cells a girder higher and two same-height snapshots can differ 77%
+  vs 2% — an LSTM cold-drop problem (hence run 28's spawn burn-in), not a
+  route or timer problem (both exonerated by per-cell CSV audits, §11b).
 
 ---
 
@@ -83,34 +91,40 @@ stage bottom-up with live barrels** (reach Pauline at the top). Stretch: all 4 s
 ## 3. Quick start
 
 ```bash
-# Run 26 start command:
-nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
-    --timesteps 100000000 --n-envs 16 \
-    --save artifacts/ppo_dkong_run26 --logdir logs \
-    --gamma 0.999 --ent-coef 0.01 --lr 2e-5 --n-epochs 3 \
-    --stack 2 --p-no-barrels 0.0 --p-curric 0.15 \
-    --lstm --lstm-hidden 256 \
-    --init-from artifacts/ppo_dkong_run25_last \
-    > logs/run26.log 2>&1 &
+# THE canonical launcher (run 28 dials live HERE — edit this file, nothing else):
+#   scripts/current_launch.sh <init-from-model> <log-file>
+# Resume after a crash/reboot (newest checkpoint by mtime; silent no-op if
+# a trainer is already running or .maintenance exists):
+./scripts/auto_resume.sh
 
-# Check training is alive
-ps aux | grep dkong_ai.train | grep -v grep
-tail -f logs/run26.log
+# Live run identifiers (maintained by auto_resume / deploys):
+cat logs/run_current.pid      # trainer PID
+tail -f logs/run_current.log  # symlink to the live log
 
-# Kill gracefully (saves final checkpoint to artifacts/ppo_dkong_run26_last.zip):
-kill -SIGTERM <pid>
+# STOPPING ON PURPOSE (or any manual kill+relaunch):
+touch .maintenance            # FIRST — or the watchdog relaunches behind you
+kill -SIGTERM $(cat logs/run_current.pid)   # saves ppo_dkong_run28_last.zip
+# known shutdown mode: _last saves within seconds, then the process can HANG
+# in env-close — after ~60s, SIGKILL the literal PID (the save is already on
+# disk). Then: rm .maintenance
+# NEVER pkill -f anything (self-match footguns, twice); kill literal PIDs.
+
+# Crash-resume crontab (designed + tested, NOT yet installed — needs user):
+# (crontab -l; echo '@reboot sleep 90 && /home/claw3/dkong-ai/scripts/auto_resume.sh >> /home/claw3/dkong-ai/logs/auto_resume.log 2>&1'; echo '*/10 * * * * /home/claw3/dkong-ai/scripts/auto_resume.sh >> /home/claw3/dkong-ai/logs/auto_resume.log 2>&1') | crontab -
 
 # Watch a trained model (records .inp, then plays windowed)
 .venv/bin/python -m dkong_ai.eval --rom-dir ./roms \
-    --model artifacts/checkpoints/ppo_dkong_run26/ppo_dkong_run26_Xsteps \
+    --model artifacts/checkpoints/ppo_dkong_run28/ppo_dkong_run28_Xsteps \
     --port 5100 --stack 2
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
 # TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
-# Open http://localhost:6006 in Windows browser. Run 26 = RecurrentPPO_11.
+# Open http://localhost:6006 in Windows browser. Run 28 = RecurrentPPO_51.
 ```
 
 ⚠️ Eval/diag always use `--port 5100` to avoid colliding with training (5000+).
+⚠️ Run-27-era checkpoints do NOT load at current code (capacity change, §12) —
+check out a pre-`7dea1c4` commit to eval them.
 
 ---
 
@@ -129,16 +143,17 @@ MAME (dkong) --autoboot_script--> scripts/bridge.lua  (socket SERVER, lock-step)
   static threat/ladder/fall-zone map (see §6). Stacked ×n_stack by
   `DkFrameStackWrapper` → `(84, 84, 2×n_stack)` at policy input.
   Run 21+: `n_stack=2` → `(84, 84, 4)`.
-- `"ram"`: `(62,)` float32 — normalised RAM features (see §5).
+- `"ram"`: `(75,)` float32 — normalised RAM features (see §5).
 
 **Policy** (`dkong_ai/dk_policy.py`):
 - `DkFeaturesExtractor`: NatureCNN on image → 256 features; Linear MLP on RAM
-  → 64 features; concat → 320 features → LSTM → RecurrentPPO policy/value heads.
+  → 128 features; concat → 384 features → LSTM → RecurrentPPO policy/value heads.
 - `DkFrameStackWrapper`: stacks `image` across N frames (run 21+: **stack=2** —
   optical flow only; LSTM handles long-range temporal memory), passes `ram` from
   latest frame only.
 - **Run 21+**: `RecurrentPPO` (`sb3_contrib`) with `MultiInputLstmPolicy`.
-  LSTM hidden size 256, 1 layer, shared actor/critic. Stack reduced from 8→2.
+  Run 28+: LSTM hidden **512**, RAM MLP **128** (was 256/64 through run 27 —
+  bumped for interference reduction after the hollow-tower diagnosis, §11b).
 
 **Actions** (8): noop, L, R, U, D, jump, jump+L, jump+R.
 
@@ -150,17 +165,25 @@ load curriculum state i, `0xF8` freeze barrels, `0xF7` unfreeze barrels.
 
 ## 5. RAM features (`dkong_ai/memory_map.py` + `mame_env.py:_build_ram_features`)
 
-**62 features** (layout: `[mario_x/255, mario_y/240]` + 6 barrels × 7 + 5
-fireballs × 3 + hammer × 3):
+**75 features** (layout: `[mario_x/255, mario_y/240]` + 6 barrels × 9 + 5
+fireballs × 3 + hammer × 3 + difficulty/5):
 
-Per barrel: `[Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active]`
+Per barrel: `[Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active, crazy, blue]`
 - `vx/vy`: per-step velocity (frameskip=4); horiz norm ÷8, vertical ÷20.
 - `lad53`: barrel x-distance to the critical left ladder at x=53 (norm ÷64).
   Tells agent whether a barrel is heading for that ladder column.
 - `edge_dist`: normalised distance to the girder edge the barrel is heading
   toward (0 = at edge / about to fall, 1 = far away).
+- `crazy/blue` (run 27w+): the game's own barrel-type flags — wild (crazy)
+  barrels bounce vertically so every rolling-barrel prior is wrong for them;
+  blue barrels end in the oil drum → fireball spawn.
 
 Per fireball: `[Δx/128, Δy/120, active]` — all 5 slots tracked.
+
+`difficulty/5` (run 28+): internal difficulty 0x6380 (1-5). Wild-barrel
+behaviour is regime-dependent (user lore: 3-4 = worst/most erratic, 5 =
+predictable with a static neutral-jump counter) — this makes play
+regime-conditional instead of averaged across regimes.
 
 **⚠️ Missing feature (known gap):** There is no `lad143` — barrel distance to
 the x=143 first ladder. `lad53` helps time the 2nd→3rd girder climb; an
@@ -168,7 +191,7 @@ equivalent for x=143 would help time the first-ladder climb between barrels.
 Consider adding as a future improvement (changes `RAM_FEATURE_DIM` 62→68,
 breaks warm-start from run 25).
 
-**Full RAM address map** (`memory_map.py` + `bridge.lua` WATCH_ADDRS, 47 entries,
+**Full RAM address map** (`memory_map.py` + `bridge.lua` WATCH_ADDRS, 60 entries,
 ORDER MUST MATCH between both files):
 
 | name | addr | notes |
@@ -186,9 +209,10 @@ ORDER MUST MATCH between both files):
 | has_hammer | 0x6217 | 1 while wielding hammer |
 | **is_jumping** | **0x6216** | **non-zero during jump arc; used to gate rewards** |
 
-⚠️ `is_jumping` (0x6216) is the **last entry** in both `WATCH_ORDER` and bridge.lua
-`WATCH_ADDRS`. Both lists have exactly 47 entries and must remain in sync.
-`tests/test_bridge_sync.py` enforces this mechanically — run it after any WATCH change.
+⚠️ `WATCH_ORDER` and bridge.lua `WATCH_ADDRS` are **append-only** and must stay
+in sync (60 entries: 47 original + 12 barrel type flags (27w) + difficulty
+(27x)). `tests/test_bridge_sync.py` enforces the count and the appended-entry
+positions mechanically — run it after any WATCH change.
 
 ---
 
@@ -316,8 +340,23 @@ that the new objective has been learned.
 - **Fast resets** (`record=False`): first reset plays ~19s intro, saves state;
   all later resets load it (~0.03s). Disabled when `record=True` (.inp playback
   requires real input events).
-- **RNG diversity**: after each load, advance 0–15 random NOOP frames so barrel
-  patterns differ per episode.
+- **RNG diversity**: after each load, advance random NOOP exchanges so barrel
+  patterns differ per episode — BOTTOM STARTS ONLY (0-20 exchanges; idling at
+  a curriculum cell was a death sentence, see §12 jitter-death).
+- **Spawn burn-in (run 28+)**: for the first `BURN_IN_STEPS=8` steps of a
+  curriculum episode starting BELOW h172, `step()` executes NOOP regardless
+  of the chosen action — the LSTM fills with real observations before
+  decisions count (a state-load drops the policy mid-traffic with zeroed
+  memory; the establishment-wall signature was 9s dodge-in-place, zero
+  height gain). Skipped at top-girder cells: they sit in the barrel-spawn
+  lane where standing still kills, and they clear 90-100% without help.
+  Trade-off: burn-in transitions store the chosen action but executed NOOP
+  (~2% of steps, accepted off-policy noise).
+- **Rehearsal cap (run 28+)**: `BW_REHEARSAL_CAP=8` — the non-frontier 50%
+  of curriculum draws sample the 8 cells just above the frontier, not the
+  whole passed window. Uncapped windows starved per-cell maintenance
+  (~50%/level of chain draws → tiers gated at 0.31 decayed to 0-13%; the
+  hollow tower, §11b).
 - **Barrel-freeze training wheels** (`P_NO_BARRELS`, run 26: **0.0**):
   bridge `0xF8` command zeroes all barrel/fireball status bytes each frame.
   Currently OFF — all episodes have live barrels.
@@ -367,7 +406,10 @@ that the new objective has been learned.
 | 27 | **phase 2 backward algorithm**, warm-start run26, lr 5e-5, p_curric 0.8 | ~1M | — | — | curric 0.53@L0 | level 0→1 @336K — first trained-policy live-barrel clears; restarted: slot-clobber bug |
 | 27b | + slot backup fix (honest bottomup labels) | ~7M | — | ~35 | curric ~0.3 | stalled level 1: 20% of curric states frozen + tier-1 "blind spots" |
 | 27c | + verified manifest (13 frozen dropped), thresh 0.3, frontier metric | 18M | — | ~35 | frontier ~0 | stalled level 2 17M steps → exposed the REAL bug ↓ |
-| **27d** | **single-life episodes (`done = died or ...`)** | **active** | — | ~43 honest | **level 3 in 2M steps** | multi-life episodes were the phase-2 wall; walk-back moving |
+| **27d** | **single-life episodes (`done = died or ...`)** | 3.2M | — | ~43 honest | **level 3 in 2M steps** | multi-life episodes were the phase-2 wall; walk-back moving |
+| 27e-27aj | per-chain frontier gating, dense3-11, obs 62→74, level-reset rule, WC chain, 000-timer pruning, film-review fixes | ~2 weeks | 193 | floor 3.4→48.6 clean | curric ≤0.24; bottomup 0 | full story §11b; ended in the hollow-tower stall |
+| 27ak | crash recovery (WSL reboot #2), auto-resume infra | 14.1M | 192 | floor 47-48.6 record | 0 | stable but 3 advances/night — tower stalled at the h163-168 shelf |
+| **28** | **capacity bundle**: LSTM 512, RAM 128, difficulty obs (75), spawn burn-in, rehearsal cap, dense12, levels reset | **active** | — | — | — | 53 advances in first 35 min; capacity test = passing the shelf |
 
 ---
 
@@ -587,10 +629,53 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   ep_rew not comparable across the change. ALSO: deploy-race lesson — never
   run two kill+launch chains concurrently (two trainers, PIDs 3 apart, 32
   MAMEs; identify duplicates via /proc/PID/fd/1 → log path).
+- **27ak (2026-07-09/10)**: WSL hard-reboot #2 killed 27aj at 1.29M (~15 min
+  lost — the 500k CheckpointCallback earns its keep). Built + E2E-tested the
+  auto-resume infra (`scripts/current_launch.sh` = canonical dials,
+  `scripts/auto_resume.sh` = guarded relauncher; §3). Overnight per-cell
+  audit produced **THE HOLLOW-TOWER DIAGNOSIS**: all 7 explorer frontiers at
+  1.5-3.1% over 800-1150 draws, ALL loading at h163-168 (four chains strung
+  on the same c446 rung ladder); the 5 WC slots' shared frontier wc_115 at
+  0/1379 — and previously-gated tiers (passed at 0.31) decayed to 0-13%,
+  low-and-flat (starved equilibrium: uncapped rehearsal windows give each
+  tier ~2% of chain draws at level 20). The cliff is BEHAVIORAL, not
+  spatial: two same-height snapshots clear 77% vs 2% — LSTM cold-drop
+  establishment, the same mechanism at every wall since run 26.
+  Densification of decayed (vs never-passed) cells is the WRONG TOOL; the
+  WC chain is un-densifiable past its shelf (the pro's climb from h135
+  lives inside the 000-timer endgame — no mintable in-between states with
+  viable timers). Also: floor record 48.6 clean; wc_115 timer exonerated.
+- **28 (2026-07-10, ACTIVE, TB `RecurrentPPO_51`, commit `7dea1c4`)**: the
+  capacity bundle, one restart, five parts: (1) LSTM 512 + RAM MLP 128
+  (interference reduction — the actual fix for tier decay); (2) difficulty
+  in obs (75); (3) spawn burn-in (§9); (4) rehearsal cap K=8 (§9);
+  (5) dense12 = WC slots deduped 5→2 (both copies keep slots 0,1), explorer
+  chains 6/7/9 duplicated into slots 2/10/11 (double gate volume). CNN
+  transferred (8 layers), heads fresh, LEVELS RESET (the 27ab rule).
+  First 35 min: 53 advances at 0.31-1.00 gates, rehearsal 0.844 (record).
+  Success criteria: (a) re-descend to and PASS the h163-168 shelf — the
+  old policy never did; (b) re-passed tiers HOLD >30%; (c) burn-in cells
+  show height-gain >0 on failures; (d) floor recovery slope (fresh heads
+  start ~5 in the poverty trap; judge slope, not level).
 
 ---
 
 ## 12. Critical bugs fixed (do not reintroduce)
+
+### Old checkpoints don't load after capacity changes (fixed run 28, `7dea1c4`)
+
+`PPO.load()` / `RecurrentPPO.load()` rebuilds the policy skeleton from the
+CURRENT code (policy_kwargs reference `DkFeaturesExtractor` by module path, and
+its layer widths come from today's constants) then `set_parameters(exact_match=
+True)`. After RAM_HIDDEN 64→128, run-27 checkpoints stopped fitting their own
+skeleton — `load()` raises `RuntimeError` on state_dict shapes. Consequences:
+- `--transfer-features-from` now reads the checkpoint zip's raw state dict via
+  `stable_baselines3.common.save_util.load_from_zip_file` (no skeleton built)
+  and copies shape-matching `features_extractor.*` tensors only.
+- Evaluating a pre-bundle checkpoint requires checking out a pre-`7dea1c4`
+  commit (constants must match the weights).
+- `auto_resume.sh` must glob ONLY current-line models (`run28*`) — a stale
+  glob would feed `--init-from` an unloadable old checkpoint and crashloop.
 
 ### The x=99 broken-ladder glitch: superhuman exploit in winners AND policy (guarded run 27o, 2026-07-05)
 

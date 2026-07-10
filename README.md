@@ -14,13 +14,17 @@ Train an agent to play arcade **Donkey Kong** (`dkong`) through MAME. First goal
   RecurrentPPO starting near Pauline, walking the start back down the proven
   routes as the clear rate rises.
 - **Observation:** Dict — `image`: 84×84×4 (2-frame stack, grayscale + threat/ladder map);
-  `ram`: 62 normalised features (barrel positions, velocities, edge proximity, fireball, hammer).
+  `ram`: 75 normalised features (barrel positions, velocities, edge proximity,
+  crazy/blue type flags, fireballs, hammer, internal difficulty).
 - **Reward (from RAM):** height-milestone + exploration novelty + expert-route
   corridor + waypoint milestones + climb bonus + de-weighted score + death/clear.
   All height rewards gated on `is_jumping==0`. Episodes are **single-life** (any
   death terminates). See `dkong_ai/mame_env.py:_reward` and HANDOFF.
 - **Algorithm:** RecurrentPPO / LSTM (`sb3_contrib.RecurrentPPO`, `MultiInputLstmPolicy`),
-  GPU, 16 parallel envs.
+  GPU, 16 parallel envs. Run 28+: LSTM hidden 512, RAM MLP 128.
+- **Ops:** `scripts/current_launch.sh` (canonical launch, dials live here),
+  `scripts/auto_resume.sh` (crash/reboot recovery; `touch .maintenance` before
+  intentional stops). Live run: `logs/run_current.pid` / `logs/run_current.log`.
 
 ## Architecture
 
