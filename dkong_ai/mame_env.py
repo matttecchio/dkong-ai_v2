@@ -806,15 +806,19 @@ class DonkeyKongEnv(gym.Env):
                            and s["mario_x"] >= p["mario_x"])
                 if 0 < gained <= 2000 and not in_gate:
                     r += gained * 0.003         # +0.3 per 100-pt barrel jump
-                # Hammer-at-left-wall penalty: penalise the exact failure we
-                # observed — grab hammer, run to left wall, stand waiting for
-                # it to expire. Only fires above ground-floor height so the
-                # ground-floor corner penalty isn't double-counted.
-                if (s.get("has_hammer", 0)
-                        and s["mario_x"] < self.HAMMER_WALL_X
-                        and s["mario_y"] is not None
-                        and s["mario_y"] < self.BASE_Y - self.HAMMER_WALL_H_LO):
-                    r -= self.HAMMER_WALL_COST
+            # Hammer-at-left-wall penalty: penalise the exact failure we
+            # observed — grab hammer, run to left wall, stand waiting for
+            # it to expire. Only fires above ground-floor height so the
+            # ground-floor corner penalty isn't double-counted.
+            # Deliberately OUTSIDE the score-validity gate above: it has no
+            # score dependency, and score decode legitimately returns None on
+            # volatile HUD frames — an indentation accident had it skipping
+            # exactly then (external review finding, fixed 2026-07-10).
+            if (s.get("has_hammer", 0)
+                    and s["mario_x"] < self.HAMMER_WALL_X
+                    and s["mario_y"] is not None
+                    and s["mario_y"] < self.BASE_Y - self.HAMMER_WALL_H_LO):
+                r -= self.HAMMER_WALL_COST
         # Broken-ladder glitch guard: sustained climbing (y falling, x pinned,
         # not a jump arc, alive — 0x6200 is 1=alive) anywhere outside a
         # complete ladder's envelope is the frame-perfect broken-ladder
@@ -1076,6 +1080,19 @@ class DonkeyKongEnv(gym.Env):
         state, pix = self._start_game()
         if not self.record:
             self._save_state()
+        # The recovered episode is a fresh BOTTOM start on a fresh MAME:
+        # correct the episode labels (a death mid-curriculum-reset would
+        # otherwise keep _start_type="curriculum"/_bw_start and poison
+        # per-cell audits) and re-apply the per-episode barrel mode (the
+        # fresh MAME runs bridge-default live barrels regardless of what
+        # self._no_barrels said — resample and send the command so label
+        # and reality agree). External review finding, fixed 2026-07-10.
+        self._start_type = "bottomup"
+        self._bw_start = None
+        self._no_barrels = self.np_random.random() < self.P_NO_BARRELS
+        state, pix = self._exchange(
+            self.A_FREEZE_BARRELS if self._no_barrels
+            else self.A_UNFREEZE_BARRELS)
         return state, pix
 
     def _begin_episode(self, state):

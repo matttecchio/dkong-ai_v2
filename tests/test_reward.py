@@ -159,3 +159,23 @@ def test_clear_terminates():
     r, done = env._reward(s)
     assert done
     assert r >= 100.0
+
+
+def test_hammer_wall_penalty_fires_when_score_is_none():
+    """The hammer-at-left-wall penalty must not depend on score decode
+    validity: score legitimately reads None on volatile HUD frames, and an
+    indentation accident once made the penalty silently skip exactly then
+    (external review finding, 2026-07-10). Differential: identical states
+    except has_hammer, both with score=None."""
+    def reward_with(hammer):
+        env = _make_env(reward_max_h=60)          # above height 50: no milestone
+        p = _state(mario_y=190, mario_x=40, has_hammer=hammer)  # h=50, left wall
+        s = _state(mario_y=190, mario_x=40, has_hammer=hammer)
+        assert s["score"] is None
+        env._prev = p
+        r, _ = env._reward(s)
+        return r
+
+    diff = reward_with(1) - reward_with(0)
+    assert abs(diff + DonkeyKongEnv.HAMMER_WALL_COST) < 1e-9, (
+        f"hammer-wall penalty missing/wrong when score=None: diff={diff}")
