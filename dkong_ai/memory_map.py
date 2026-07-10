@@ -55,9 +55,11 @@ ADDR = {
     "fireball2_st": 0x6440, "fireball2_x": 0x6443, "fireball2_y": 0x6445,
     "fireball3_st": 0x6460, "fireball3_x": 0x6463, "fireball3_y": 0x6465,
     "fireball4_st": 0x6480, "fireball4_x": 0x6483, "fireball4_y": 0x6485,
-    # Hammer sprite at #6A1C-#6A1F. Pattern: +0=X, +3=Y. has_hammer=0x6217.
-    "hammer_x": 0x6A1C, "hammer_y": 0x6A1F, "has_hammer": 0x6217,
-    "is_jumping": 0x6216,
+    # Hammer sprite at #6A1C-#6A1F. Pattern: +0=X, +3=Y.
+    # (has_hammer 0x6217 and is_jumping 0x6216 are defined ONCE in the Mario
+    # block above — they were duplicated here and relied on dict-overwrite;
+    # deduped 2026-07-10, external review finding.)
+    "hammer_x": 0x6A1C, "hammer_y": 0x6A1F,
     # Internal difficulty (1-5): starts at the level number, ramps on a timer
     # within each board; indexes the game's barrel-steering/fireball aggression
     # tables. TRACKED ONLY (episode CSV/TB) — deliberately NOT in the RAM

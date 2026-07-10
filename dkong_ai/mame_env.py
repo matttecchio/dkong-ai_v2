@@ -1256,9 +1256,14 @@ class DonkeyKongEnv(gym.Env):
         except (ConnectionError, OSError):
             # MAME died mid-episode (crash / timeout): relaunch and end this
             # episode cleanly so training continues on a fresh instance.
+            # The terminal info must describe the CRASHED episode (last good
+            # state + its trackers), not the fresh post-recovery start —
+            # capture it BEFORE _recover()/_begin_episode reset the labels,
+            # or the Monitor CSV logs a phantom row (external review, 2026-07-10).
+            crash_info = self._info(self._prev)
             state, pix = self._recover()
             self._begin_episode(state)
-            return self._preprocess(pix, state), 0.0, True, False, self._info(state)
+            return self._preprocess(pix, state), 0.0, True, False, crash_info
         state = self._decode_state(ram)
         reward, terminated = self._reward(state)
         if state["mario_y"] and not state.get("is_jumping", 0):

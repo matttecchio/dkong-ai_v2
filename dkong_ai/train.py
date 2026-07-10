@@ -263,7 +263,9 @@ def main():
     ap.add_argument("--n-envs", type=int, default=16)
     ap.add_argument("--base-port", type=int, default=5000)
     ap.add_argument("--frameskip", type=int, default=4)
-    ap.add_argument("--stack", type=int, default=4)
+    ap.add_argument("--stack", type=int, default=2,
+                    help="frame stack depth (run 21+ canonical: 2 — matches "
+                         "eval.py and scripts/current_launch.sh)")
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--save", default="artifacts/ppo_dkong")
     ap.add_argument("--init-from", default=None,
