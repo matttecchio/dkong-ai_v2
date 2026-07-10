@@ -1114,6 +1114,7 @@ class DonkeyKongEnv(gym.Env):
         self._glitch_streak = 0              # consecutive off-ladder climb steps
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
+        self._burnin_drawn = 0               # this episode's drawn burn-in length
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -1212,9 +1213,19 @@ class DonkeyKongEnv(gym.Env):
         # above), and they clear 90-100% without help. Trade-off: the ~8
         # burn-in transitions store the CHOSEN action but executed NOOP —
         # slight off-policy mislabeling, accepted at ~2% of episode steps.
+        # STOCHASTIC 50/50 (run 28c, user film review + beeline probe,
+        # 2026-07-10): a FIXED 8-step freeze phase-shifts the whole run into
+        # the cell's deterministic traffic pattern — 2 of 3 stuck frontiers
+        # were PROVEN clearable by immediate play and doomed by the delay
+        # (delayed-beeline deaths matched the policy's film frame-for-frame).
+        # Half the spawns now get instant control (delay-critical cells cap
+        # ~0.35-0.45, above the 0.31 gate); half keep the LSTM warm-up.
+        # Bonus: restores traffic-phase diversity to fixed-RNG cells.
         if (self._start_type == "curriculum"
-                and state["mario_y"] > self.BASE_Y - 172):
+                and state["mario_y"] > self.BASE_Y - 172
+                and self.np_random.random() < 0.5):
             self._burnin_left = self.BURN_IN_STEPS
+            self._burnin_drawn = self.BURN_IN_STEPS
         return self._preprocess(pix, state), self._info(state)
 
     BASE_Y = 240   # Mario's start-row y; height climbed = BASE_Y - min_y reached
@@ -1237,6 +1248,9 @@ class DonkeyKongEnv(gym.Env):
                 # label lag — this column makes per-cell attribution exact.
                 "bw_chain": self._bw_start[0] if self._bw_start else -1,
                 "glitch_kill": int(self._glitch_kill),
+                # Drawn burn-in length (0 or BURN_IN_STEPS): per-phase clear
+                # attribution for the stochastic spawn burn-in.
+                "burnin": self._burnin_drawn,
                 # Internal difficulty (1-5, tracked-only): curriculum states
                 # inherit game time from their phase-1 trajectories, so deep
                 # cells start at HIGHER difficulty than the bottom start —
