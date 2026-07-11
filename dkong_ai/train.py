@@ -95,10 +95,20 @@ class BackwardCallback(BaseCallback):
     flows down the easiest route first — one route to the bottom is enough.
     The start window is [n-1-level, n-1], so mastered tiers keep rehearsing."""
 
-    def __init__(self, n_chains, window=64, threshold=0.5):
+    PROGRESS_PX = 40   # success bar for progress-gated (floor) chains
+
+    def __init__(self, n_chains, window=64, threshold=0.5, gates=None):
         super().__init__()
         self.n_chains = n_chains
         self.window = window
+        # Per-chain gate type: "clear" (reach Pauline) or "progress" (gain
+        # PROGRESS_PX from spawn). Progress gates make LOW cells usable as
+        # curriculum: a clear-gate from h20 is absurd — the walk-back could
+        # never advance — but "+40px" is exactly the traffic-crossing +
+        # first-ladder skill the floor policy lacks (run 28d: honest floor
+        # = 0 after the stub-glitch guard fix; the poverty trap won't
+        # dissolve from bottom-up episodes alone).
+        self.gates = gates or ["clear"] * n_chains
         self.chain_window = max(16, window // 4)
         # Rehearsal drives the consolidation governor; at window=64 its
         # easy/hard tier mix swings the rate +/-0.1 by draw luck alone and
@@ -165,22 +175,27 @@ class BackwardCallback(BaseCallback):
                 # earned. (Current runs use --p-no-barrels 0.0, so this is a
                 # guard for configs that re-enable freeze episodes.)
                 continue
-            cleared = info.get("cleared", 0)
-            self._results.append(cleared)
             bw = info.get("bw_start")
             if not bw:
                 continue
             ci, pos, n, _h = bw
+            if self.gates[ci] == "progress":
+                start_h = max(0, 240 - info.get("start_y", 240))
+                success = int(info.get("max_height", 0) - start_h
+                              >= self.PROGRESS_PX)
+            else:
+                success = info.get("cleared", 0)
+            self._results.append(success)
             if pos != max(0, n - 1 - self.levels[ci]):
                 # Rehearsal draw from an already-promoted tier. Its rolling
                 # clear rate is the consolidation signal: rising = the tower
                 # keeps hardening behind the frontier; sagging = pause the
                 # walk-back and train in place before advancing further.
-                self._rehearsal.append(cleared)
+                self._rehearsal.append(success)
                 self._rehearsal = self._rehearsal[-self.rehearsal_window:]
                 continue
             f = self._frontier[ci]
-            f.append(cleared)
+            f.append(success)
             del f[:-self.chain_window]
             if (not self._consolidating
                     and len(f) >= self.chain_window
@@ -251,7 +266,7 @@ def make_env(rom_dir, port, frameskip, backward_manifest=None,
                        info_keywords=("max_height", "cleared", "start_type",
                                       "start_y", "start_screen", "end_screen",
                                       "bw_pos", "bw_chain", "no_barrels",
-                                      "glitch_kill", "burnin",
+                                      "glitch_kill", "burnin", "approach_len",
                                       "difficulty_start", "difficulty_end"))
     return _thunk
 
@@ -346,7 +361,8 @@ def main():
     if args.backward_dir:
         import json as _json
         with open(bw_manifest) as _f:
-            n_chains = len(_json.load(_f)["chains"])
+            _chains = _json.load(_f)["chains"]
+        n_chains = len(_chains)
         if n_chains == 0:
             # Mirror the env's behavior (it disables the curriculum with a
             # warning); an empty levels list would crash the callback's
@@ -354,8 +370,12 @@ def main():
             print("WARNING: backward manifest has no chains — "
                   "BackwardCallback disabled")
         else:
+            gates = [ch.get("gate", "clear") for ch in _chains]
+            if any(g == "progress" for g in gates):
+                print(f"[backward] progress-gated chains: "
+                      f"{[i for i, g in enumerate(gates) if g == 'progress']}")
             bw_cb = BackwardCallback(n_chains, window=args.bw_window,
-                                     threshold=args.bw_threshold)
+                                     threshold=args.bw_threshold, gates=gates)
             # Persist walk-back levels next to the manifest so restarts
             # resume the descent instead of re-earning it.
             bw_cb.levels_path = os.path.join(args.backward_dir,

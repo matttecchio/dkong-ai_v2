@@ -25,7 +25,7 @@ nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
   --gamma 0.999 --ent-coef 0.01 --lr 1e-4 --n-epochs 3 \
   --stack 2 --p-no-barrels 0.0 --p-curric 0.8 \
   --lstm --lstm-hidden 512 \
-  --backward-dir artifacts/backward_dense12 --bw-threshold 0.3 \
+  --backward-dir artifacts/backward_dense13 --bw-threshold 0.3 \
   --init-from "$model" \
   > "$log" 2>&1 &
 echo $!

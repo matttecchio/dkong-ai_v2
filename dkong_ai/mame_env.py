@@ -124,6 +124,7 @@ class DonkeyKongEnv(gym.Env):
         self._bw_level = 0
         self._bw_levels: list[int] | None = None   # per-chain (preferred)
         self._bw_start: tuple | None = None
+        self._pending_approach: list | None = None   # set by _load_backward_start
         self._bottom_backup_ok = False   # bottom_<port>.sta from THIS instance
         if backward_manifest:
             if record:
@@ -136,7 +137,14 @@ class DonkeyKongEnv(gym.Env):
             base = os.path.dirname(os.path.abspath(backward_manifest))
             self._bw_chains = [
                 [{"sta": os.path.join(base, c["sta"]),
-                  "height": c.get("height", 0)} for c in ch["cells"]]
+                  "height": c.get("height", 0),
+                  # approach (optional, augment_approaches.py): mid-leg
+                  # anchor + proven action indices arriving at the cell.
+                  "approach": ({"anchor": os.path.join(
+                                    base, c["approach"]["anchor"]),
+                                "acts": c["approach"]["acts"]}
+                               if "approach" in c else None)}
+                 for c in ch["cells"]]
                 for ch in mani["chains"]] or None
             if self._bw_chains is None:
                 print("[env] WARNING: backward manifest has no chains — "
@@ -1027,11 +1035,35 @@ class DonkeyKongEnv(gym.Env):
             # chain's window overlaps anyway.
             hi = min(lo + self.BW_REHEARSAL_CAP, n - 1)
             pos = int(self.np_random.integers(lo, hi + 1))
-        self.load_state_file(chain[pos]["sta"])
+        cell = chain[pos]
+        approach = cell.get("approach")
+        if approach:
+            # APPROACH REPLAY (run 28e, film reviews #3/#4): instead of
+            # cold-dropping the policy on the cell with a zeroed LSTM, load
+            # the mid-leg anchor and FORCE the proven approach actions for
+            # the first steps of the episode — the LSTM fills with the real
+            # arrival context and control lands at the cell's original game
+            # time (zero bonus-timer cost, unlike the NOOP burn-in).
+            # Handover is randomized (drop a random 0..HANDOVER_JITTER
+            # suffix): diversity along a proven-survivable path — the safe
+            # replacement for the idle-jitter removed in 27j.
+            self.load_state_file(approach["anchor"])
+            ok, state, pix = self._is_responsive()
+            if not ok:
+                return None, None
+            drop = int(self.np_random.integers(0, self.HANDOVER_JITTER + 1))
+            acts = approach["acts"]
+            # Stashed, not applied: _begin_episode (called later in reset)
+            # zeroes the per-episode action queue — reset() applies this
+            # AFTER _begin_episode, mirroring the burn-in ordering.
+            self._pending_approach = list(acts[:max(1, len(acts) - drop)])
+            self._bw_start = (ci, pos, n, cell["height"])
+            return state, pix
+        self.load_state_file(cell["sta"])
         ok, state, pix = self._is_responsive()
         if not ok:
             return None, None
-        self._bw_start = (ci, pos, n, chain[pos]["height"])
+        self._bw_start = (ci, pos, n, cell["height"])
         return state, pix
 
     def _load_curriculum(self, idx):
@@ -1125,6 +1157,8 @@ class DonkeyKongEnv(gym.Env):
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
+        self._forced_actions = []            # approach replay queue (see reset)
+        self._approach_len = 0               # this episode's forced-approach length
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -1231,7 +1265,15 @@ class DonkeyKongEnv(gym.Env):
         # Half the spawns now get instant control (delay-critical cells cap
         # ~0.35-0.45, above the 0.31 gate); half keep the LSTM warm-up.
         # Bonus: restores traffic-phase diversity to fixed-RNG cells.
-        if (self._start_type == "curriculum"
+        if self._pending_approach is not None:
+            # Approach replay supersedes burn-in for this episode; only
+            # applies to genuine curriculum starts (a mid-reset _recover
+            # falls back to bottomup and must not inherit the queue).
+            if self._start_type == "curriculum":
+                self._forced_actions = self._pending_approach
+                self._approach_len = len(self._forced_actions)
+            self._pending_approach = None
+        elif (self._start_type == "curriculum"
                 and state["mario_y"] > self.BASE_Y - 172
                 and self.np_random.random() < 0.5):
             self._burnin_left = self.BURN_IN_STEPS
@@ -1261,6 +1303,9 @@ class DonkeyKongEnv(gym.Env):
                 # Drawn burn-in length (0 or BURN_IN_STEPS): per-phase clear
                 # attribution for the stochastic spawn burn-in.
                 "burnin": self._burnin_drawn,
+                # Forced-approach length (0 = no approach replay): per-cell
+                # attribution for approach-replay vs burn-in episodes.
+                "approach_len": self._approach_len,
                 # Internal difficulty (1-5, tracked-only): curriculum states
                 # inherit game time from their phase-1 trajectories, so deep
                 # cells start at HIGHER difficulty than the bottom start —
@@ -1269,9 +1314,12 @@ class DonkeyKongEnv(gym.Env):
                 "difficulty_end": state.get("difficulty", 0)}
 
     BURN_IN_STEPS = 8   # ~0.53s at frameskip 4; long enough to read velocities
+    HANDOVER_JITTER = 6  # approach replay: drop a random 0..J action suffix
 
     def step(self, action: int):
-        if self._burnin_left > 0:            # LSTM spawn burn-in (see reset)
+        if self._forced_actions:             # approach replay (see
+            action = self._forced_actions.pop(0)   # _load_backward_start)
+        elif self._burnin_left > 0:          # LSTM spawn burn-in (see reset)
             self._burnin_left -= 1
             action = 0                       # ACTIONS[0] = noop
         try:
