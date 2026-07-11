@@ -482,8 +482,9 @@ def main():
     venv = DkFrameStackWrapper(venv, n_stack=args.stack)
 
     # Namespace checkpoints by the run's save name so parallel/sequential runs
-    # don't overwrite each other's checkpoints.
-    import os
+    # don't overwrite each other's checkpoints. (No local `import os` here:
+    # it made `os` main()-local and blew up every EARLIER os.* reference —
+    # the run-29 startup crash.)
     run_name = os.path.basename(args.save)
     # Checkpoint every ~500k steps (60 files / 30M run ~= 1.2GB), not 50k (~12GB).
     ckpt = CheckpointCallback(save_freq=max(500_000 // args.n_envs, 1),
