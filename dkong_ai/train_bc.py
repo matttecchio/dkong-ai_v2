@@ -1,9 +1,23 @@
 """Behavioral cloning: supervised-train the SB3 CnnPolicy to imitate the expert
 (from extract_bc's dataset), then save a model the RL run can --init-from.
 
+⚠️ STALE — REFERENCE ONLY (run-5 era, 2026-06). Builds a single-image
+Box(84,84,1) CnnPolicy: THREE architectures behind the active line (Dict
+obs {image, ram-75} + MultiInputLstmPolicy + DkFeaturesExtractor). A model
+saved here CANNOT be loaded by current train.py (--init-from raises on the
+observation-space mismatch). Kept as the reference implementation of the
+extract->supervise pipeline; if BC is revived, rebuild it against the
+current policy class — or better, as the decaying BC-AUXILIARY-loss design
+(ArcadeAI recon), which avoids init-BC's brittleness entirely.
+
     python -m dkong_ai.train_bc --data artifacts/bc_data.npz --out artifacts/ppo_dkong_bc
 """
 import argparse
+import sys
+
+print("WARNING: train_bc.py is STALE (run-5 era, single-image CnnPolicy). "
+      "Its output cannot be loaded by current train.py. See the module "
+      "docstring.", file=sys.stderr)
 
 import numpy as np
 import torch
