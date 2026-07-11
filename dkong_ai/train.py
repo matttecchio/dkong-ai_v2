@@ -84,6 +84,105 @@ class ClimbMetricsCallback(BaseCallback):
         return True
 
 
+class SILCallback(BaseCallback):
+    """Self-imitation on the policy's OWN successes (Oh et al. 2018, adapted).
+
+    PPO is on-policy: a clear from a 2% frontier cell gets three epochs of
+    gradient and is discarded — the project's scarcest resource, thrown away.
+    This callback keeps a buffer of successful episodes' (obs, exec_action)
+    sequences and periodically adds an imitation loss on them, replaying wins
+    until absorbed. Unlike the run-5 init-BC (brittle, expert-distribution
+    mismatch), these are the policy's own on-distribution trajectories.
+
+    Success = honest clear, or +40px gain from a curriculum spawn (matches
+    the env's success-recording criteria). Imitates `exec_action` (what the
+    env RAN — forced approach/burn-in steps override the agent's choice).
+    LSTM-correct: each episode is evaluated as one sequence with
+    episode_start=[1,0,...] and zero initial state — exactly the semantics
+    of an episode boundary."""
+
+    def __init__(self, coef=0.1, buffer_eps=40, eps_per_update=2,
+                 max_ep_len=600):
+        super().__init__()
+        self.coef = coef
+        self.buffer_eps = buffer_eps
+        self.eps_per_update = eps_per_update
+        self.max_ep_len = max_ep_len
+        self._acc: list[list] = []      # per-env (obs, act) accumulator
+        self._buf: list[list] = []      # successful episodes
+        self._last_obs = None
+        self._updates = 0
+
+    def _on_training_start(self) -> None:
+        self._acc = [[] for _ in range(self.training_env.num_envs)]
+
+    def _on_step(self) -> bool:
+        import numpy as _np
+        obs = self.locals.get("obs_tensor")     # PRE-step obs (torch, on-dev)
+        infos = self.locals.get("infos", [])
+        dones = self.locals.get("dones")
+        if obs is None or dones is None:
+            return True
+        for i in range(len(dones)):
+            info = infos[i] if i < len(infos) else {}
+            if len(self._acc[i]) < self.max_ep_len:
+                self._acc[i].append((
+                    {k: v[i].detach().cpu().numpy().copy()
+                     for k, v in obs.items()},
+                    int(info.get("exec_action", 0))))
+            if dones[i]:
+                ep = info.get("episode")
+                success = (not info.get("no_barrels")
+                           and not info.get("glitch_kill")
+                           and (info.get("cleared")
+                                or (info.get("start_type") == "curriculum"
+                                    and info.get("max_height", 0)
+                                    - max(0, 240 - info.get("start_y", 240))
+                                    >= 40)))
+                if ep is not None and success and 4 < len(self._acc[i]):
+                    self._buf.append(self._acc[i])
+                    self._buf = self._buf[-self.buffer_eps:]
+                self._acc[i] = []
+        return True
+
+    def _on_rollout_end(self) -> None:
+        import numpy as _np
+        import torch as _th
+        self.logger.record("sil/buffer_eps", len(self._buf))
+        if not self._buf:
+            return
+        policy = self.model.policy
+        rng = _np.random.default_rng()
+        losses = []
+        for _ in range(min(self.eps_per_update, len(self._buf))):
+            ep = self._buf[int(rng.integers(len(self._buf)))]
+            T = len(ep)
+            obs = {k: _th.as_tensor(_np.stack([t[0][k] for t in ep]),
+                                    device=policy.device)
+                   for k in ep[0][0]}
+            acts = _th.as_tensor(_np.array([t[1] for t in ep]),
+                                 device=policy.device)
+            starts = _th.zeros(T, device=policy.device)
+            starts[0] = 1.0
+            shp = (policy.lstm_actor.num_layers, 1,
+                   policy.lstm_actor.hidden_size)
+            zeros = (_th.zeros(shp, device=policy.device),
+                     _th.zeros(shp, device=policy.device))
+            from sb3_contrib.common.recurrent.type_aliases import RNNStates
+            lstm_states = RNNStates(zeros, zeros)
+            _, log_prob, _ = policy.evaluate_actions(
+                obs, acts, lstm_states, starts)
+            loss = -self.coef * log_prob.mean()
+            policy.optimizer.zero_grad()
+            loss.backward()
+            _th.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
+            policy.optimizer.step()
+            losses.append(float(loss.item()))
+        self._updates += 1
+        self.logger.record("sil/updates", self._updates)
+        self.logger.record("sil/loss", sum(losses) / len(losses))
+
+
 class BackwardCallback(BaseCallback):
     """Backward-algorithm walk-back (Go-Explore phase 2), per-chain.
 
@@ -317,6 +416,9 @@ def main():
                     help="torch device (auto = cuda if available). Hardcoded "
                          "cuda used to make recovery on a GPU-less host fail "
                          "confusingly.")
+    ap.add_argument("--sil-coef", type=float, default=0.1,
+                    help="self-imitation aux-loss coefficient on the policy's "
+                         "own successful episodes (0 disables; LSTM runs only)")
     args = ap.parse_args()
 
     import torch
@@ -388,6 +490,9 @@ def main():
                               save_path=os.path.join("artifacts/checkpoints", run_name),
                               name_prefix=run_name)
     callbacks = [ckpt, ClimbMetricsCallback()]
+    if args.sil_coef > 0 and args.lstm:
+        callbacks.append(SILCallback(coef=args.sil_coef))
+        print(f"[sil] self-imitation on successes, coef={args.sil_coef}")
     if args.backward_dir:
         import json as _json
         with open(bw_manifest) as _f:

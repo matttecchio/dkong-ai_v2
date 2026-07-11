@@ -94,6 +94,10 @@ class FakeDK(DonkeyKongEnv):
         st = dict(getattr(self, "_cur", BOTTOM))
         return self.responsive, st, b""
 
+    def _is_live(self, s0):
+        st = dict(getattr(self, "_cur", BOTTOM))
+        return self.responsive, st, b""
+
     def _read_obs(self):
         if self.crash_next_read:
             self.crash_next_read = False

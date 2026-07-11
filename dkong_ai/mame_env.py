@@ -85,6 +85,31 @@ class DonkeyKongEnv(gym.Env):
     # is_jumping-gated, and girder walking moves x. 6px ≈ two ratchet pulls.
     GLITCH_PX_MAX = 6
 
+    # Potential-based floor shaping (run 29): the floor "poverty trap" —
+    # honest play at the bottom nets negative expected reward because the
+    # crossing to the x=143 ladder pays nothing and risks death, so the
+    # policy prefers familiar exploits/camping (the ratchet survived 18h of
+    # -10 kills because nothing better existed). PBRS (Ng et al.) fills the
+    # trap without farmability: r += gamma*PHI(s') - PHI(s) telescopes, so
+    # loops/camping pay ~0 (gamma<1 gives a tiny anti-camping bleed) and
+    # only genuine crossing progress pays — once. PHI saturates once off
+    # the floor so climbing out never LOSES potential; height progress
+    # above is the milestone system's job.
+    PBRS_COEF = 0.04          # full crossing ~ +5 total
+    PBRS_GAMMA = 0.999        # must match training gamma
+    PBRS_FLOOR_H = 8          # "on the floor row" band
+    PBRS_LADDER_X = 143       # the legal first ladder
+
+    def _phi(self, s):
+        """Crossing-progress potential. State function only — no memory."""
+        if s.get("screen_id", 1) != 1 or not s.get("mario_y"):
+            return None                       # off-board/off-field: no term
+        height = max(0, self.BASE_Y - s["mario_y"])
+        prog = 128 - min(abs(s["mario_x"] - self.PBRS_LADDER_X), 128)
+        if height >= self.PBRS_FLOOR_H:
+            prog = 128                        # saturated once off the floor
+        return self.PBRS_COEF * prog
+
     # _p_curric is a class-level default (like P_NO_BARRELS). Override it by
     # setting an INSTANCE attribute on each constructed env (train.py does
     # this inside the make_env thunk so it happens in the worker process).
@@ -680,8 +705,12 @@ class DonkeyKongEnv(gym.Env):
             return 0.0, False
         p = self._prev
         died = s["lives"] < p["lives"]
+        r_pbrs = 0.0
+        phi_s, phi_p = self._phi(s), self._phi(p)
+        if phi_s is not None and phi_p is not None:
+            r_pbrs = self.PBRS_GAMMA * phi_s - phi_p
         cleared = s["screen_id"] > p["screen_id"]
-        r = 0.0
+        r = r_pbrs
         if not died and not cleared:
             if s["mario_y"]:
                 height = self.BASE_Y - s["mario_y"]
@@ -1084,10 +1113,12 @@ class DonkeyKongEnv(gym.Env):
             # Handover is randomized (drop a random 0..HANDOVER_JITTER
             # suffix): diversity along a proven-survivable path — the safe
             # replacement for the idle-jitter removed in 27j.
-            self.load_state_file(approach["anchor"])
-            ok, state, pix = self._is_responsive()
+            s0, _ = self.load_state_file(approach["anchor"])
+            self._ep_start_sta = approach["anchor"]
+            ok, state, pix = self._is_live(s0)
             if not ok:
                 self._bw_fallback_chain = ci
+                self._ep_start_sta = None
                 return None, None
             drop = int(self.np_random.integers(0, self.HANDOVER_JITTER + 1))
             acts = approach["acts"]
@@ -1097,9 +1128,11 @@ class DonkeyKongEnv(gym.Env):
             self._pending_approach = list(acts[:max(1, len(acts) - drop)])
             self._bw_start = (ci, pos, n, cell["height"])
             return state, pix
-        self.load_state_file(cell["sta"])
-        ok, state, pix = self._is_responsive()
+        s0, _ = self.load_state_file(cell["sta"])
+        self._ep_start_sta = cell["sta"]
+        ok, state, pix = self._is_live(s0)
         if not ok:
+            self._ep_start_sta = None
             # Attribute the fallback: the episode silently becomes a bottom
             # start, and per-chain fallback rates are invisible without this
             # (floor chains drew 23 eps/h instead of ~350 — WC states are
@@ -1116,10 +1149,34 @@ class DonkeyKongEnv(gym.Env):
             state, pix = self._exchange(0xE0 + idx)
         return self._hold(self.A_NOOP, 2)
 
+    def _is_live(self, s0):
+        """Frozen-snapshot check WITHOUT driving Mario: advance 2 NOOP
+        exchanges and confirm the WORLD moves (any barrel/fireball position
+        changes). The old input-response probe walked Mario blindly into
+        traffic — at floor-band cells a barrel reaches the spawn inside the
+        probe window on fixed RNG, so the probe itself died on ~85% of
+        floor-chain loads (run 28g doom-triage: wc_011 probe-suicide 4/4).
+        Static pre-checks: Mario alive (0x6200==1) and on-field (y!=0).
+        Returns (ok, state, pix)."""
+        if not s0.get("mario_y") or s0.get("is_dead", 1) != 1:
+            return False, s0, b""
+        dyn = [f"barrel{i}_{a}" for i in range(6) for a in ("x", "y")] + \
+              [f"fireball{i}_{a}" for i in range(5) for a in ("x", "y")]
+        st, pix = self._exchange(self.A_NOOP)
+        for _ in range(2):
+            st2, pix = self._exchange(self.A_NOOP)
+            if any(st2.get(k, 0) != st.get(k, 0) for k in dyn):
+                return True, st2, pix
+            st = st2
+        return False, st, pix
+
     def _is_responsive(self):
         """Probe whether Mario actually responds to input (some curriculum
         snapshots caught a mid-transition frozen frame). Mixed inputs cover both
-        on-girder (L/R move x) and on-ladder (U moves y). Returns (ok, state, pix)."""
+        on-girder (L/R move x) and on-ladder (U moves y). Returns (ok, state, pix).
+        NOTE: curriculum loads use _is_live instead (this probe walks Mario
+        into traffic — probe-suicide at floor cells); this remains for the
+        bottom-start controllability check and offline tooling."""
         s0, pix = self._exchange(self.A_NOOP)
         x0, y0 = s0["mario_x"], s0["mario_y"]
         st = s0
@@ -1200,17 +1257,27 @@ class DonkeyKongEnv(gym.Env):
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
+        self._ep_acts = []                   # executed-action log (success record)
         self._forced_actions = []            # approach replay queue (see reset)
         self._approach_len = 0               # this episode's forced-approach length
+        # Success recording (run 29): executed-action log + start descriptor.
+        # A successful curriculum episode is fully reproducible offline
+        # (fixed .sta + recorded acts, no jitter on curriculum loads), which
+        # makes every rare win harvestable: SIL replay data, new curriculum
+        # rungs, and approach bytes — see harvest_successes.py.
+        self._ep_acts: list[int] = []
+        self._ep_start_sta: str | None = None   # .sta this episode loaded
+        self._last_exec = 0                  # action actually executed this step
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         self._start_type = "bottomup"
         self._bw_start = None
-        # Reset here, NOT in _begin_episode: it's set during
+        # Reset here, NOT in _begin_episode: these are set during
         # _load_backward_start, which runs before _begin_episode (the
         # per-episode-state ordering trap, §12 of HANDOFF — third time).
         self._bw_fallback_chain = -1
+        self._ep_start_sta = None
         try:
             if self._proc is None:           # first reset: launch persistent MAME
                 self._launch_mame()
@@ -1356,6 +1423,9 @@ class DonkeyKongEnv(gym.Env):
                 # Chain whose curriculum load fell back to a bottom start
                 # this episode (-1 = no fallback): per-chain flakiness rates.
                 "bw_fallback_chain": self._bw_fallback_chain,
+                # Action actually EXECUTED this step (forced-approach/burn-in
+                # may override the agent's choice) — SIL must imitate this.
+                "exec_action": self._last_exec,
                 # Internal difficulty (1-5, tracked-only): curriculum states
                 # inherit game time from their phase-1 trajectories, so deep
                 # cells start at HIGHER difficulty than the bottom start —
@@ -1372,6 +1442,8 @@ class DonkeyKongEnv(gym.Env):
         elif self._burnin_left > 0:          # LSTM spawn burn-in (see reset)
             self._burnin_left -= 1
             action = 0                       # ACTIONS[0] = noop
+        self._last_exec = int(action)
+        self._ep_acts.append(int(action))
         try:
             self._sock.sendall(bytes([ACTIONS[int(action)]]))
             ram, pix = self._read_obs()
@@ -1393,7 +1465,37 @@ class DonkeyKongEnv(gym.Env):
         self._max_screen = max(self._max_screen, state["screen_id"])
         obs = self._preprocess(pix, state)   # uses self._prev (old) for vx/vy/fall-zone
         self._prev = state
+        if terminated:
+            self._maybe_record_success(state)
         return obs, reward, terminated, False, self._info(state)
+
+    def _maybe_record_success(self, state):
+        """Append a reproducible success record (start .sta + executed acts)
+        to logs/successes/dk_<port>.jsonl. Curriculum successes replay
+        deterministically (fixed-RNG .sta, no jitter, forced prefixes are in
+        the act log); bottom starts are flagged approximate (reset jitter is
+        not in the log). Harvested offline by harvest_successes.py into SIL
+        food, new rungs, and approach bytes."""
+        if self._no_barrels or self._glitch_kill or len(self._ep_acts) > 1500:
+            return
+        cleared = int(self._max_screen > 1)
+        gain = max(0, self.BASE_Y - self._min_y) - max(
+            0, self.BASE_Y - (self._start_y or self.BASE_Y))
+        curric = self._start_type == "curriculum"
+        if not (cleared or (curric and gain >= 40)):
+            return
+        rec = {"ts": time.time(), "port": self.port,
+               "start": (os.path.basename(self._ep_start_sta)
+                         if self._ep_start_sta else "bottom"),
+               "exact": bool(self._ep_start_sta),
+               "acts": list(self._ep_acts), "cleared": cleared, "gain": gain,
+               "bw": list(self._bw_start[:2]) if self._bw_start else None}
+        try:
+            os.makedirs("logs/successes", exist_ok=True)
+            with open(f"logs/successes/dk_{self.port}.jsonl", "a") as f:
+                f.write(json.dumps(rec) + "\n")
+        except OSError:
+            pass                       # recording must never kill training
 
     def close(self):
         if self._sock:

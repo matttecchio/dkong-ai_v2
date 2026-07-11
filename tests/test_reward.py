@@ -212,3 +212,47 @@ def test_glitch_guard_catches_ratchet():
         env._reward(s)
     assert killed, (
         f"ratchet not caught: {env._glitch_px}px accumulated, no kill")
+
+
+# ---- potential-based floor shaping (run 29) ----------------------------
+
+def _pbrs_env():
+    env = _make_env(reward_max_h=200)   # suppress milestone noise
+    env._glitch_px = 0
+    env._wp_hit = set(range(16)) | set(range(100, 116))  # waypoints + girders fired
+    env._visited = {(x, h) for x in range(16) for h in range(16)}  # no novelty
+    return env
+
+
+def test_pbrs_pays_crossing_progress():
+    """Moving toward the x=143 ladder on the floor pays ~coef per pixel."""
+    env = _pbrs_env()
+    p = _state(mario_y=239, mario_x=100)
+    s = _state(mario_y=239, mario_x=110)   # 10px closer to 143
+    env._prev = p
+    r, _ = env._reward(s)
+    assert r > 0.3, f"crossing progress should pay, got {r}"
+
+
+def test_pbrs_not_farmable_by_looping():
+    """There-and-back nets ~zero (telescoping): no oscillation income."""
+    env = _pbrs_env()
+    total = 0.0
+    for px, sx in ((100, 110), (110, 100)):
+        p = _state(mario_y=239, mario_x=px)
+        s = _state(mario_y=239, mario_x=sx)
+        env._prev = p
+        env._visited = {(sx // env.CELL, 0), (px // env.CELL, 0)}
+        r, _ = env._reward(s)
+        total += r
+    assert abs(total) < 0.05, f"loop should net ~0, got {total}"
+
+
+def test_pbrs_saturates_off_floor():
+    """Above the floor band, x-position no longer moves the potential."""
+    env = _pbrs_env()
+    p = _state(mario_y=180, mario_x=60)    # height 60: saturated
+    s = _state(mario_y=180, mario_x=100)
+    env._prev = p
+    r, _ = env._reward(s)
+    assert abs(r) < 0.05, f"off-floor x-moves should not pay PBRS, got {r}"
