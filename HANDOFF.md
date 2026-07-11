@@ -39,7 +39,13 @@ tolerate genuine no-win scenarios.
   honest floor = 0); **28e** APPROACH REPLAY (verified per-cell approach
   bytes force-executed at spawn: warm LSTM + correct phase + zero timer
   cost; `augment_approaches.py`) + two PROGRESS-GATED FLOOR CHAINS (WC
-  cells h0-51, +40px gate — the first direct floor curriculum).
+  cells h0-51, +40px gate — the first direct floor curriculum);
+  **28f** 20 envs (REVERTED: 343 fps < 400 — contention beat batching);
+  **28g** approach fixes from first live data (approach 1% vs clean-spawn
+  67% on c446_d5): approach draws COIN-FLIP with the burn-in path (never
+  monopolize), dense13 stripped to 14 approaches with real ascending
+  motion (descent + stationary filters now native to the augmenter),
+  `bw_fallback_chain` CSV column for per-chain load-fallback rates.
   Dials: lr 1e-4, ent 0.01, p_curric 0.8, thresh 0.3, `backward_dense13`
   (14 chains), governor 0.40/0.48, levels in `<backward-dir>/levels.json`.
 - **Standing diagnostic rules** (proven this week, run by the monitoring
@@ -135,7 +141,7 @@ kill -SIGTERM $(cat logs/run_current.pid)   # saves ppo_dkong_run28_last.zip
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
 # TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
-# Open http://localhost:6006 in Windows browser. Run 28e = RecurrentPPO_55.
+# Open http://localhost:6006 in Windows browser. Run 28g = RecurrentPPO_57.
 
 # Daily scoreboard (honest floor + key cells; ~20 min on port 5100):
 .venv/bin/python -m dkong_ai.eval_battery --rom-dir ./roms --model <newest>
@@ -383,15 +389,23 @@ that the new objective has been learned.
   whole passed window. Uncapped windows starved per-cell maintenance
   (~50%/level of chain draws → tiers gated at 0.31 decayed to 0-13%; the
   hollow tower, §11b).
-- **Approach replay (run 28e+)**: cells carrying an `approach` entry (from
-  `augment_approaches.py` — replay-verified anchor + action indices) load
-  the mid-leg anchor instead and `step()` FORCE-EXECUTES the proven arrival
-  actions before handing control over (`HANDOVER_JITTER=6` random suffix
-  drop = diversity along a proven-survivable path). Warm LSTM + correct
-  traffic phase + zero bonus-timer cost. Ordering trap (hit twice — burn-in
-  28c, approach 28e): anything set during a curriculum load must be stashed
-  and applied AFTER `_begin_episode`, which zeroes per-episode state.
-  `approach_len` CSV column attributes episodes.
+- **Approach replay (run 28e+, fixed 28g)**: cells carrying an `approach`
+  entry (from `augment_approaches.py` — replay-verified anchor + action
+  indices) MAY load the mid-leg anchor instead and `step()` FORCE-EXECUTES
+  the proven arrival actions before handing control over
+  (`HANDOVER_JITTER=6` random suffix drop = diversity along a
+  proven-survivable path). Warm LSTM + correct traffic phase + zero
+  bonus-timer cost. THREE hard-won rules: (1) approach draws are a
+  COIN-FLIP with the burn-in path — any spawn mode that monopolizes draws
+  lets one bad artifact starve a cell's gate (c446_d5: approach 1% vs
+  clean 67%, 0 gates while monopolized); (2) approaches must have real
+  ASCENDING MOTION — the augmenter drops descending (downward-momentum
+  handover) and stationary (<8px displacement = pure delay = phase doom)
+  candidates, which are common archive truth (the explorer idled/wandered
+  before snapshots); (3) the ordering trap (hit twice — burn-in 28c,
+  approach 28e): anything set during a curriculum load must be stashed and
+  applied AFTER `_begin_episode`, which zeroes per-episode state.
+  `approach_len` + `bw_fallback_chain` CSV columns attribute episodes.
 - **Progress-gated chains (run 28e+)**: a manifest chain with
   `"gate": "progress"` gates on `max_height - start_height >= 40px`
   instead of clears (BackwardCallback.PROGRESS_PX). Makes LOW cells usable
@@ -454,7 +468,9 @@ that the new objective has been learned.
 | 28b | lr 1e-4 (solo hot-lr test) | ~1h | — | retracted | 0 | approved after 5h frontier flatline; clip warm but outcomes positive throughout |
 | 28c | stochastic 50/50 burn-in (film #3 + beeline probe: fixed 8-step burn-in = phase doom on fixed-RNG cells) | ~14M | 192 | retracted | 0 | WC chains unlocked in 2h (0→level 4); "floor breakout" 10→40... |
 | 28d | **cumulative glitch guard** (film #4: streak guard ratchet-evaded; 100% of floor height was stub glitch) | ~3M | — | **honest floor = 0** | 0 | ALL prior floor metrics retracted; 80% of bottomups die to guard while unlearning |
-| **28e** | **approach replay** (27 verified cells) + **progress-gated floor chains** (first direct floor curriculum) | **active** | — | 0 (rebuilding honestly) | 0 | three-way attribution live: approach vs clean-spawn vs burn-in |
+| 28e | **approach replay** (27 verified cells) + **progress-gated floor chains** (first direct floor curriculum) | ~3h | — | 0 (rebuilding honestly) | 0 | first live data: approach monopolized spawns and one stationary approach starved c446_d5 (1% vs 67% clean) |
+| 28f | 20 envs (speed lever) | ~1.5h | — | — | 0 | 343 fps < 400 baseline — reverted; floor chains drew 23/h vs ~350 expected (fallback flakiness, now instrumented) |
+| **28g** | approach coin-flip share + descent/stationary filters (14 approaches remain) + 16 envs + `bw_fallback_chain` | **active** | — | 0 (rebuilding honestly) | 0 | c446_d5 clean spawns at 67% vs 0.31 gate — chains 4/11 should advance fast |
 
 ---
 
