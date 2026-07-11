@@ -97,7 +97,14 @@ class DonkeyKongEnv(gym.Env):
     # above is the milestone system's job.
     PBRS_COEF = 0.04          # full crossing ~ +5 total
     PBRS_GAMMA = 0.999        # must match training gamma
-    PBRS_FLOOR_H = 8          # "on the floor row" band
+    # Floor band height. NOT 8 (external review round 5, real bug): the
+    # floor girder SLOPES — Mario stands at h~6 on the right end but h~16
+    # at the x=143 ladder base — so an 8px band saturated the potential a
+    # third of the way into the crossing and the shaping was inert exactly
+    # where it mattered. 25 covers the whole slope (and CORNER_H_MAX);
+    # the potential still saturates a few px up the ladder, where the
+    # milestone system takes over.
+    PBRS_FLOOR_H = 25
     PBRS_LADDER_X = 143       # the legal first ladder
 
     def _phi(self, s):
@@ -184,7 +191,7 @@ class DonkeyKongEnv(gym.Env):
         self._ladder_map = self._build_ladder_map()  # static; barrel board never changes
 
         # Dict obs: "image" = 84×84×2 (pixels + threat/ladder/fall-zone map, stacked ×n
-        # by DkFrameStackWrapper); "ram" = 74 normalised RAM features giving
+        # by DkFrameStackWrapper); "ram" = 75 normalised RAM features giving
         # explicit barrel/fireball/hammer positions, velocities, edge proximity,
         # and barrel type flags (crazy/wild, blue).
         self.observation_space = spaces.Dict({
@@ -1257,7 +1264,6 @@ class DonkeyKongEnv(gym.Env):
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
-        self._ep_acts = []                   # executed-action log (success record)
         self._forced_actions = []            # approach replay queue (see reset)
         self._approach_len = 0               # this episode's forced-approach length
         # Success recording (run 29): executed-action log + start descriptor.
@@ -1265,7 +1271,7 @@ class DonkeyKongEnv(gym.Env):
         # (fixed .sta + recorded acts, no jitter on curriculum loads), which
         # makes every rare win harvestable: SIL replay data, new curriculum
         # rungs, and approach bytes — see harvest_successes.py.
-        self._ep_acts: list[int] = []
+        self._ep_acts: list[int] = []        # executed-action log
         # NB: _ep_start_sta is deliberately NOT cleared here — it is set by
         # _load_backward_start, which runs BEFORE _begin_episode (the §12
         # ordering trap, FOURTH occurrence: this very line used to zero it

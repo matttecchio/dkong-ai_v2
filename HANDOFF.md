@@ -337,7 +337,7 @@ in TensorBoard) is also gated in `step()`.
 | Score | +0.003/pt | 0 < gain ≤ 2000; **gated out** when height<65 AND x>115 AND not moving left |
 | First-ladder climb | +0.30/step | **not jumping**, x=133-155, height=10-44, mario_y decreasing |
 | 2nd→3rd ladder climb | +0.30/step | **not jumping**, x=43-68, height=40-100, mario_y decreasing |
-| Top-ladder climb | +0.30/step | **not jumping**, x=137-160, height=138-192, mario_y decreasing |
+| Top-ladder climb | +0.50/step | **not jumping**, x=137-160, height=138-200, mario_y decreasing |
 | 2nd-girder traverse | +0.05/pixel | moving left, height=36-65, x=53-143 |
 | 5th-girder traverse | +0.05/pixel | moving right, height=140-158, x=67-147 |
 
@@ -352,7 +352,7 @@ in TensorBoard) is also gated in `step()`.
 | Corner penalty | −0.20/step | height<25 AND (x<30 OR x>160) |
 | First-ladder idle | −0.05/step | **not jumping**, x=133-155, height=10-44, mario_y unchanged |
 | 2nd→3rd ladder idle | −0.05/step | **not jumping**, x=43-68, height=40-100, mario_y unchanged |
-| Top-ladder idle | −0.05/step | **not jumping**, x=137-160, height=138-192, mario_y unchanged |
+| Top-ladder idle | −0.15/step | **not jumping**, x=137-160, height=138-200, mario_y unchanged |
 | Hammer-at-wall | −0.05/step | has_hammer AND x<45 AND height>25 |
 
 ---
