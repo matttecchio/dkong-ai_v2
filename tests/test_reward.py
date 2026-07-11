@@ -179,3 +179,36 @@ def test_hammer_wall_penalty_fires_when_score_is_none():
     diff = reward_with(1) - reward_with(0)
     assert abs(diff + DonkeyKongEnv.HAMMER_WALL_COST) < 1e-9, (
         f"hammer-wall penalty missing/wrong when score=None: diff={diff}")
+
+
+def test_glitch_guard_catches_ratchet():
+    """Climb-pause-climb on the broken stub must still trigger the guard.
+    The old 3-consecutive-streak guard reset on every pause; a trajectory
+    audit (2026-07-11) showed 20/20 bottom-up episodes ratcheting 100% of
+    their height through the x=99 stub with only one guard kill. The guard
+    now accumulates pixels per episode."""
+    env = _make_env()
+    env._glitch_px = 0
+    env._glitch_kill = False
+    y = 220
+    killed = False
+    for pull in range(4):                      # 4x (climb 2px, pause)
+        for _ in range(2):                     # 2 climb steps of 1px
+            p = _state(mario_y=y, mario_x=99)
+            p["is_dead"] = 1
+            s = _state(mario_y=y - 1, mario_x=99)
+            s["is_dead"] = 1
+            env._prev = p
+            r, done = env._reward(s)
+            y -= 1
+            if done and env._glitch_kill:
+                killed = True
+        # pause step: y unchanged (streak-reset bait for the old guard)
+        p = _state(mario_y=y, mario_x=99)
+        p["is_dead"] = 1
+        s = _state(mario_y=y, mario_x=99)
+        s["is_dead"] = 1
+        env._prev = p
+        env._reward(s)
+    assert killed, (
+        f"ratchet not caught: {env._glitch_px}px accumulated, no kill")

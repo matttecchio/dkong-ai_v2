@@ -79,6 +79,12 @@ class DonkeyKongEnv(gym.Env):
         (147,  48, 100),  # top section to Pauline
     ]
 
+    # Max cumulative off-ladder climb pixels per episode before the glitch
+    # guard kills (see the guard in _reward). Legal play never accumulates
+    # any: complete-ladder climbing is envelope-exempt, jump arcs are
+    # is_jumping-gated, and girder walking moves x. 6px ≈ two ratchet pulls.
+    GLITCH_PX_MAX = 6
+
     # _p_curric is a class-level default (like P_NO_BARRELS). Override it by
     # setting an INSTANCE attribute on each constructed env (train.py does
     # this inside the make_env thunk so it happens in the worker process).
@@ -834,12 +840,16 @@ class DonkeyKongEnv(gym.Env):
                 and not any(abs(s["mario_x"] - lx) <= 6
                             and yt - 6 <= s["mario_y"] <= yb + 6
                             for lx, yt, yb in self.COMPLETE_LADDERS)):
-            self._glitch_streak += 1
-            if self._glitch_streak >= 3:
+            # CUMULATIVE pixels, not consecutive steps (fixed 2026-07-11,
+            # film review #4): the old 3-consecutive-streak guard reset on
+            # every pause, so the policy learned a climb-pause-climb RATCHET
+            # — a trajectory audit showed 100% of bottom-up height gain
+            # coming from the x=99 stub in 20/20 episodes, only 1 of which
+            # tripped the streak guard. Pausing must not launder the climb.
+            self._glitch_px += p["mario_y"] - s["mario_y"]
+            if self._glitch_px >= self.GLITCH_PX_MAX:
                 glitch_killed = True
                 self._glitch_kill = True
-        else:
-            self._glitch_streak = 0
         if glitch_killed:
             r -= 10.0
         if died:
@@ -1111,7 +1121,7 @@ class DonkeyKongEnv(gym.Env):
         self._visited = set()                # novelty bonus: cells seen this episode
         self._wp_hit = set()                 # waypoint milestones fired this episode
         self._episode_steps = 0              # for height-timeout termination
-        self._glitch_streak = 0              # consecutive off-ladder climb steps
+        self._glitch_px = 0                  # cumulative off-ladder climb pixels
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
