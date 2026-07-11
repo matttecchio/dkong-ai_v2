@@ -25,18 +25,31 @@ tolerate genuine no-win scenarios.
 - **Full pipeline works and is robust**: MAME `dkong` driven from Python, a
   Gymnasium env over a socket bridge, RecurrentPPO (LSTM) on pixels+RAM, reward
   from RAM. 16 parallel envs, ~500–600 fps, runs overnight with 0 crashes.
-- **Run 28 ACTIVE** (TB `RecurrentPPO_51`, launched 2026-07-10): the
-  **capacity bundle** — LSTM 256→512, RAM MLP 64→128, difficulty in obs
-  (RAM 75), spawn burn-in (8 forced NOOPs at curriculum starts below h172),
-  rehearsal capped to the 8 tiers above the frontier, `backward_dense12`
-  (WC slots deduped 5→2; explorer chains 6/7/9 duplicated into the freed
-  slots), CNN transferred / heads fresh / **levels reset**. Motivated by the
-  **hollow-tower diagnosis** (§11b, 2026-07-10): all 12 chain frontiers had
-  converged on one establishment shelf (h163-168, 1.5-3% over ~1k draws
-  each) while previously-gated tiers decayed to 0-13% — interference at
-  small net size + rehearsal starvation from uncapped windows. Dials:
-  lr 5e-5, ent 0.01, p_curric 0.8, thresh 0.3, frontier share 0.5,
-  governor 0.40/0.48, levels persist in `<backward-dir>/levels.json`.
+- **Run 28e ACTIVE** (TB `RecurrentPPO_55`, launched 2026-07-11): the run-28
+  line is the **capacity bundle** (LSTM 512, RAM MLP 128, difficulty in obs
+  = RAM 75, rehearsal cap K=8, CNN transferred / heads fresh / levels
+  reset) plus, in order: **28b** lr 5e-5→1e-4 (solo hot-lr test — all 12
+  frontiers flat 0-1% on 12h-old heads; guardrail: clip>0.25 sustained →
+  revert); **28c** stochastic 50/50 {0,8} spawn burn-in (film review #3 +
+  beeline probe PROVED the fixed 8-step burn-in phase-shifted runs into
+  deterministic traffic doom on fixed-RNG cells — the policy already knew
+  the routes); **28d** CUMULATIVE glitch guard (film review #4: the
+  3-consecutive-streak guard was ratchet-evaded — 100% of ALL bottom-up
+  height was x=99 stub glitch; **every prior floor metric is retracted**,
+  honest floor = 0); **28e** APPROACH REPLAY (verified per-cell approach
+  bytes force-executed at spawn: warm LSTM + correct phase + zero timer
+  cost; `augment_approaches.py`) + two PROGRESS-GATED FLOOR CHAINS (WC
+  cells h0-51, +40px gate — the first direct floor curriculum).
+  Dials: lr 1e-4, ent 0.01, p_curric 0.8, thresh 0.3, `backward_dense13`
+  (14 chains), governor 0.40/0.48, levels in `<backward-dir>/levels.json`.
+- **Standing diagnostic rules** (proven this week, run by the monitoring
+  protocol): DOOM TRIAGE — any frontier cell at 0% over 500+ clean-spawn
+  draws gets a scripted beeline probe (clears = policy problem, train on;
+  all-die = retire/re-mine the cell); FILM PIPELINE — any frontier flat
+  >6h gets a `film_cells.py` reel for human review. Two film reviews found
+  two self-built walls in two days (burn-in phase doom; guard ratchet).
+- **Scoreboard**: `eval_battery.py` daily (bottom-up det+stoch clean
+  means + key-cell probes split by burnin/approach) → logs/battery/.
 - **Deployment is scripted**: `scripts/current_launch.sh` is THE canonical
   launch command (edit dials there only); `scripts/auto_resume.sh` relaunches
   from the newest checkpoint after a reboot/crash (guards: `.maintenance`
@@ -59,14 +72,17 @@ tolerate genuine no-win scenarios.
   `height_best`, `height_mean`, or the height milestone reward. Per-episode
   audit trail: `logs/episodes/dk_<port>.monitor.csv` (start_y, start_screen,
   end_screen, bw_pos, no_barrels) — check any surprising aggregate there first.
-- **Bottom-up with live barrels: still 0 honest clears** (~400M+ steps).
-  Clean bottom-up floor (glitch-kills excluded — judge the floor ONLY by
-  this) hit an all-time record 48.6 the morning run 28 launched. The
-  establishment-wall signature to know: curriculum spawn → ~9s dodge-in-
-  place → death with ZERO height gain, while the same policy clears 90-100%
-  from cells a girder higher and two same-height snapshots can differ 77%
-  vs 2% — an LSTM cold-drop problem (hence run 28's spawn burn-in), not a
-  route or timer problem (both exonerated by per-cell CSV audits, §11b).
+- **Bottom-up with live barrels: still 0 honest clears** (~430M+ steps) —
+  and as of 2026-07-11 the honest floor is **0**: a trajectory audit
+  (film review #4) showed 100% of all bottom-up height gain came through
+  the x=99 broken-stub ratchet, so every historical floor number
+  (including the old line's 38-48 "honest band") was glitch-inflated.
+  Real floor skill is being built for the first time by the progress-gated
+  floor chains. Mid-tower competence is real and verified per-cell.
+  The establishment-wall signature to know: curriculum spawn → ~9s
+  dodge-in-place → death with ZERO height gain — an LSTM cold-drop +
+  traffic-phase problem, now addressed by approach replay (verified
+  arrival context) with stochastic burn-in as the fallback.
 
 ---
 
@@ -119,7 +135,17 @@ kill -SIGTERM $(cat logs/run_current.pid)   # saves ppo_dkong_run28_last.zip
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
 # TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
-# Open http://localhost:6006 in Windows browser. Run 28 = RecurrentPPO_51.
+# Open http://localhost:6006 in Windows browser. Run 28e = RecurrentPPO_55.
+
+# Daily scoreboard (honest floor + key cells; ~20 min on port 5100):
+.venv/bin/python -m dkong_ai.eval_battery --rom-dir ./roms --model <newest>
+
+# Film a reel of stuck cells for human review:
+.venv/bin/python -m dkong_ai.film_cells --rom-dir ./roms --model <newest> \
+    --cells 4:40,11:40 --eps 5 --avi reel.avi   # then ffmpeg -> mp4
+
+# Augment a manifest with verified approach bytes (dense12 -> dense13 was):
+.venv/bin/python -m dkong_ai.augment_approaches --src <dir> --out <dir>
 ```
 
 ⚠️ Eval/diag always use `--port 5100` to avoid colliding with training (5000+).
@@ -357,6 +383,21 @@ that the new objective has been learned.
   whole passed window. Uncapped windows starved per-cell maintenance
   (~50%/level of chain draws → tiers gated at 0.31 decayed to 0-13%; the
   hollow tower, §11b).
+- **Approach replay (run 28e+)**: cells carrying an `approach` entry (from
+  `augment_approaches.py` — replay-verified anchor + action indices) load
+  the mid-leg anchor instead and `step()` FORCE-EXECUTES the proven arrival
+  actions before handing control over (`HANDOVER_JITTER=6` random suffix
+  drop = diversity along a proven-survivable path). Warm LSTM + correct
+  traffic phase + zero bonus-timer cost. Ordering trap (hit twice — burn-in
+  28c, approach 28e): anything set during a curriculum load must be stashed
+  and applied AFTER `_begin_episode`, which zeroes per-episode state.
+  `approach_len` CSV column attributes episodes.
+- **Progress-gated chains (run 28e+)**: a manifest chain with
+  `"gate": "progress"` gates on `max_height - start_height >= 40px`
+  instead of clears (BackwardCallback.PROGRESS_PX). Makes LOW cells usable
+  as curriculum — a clear-gate from h20 could never advance. Floor chains
+  (slots 12/13) are WC cells h0-51 ordered BOTTOM-FIRST so level 0 drills
+  the floor traffic-crossing immediately.
 - **Barrel-freeze training wheels** (`P_NO_BARRELS`, run 26: **0.0**):
   bridge `0xF8` command zeroes all barrel/fireball status bytes each frame.
   Currently OFF — all episodes have live barrels.
@@ -409,7 +450,11 @@ that the new objective has been learned.
 | **27d** | **single-life episodes (`done = died or ...`)** | 3.2M | — | ~43 honest | **level 3 in 2M steps** | multi-life episodes were the phase-2 wall; walk-back moving |
 | 27e-27aj | per-chain frontier gating, dense3-11, obs 62→74, level-reset rule, WC chain, 000-timer pruning, film-review fixes | ~2 weeks | 193 | floor 3.4→48.6 clean | curric ≤0.24; bottomup 0 | full story §11b; ended in the hollow-tower stall |
 | 27ak | crash recovery (WSL reboot #2), auto-resume infra | 14.1M | 192 | floor 47-48.6 record | 0 | stable but 3 advances/night — tower stalled at the h163-168 shelf |
-| **28** | **capacity bundle**: LSTM 512, RAM 128, difficulty obs (75), spawn burn-in, rehearsal cap, dense12, levels reset | **active** | — | — | — | 53 advances in first 35 min; capacity test = passing the shelf |
+| 28 | **capacity bundle**: LSTM 512, RAM 128, difficulty obs (75), spawn burn-in, rehearsal cap, dense12, levels reset | 20M | 192 | retracted | 0 | tower rebuilt (63 gates day 1); retention PERFECT (hollow tower cured); frontiers then flat 0-1% at 12h |
+| 28b | lr 1e-4 (solo hot-lr test) | ~1h | — | retracted | 0 | approved after 5h frontier flatline; clip warm but outcomes positive throughout |
+| 28c | stochastic 50/50 burn-in (film #3 + beeline probe: fixed 8-step burn-in = phase doom on fixed-RNG cells) | ~14M | 192 | retracted | 0 | WC chains unlocked in 2h (0→level 4); "floor breakout" 10→40... |
+| 28d | **cumulative glitch guard** (film #4: streak guard ratchet-evaded; 100% of floor height was stub glitch) | ~3M | — | **honest floor = 0** | 0 | ALL prior floor metrics retracted; 80% of bottomups die to guard while unlearning |
+| **28e** | **approach replay** (27 verified cells) + **progress-gated floor chains** (first direct floor curriculum) | **active** | — | 0 (rebuilding honestly) | 0 | three-way attribution live: approach vs clean-spawn vs burn-in |
 
 ---
 
@@ -661,6 +706,31 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
 ---
 
 ## 12. Critical bugs fixed (do not reintroduce)
+
+### The glitch-guard ratchet: 100% of "honest" floor was stub glitch (fixed run 28d)
+
+The x=99 broken-stub guard killed on 3 CONSECUTIVE off-ladder climb steps —
+and reset the streak on any other step. The policy learned climb-pause-climb:
+a trajectory audit showed **100% of all bottom-up height gain in 20/20
+episodes** coming through the stub (through the broken gap to h62), with 1/20
+guard kills. Every floor metric ever celebrated — including the old line's
+38-48 "honest band" — was measuring ratchet skill. Found by the user in one
+film viewing after the metrics looked historically great.
+Fix: the guard accumulates `_glitch_px` per episode (`GLITCH_PX_MAX=6`);
+pausing no longer launders the climb. Lessons: (1) a guard the policy can
+pace around is not a guard; (2) metric filters that trust a beatable guard
+lie confidently; (3) when a long-stuck metric suddenly breaks out, audit the
+mechanism before celebrating — `climb_audit.py`-style x-zone attribution of
+every gained pixel is cheap.
+
+### Per-episode state set during curriculum loads gets zeroed (hit TWICE: 28c, 28e)
+
+`reset()` calls `_begin_episode(state)` late, and `_begin_episode` zeroes all
+per-episode fields (burn-in counters, forced-action queues). Anything decided
+during `_load_backward_start` must be STASHED (`_pending_approach` pattern)
+and applied after `_begin_episode`, guarded on `start_type=="curriculum"` so
+a mid-reset `_recover()` fallback can't inherit it. The burn-in draw (28c)
+and the approach queue (28e) both hit this exact trap.
 
 ### Old checkpoints don't load after capacity changes (fixed run 28, `7dea1c4`)
 
