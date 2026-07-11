@@ -267,6 +267,7 @@ def make_env(rom_dir, port, frameskip, backward_manifest=None,
                                       "start_y", "start_screen", "end_screen",
                                       "bw_pos", "bw_chain", "no_barrels",
                                       "glitch_kill", "burnin", "approach_len",
+                                      "bw_fallback_chain",
                                       "difficulty_start", "difficulty_end"))
     return _thunk
 

@@ -20,7 +20,7 @@ model="$1"
 log="$2"
 
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
-  --timesteps 100000000 --n-envs 20 \
+  --timesteps 100000000 --n-envs 16 \
   --save artifacts/ppo_dkong_run28 --logdir logs \
   --gamma 0.999 --ent-coef 0.01 --lr 1e-4 --n-epochs 3 \
   --stack 2 --p-no-barrels 0.0 --p-curric 0.8 \

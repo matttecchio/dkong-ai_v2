@@ -126,6 +126,23 @@ def main():
                 n_fail += 1
                 os.unlink(leg_anchor)
                 continue
+            # Direction/motion filters (run 28g, learned the hard way):
+            # a DESCENDING approach hands over with downward momentum and
+            # misleading context; a STATIONARY one is a pure delay — the
+            # phase-doom the beeline probe convicted (c446_d5: approach 1%
+            # vs clean-spawn 67% over 228 draws). Both are archive truth
+            # (the explorer wandered/idled) but terrible pedagogy.
+            st0, _ = env.load_state_file(anchor_src)
+            if st0["mario_y"] and st0["mario_y"] < cy - 4:
+                print(f"[augment] DROP descending approach {name}")
+                n_fail += 1
+                os.unlink(leg_anchor)
+                continue
+            if (abs(st0["mario_x"] - cx) + abs(st0["mario_y"] - cy)) < 8:
+                print(f"[augment] DROP stationary approach {name}")
+                n_fail += 1
+                os.unlink(leg_anchor)
+                continue
             # Replay 2 — MINT a mid-leg anchor so training feeds at most
             # APPROACH_MAX forced steps. (Fresh replay: a mid-run A_SAVE
             # costs ~7 extra exchanges and would desync replay 1's landing.)

@@ -124,6 +124,7 @@ class DonkeyKongEnv(gym.Env):
         self._bw_level = 0
         self._bw_levels: list[int] | None = None   # per-chain (preferred)
         self._bw_start: tuple | None = None
+        self._bw_fallback_chain = -1
         self._pending_approach: list | None = None   # set by _load_backward_start
         self._bottom_backup_ok = False   # bottom_<port>.sta from THIS instance
         if backward_manifest:
@@ -1043,7 +1044,12 @@ class DonkeyKongEnv(gym.Env):
             pos = int(self.np_random.integers(lo, hi + 1))
         cell = chain[pos]
         approach = cell.get("approach")
-        if approach:
+        # Approach draws are STOCHASTIC (run 28g): when the approach
+        # monopolized spawns, a single bad approach starved the cell of the
+        # clean spawns it could already clear (c446_d5: approach 1% over
+        # 228 draws vs clean 67% — the gate could never fire). Coin-flip
+        # keeps both modes flowing and the CSV split attributes them.
+        if approach and self.np_random.random() < 0.5:
             # APPROACH REPLAY (run 28e, film reviews #3/#4): instead of
             # cold-dropping the policy on the cell with a zeroed LSTM, load
             # the mid-leg anchor and FORCE the proven approach actions for
@@ -1056,6 +1062,7 @@ class DonkeyKongEnv(gym.Env):
             self.load_state_file(approach["anchor"])
             ok, state, pix = self._is_responsive()
             if not ok:
+                self._bw_fallback_chain = ci
                 return None, None
             drop = int(self.np_random.integers(0, self.HANDOVER_JITTER + 1))
             acts = approach["acts"]
@@ -1068,6 +1075,11 @@ class DonkeyKongEnv(gym.Env):
         self.load_state_file(cell["sta"])
         ok, state, pix = self._is_responsive()
         if not ok:
+            # Attribute the fallback: the episode silently becomes a bottom
+            # start, and per-chain fallback rates are invisible without this
+            # (floor chains drew 23 eps/h instead of ~350 — WC states are
+            # probe-flaky as a class and we couldn't see which).
+            self._bw_fallback_chain = ci
             return None, None
         self._bw_start = (ci, pos, n, cell["height"])
         return state, pix
@@ -1170,6 +1182,10 @@ class DonkeyKongEnv(gym.Env):
         super().reset(seed=seed)
         self._start_type = "bottomup"
         self._bw_start = None
+        # Reset here, NOT in _begin_episode: it's set during
+        # _load_backward_start, which runs before _begin_episode (the
+        # per-episode-state ordering trap, §12 of HANDOFF — third time).
+        self._bw_fallback_chain = -1
         try:
             if self._proc is None:           # first reset: launch persistent MAME
                 self._launch_mame()
@@ -1312,6 +1328,9 @@ class DonkeyKongEnv(gym.Env):
                 # Forced-approach length (0 = no approach replay): per-cell
                 # attribution for approach-replay vs burn-in episodes.
                 "approach_len": self._approach_len,
+                # Chain whose curriculum load fell back to a bottom start
+                # this episode (-1 = no fallback): per-chain flakiness rates.
+                "bw_fallback_chain": self._bw_fallback_chain,
                 # Internal difficulty (1-5, tracked-only): curriculum states
                 # inherit game time from their phase-1 trajectories, so deep
                 # cells start at HIGHER difficulty than the bottom start —
