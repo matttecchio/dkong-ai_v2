@@ -177,7 +177,13 @@ class DonkeyKongEnv(gym.Env):
         statedir = os.path.abspath(os.path.join(os.path.dirname(self.bridge),
                                                 "..", "artifacts", "states"))
         os.makedirs(statedir, exist_ok=True)
-        args = [self.mame_bin, "dkong",
+        # nice +10: the bridge's read_exact busy-spins a full core per MAME
+        # while waiting for the next action byte (no blocking read in MAME's
+        # Lua sandbox). Profiling (2026-07-11) shows the spin does NOT cap
+        # throughput (CNN-era runs hit 900 fps through it; current fps is
+        # model-side), but polite spinners keep the trainer's scheduling
+        # clean as env count grows.
+        args = ["nice", "-n", "10", self.mame_bin, "dkong",
                 "-rompath", os.path.abspath(self.rom_dir),
                 "-state_directory", statedir,   # shared: per-port + curriculum states
                 "-autoboot_script", self.bridge,
