@@ -1266,7 +1266,11 @@ class DonkeyKongEnv(gym.Env):
         # makes every rare win harvestable: SIL replay data, new curriculum
         # rungs, and approach bytes — see harvest_successes.py.
         self._ep_acts: list[int] = []
-        self._ep_start_sta: str | None = None   # .sta this episode loaded
+        # NB: _ep_start_sta is deliberately NOT cleared here — it is set by
+        # _load_backward_start, which runs BEFORE _begin_episode (the §12
+        # ordering trap, FOURTH occurrence: this very line used to zero it
+        # every episode, silently marking all success records inexact and
+        # starving the harvester). reset() clears it at the top instead.
         self._last_exec = 0                  # action actually executed this step
 
     def reset(self, *, seed=None, options=None):

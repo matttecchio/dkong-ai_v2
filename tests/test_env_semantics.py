@@ -134,6 +134,9 @@ def test_burnin_survives_begin_episode(env):
     env.pin_backward_cell(0, 1)     # cellB: no approach -> burn-in path
     obs, info = env.reset()
     assert env._start_type == "curriculum"
+    # Fourth ordering-trap victim: _begin_episode once wiped this, silently
+    # marking every success record inexact and starving the harvester.
+    assert env._ep_start_sta is not None
     assert env._burnin_left == env.BURN_IN_STEPS
     assert info["burnin"] == env.BURN_IN_STEPS
     env.sent.clear()
