@@ -48,12 +48,36 @@ tolerate genuine no-win scenarios.
   `bw_fallback_chain` CSV column for per-chain load-fallback rates.
   Dials: lr 1e-4, ent 0.01, p_curric 0.8, thresh 0.3, `backward_dense13`
   (14 chains), governor 0.40/0.48, levels in `<backward-dir>/levels.json`.
+- **Run 29 series = STAGE A of the "everything on the table" build**
+  (2026-07-12, all five strategic upgrades in one day, no obs changes):
+  **liveness probe** (curriculum loads check the WORLD moves — 2 NOOPs of
+  barrel motion + alive/on-field statics — instead of walking Mario into
+  traffic; floor-load fallbacks went 1,300/h → 0); **PBRS floor shaping**
+  (potential over crossing-progress toward the x=143 ladder, telescoping =
+  unfarmable — the poverty trap finally has a filler; ep_rew NOT comparable
+  to any prior run); **SIL** (self-imitation aux loss on the policy's own
+  successful episodes, LSTM-correct per-episode sequences; --sil-coef,
+  halved to 0.05 under the clip guardrail); **success recording** (every
+  honest win logged as start-.sta + executed actions = a deterministic
+  replay recipe, logs/successes/); **offline harvester**
+  (`harvest_successes.py`: replays recipes in a scratch MAME → new rungs +
+  approach bytes from the policy's own wins); **WC approach extraction**
+  (`extract_wc_approaches.py`: EXTRACT-mode .inp mining → the pro's actual
+  mid-stride inputs as approaches for 11 wc cells incl. 7 floor cells).
+  Floor chains rebuilt on verified-live cells (wc_011 was a mid-death-
+  tumble snapshot sitting as the frontier), frontier = wc_019 (h6,
+  approach-covered). Floor +40px is the live experiment; wc_019 certified
+  a GENUINE skill cell by beeline (dies to traffic identically with/without
+  delay — needs barrel-timed crossing, which is what the curriculum is for).
 - **Standing diagnostic rules** (proven this week, run by the monitoring
   protocol): DOOM TRIAGE — any frontier cell at 0% over 500+ clean-spawn
   draws gets a scripted beeline probe (clears = policy problem, train on;
   all-die = retire/re-mine the cell); FILM PIPELINE — any frontier flat
   >6h gets a `film_cells.py` reel for human review. Two film reviews found
   two self-built walls in two days (burn-in phase doom; guard ratchet).
+  NEW: any state that becomes a FRONTIER gets a load-probe first (a
+  frontier is 50% of a chain's draws; wc_011 poisoned the floor experiment
+  for a night).
 - **Scoreboard**: `eval_battery.py` daily (bottom-up det+stoch clean
   means + key-cell probes split by burnin/approach) → logs/battery/.
 - **Deployment is scripted**: `scripts/current_launch.sh` is THE canonical
@@ -141,7 +165,7 @@ kill -SIGTERM $(cat logs/run_current.pid)   # saves ppo_dkong_run28_last.zip
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
 # TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
-# Open http://localhost:6006 in Windows browser. Run 28g = RecurrentPPO_57.
+# Open http://localhost:6006 in Windows browser. Run 29d = RecurrentPPO_61.
 
 # Daily scoreboard (honest floor + key cells; ~20 min on port 5100):
 .venv/bin/python -m dkong_ai.eval_battery --rom-dir ./roms --model <newest>
@@ -152,6 +176,16 @@ kill -SIGTERM $(cat logs/run_current.pid)   # saves ppo_dkong_run28_last.zip
 
 # Augment a manifest with verified approach bytes (dense12 -> dense13 was):
 .venv/bin/python -m dkong_ai.augment_approaches --src <dir> --out <dir>
+
+# Harvest the policy's recorded wins into rungs + approaches (staging dir;
+# merge into the manifest deliberately):
+.venv/bin/python -m dkong_ai.harvest_successes --rom-dir ./roms \
+    --manifest-dir artifacts/backward_dense13 --out artifacts/harvest_N \
+    --rungs 100:170:8
+
+# Mine pro approaches for wc_* cells from the .inp:
+.venv/bin/python -m dkong_ai.extract_wc_approaches --rom-dir ./roms \
+    --manifest-dir artifacts/backward_dense13
 ```
 
 ⚠️ Eval/diag always use `--port 5100` to avoid colliding with training (5000+).
@@ -470,7 +504,11 @@ that the new objective has been learned.
 | 28d | **cumulative glitch guard** (film #4: streak guard ratchet-evaded; 100% of floor height was stub glitch) | ~3M | — | **honest floor = 0** | 0 | ALL prior floor metrics retracted; 80% of bottomups die to guard while unlearning |
 | 28e | **approach replay** (27 verified cells) + **progress-gated floor chains** (first direct floor curriculum) | ~3h | — | 0 (rebuilding honestly) | 0 | first live data: approach monopolized spawns and one stationary approach starved c446_d5 (1% vs 67% clean) |
 | 28f | 20 envs (speed lever) | ~1.5h | — | — | 0 | 343 fps < 400 baseline — reverted; floor chains drew 23/h vs ~350 expected (fallback flakiness, now instrumented) |
-| **28g** | approach coin-flip share + descent/stationary filters (14 approaches remain) + 16 envs + `bw_fallback_chain` | **active** | — | 0 (rebuilding honestly) | 0 | c446_d5 clean spawns at 67% vs 0.31 gate — chains 4/11 should advance fast |
+| 28g | approach coin-flip share + descent/stationary filters (14 approaches remain) + 16 envs + `bw_fallback_chain` | ~5h | — | 0 | 0 | "67%" was pooled small-n; c446_d5 truly ~2% — a real wall; fallback attribution found floor chains 85% flaky + chain 3 leaky |
+| 29 | **STAGE A**: liveness probe, PBRS, SIL 0.1, success recording, WC approaches | ~1.5h | — | 0 | 0 | two launch crashes fixed (import-os shadow; cudnn train-mode); 342 successes banked in minutes |
+| 29b | floor chains rebuilt on verified-live cells (wc_011 was a DEAD-Mario snapshot as frontier) | ~1h | — | 0 | 0 | floor loads FIXED: 0 fallbacks, 1,553 draws/h; +40px 0.00 (fresh skill) |
+| 29c | sil-coef 0.05 (clip guardrail: mean ~0.29 rising) | ~1h | — | 0 | 0 | wc_019 beeline: genuine skill cell (dies to traffic, delay-independent) |
+| **29d** | success-record fix (ordering trap #4: _begin_episode wiped the start descriptor — 0/3917 records "exact") | **active** | — | 0 (honest floor rebuilding) | 0 | harvest flywheel finally fed; first exact records confirmed |
 
 ---
 
@@ -739,14 +777,20 @@ lie confidently; (3) when a long-stuck metric suddenly breaks out, audit the
 mechanism before celebrating — `climb_audit.py`-style x-zone attribution of
 every gained pixel is cheap.
 
-### Per-episode state set during curriculum loads gets zeroed (hit TWICE: 28c, 28e)
+### Per-episode state set during curriculum loads gets zeroed (hit FOUR times)
 
 `reset()` calls `_begin_episode(state)` late, and `_begin_episode` zeroes all
 per-episode fields (burn-in counters, forced-action queues). Anything decided
 during `_load_backward_start` must be STASHED (`_pending_approach` pattern)
 and applied after `_begin_episode`, guarded on `start_type=="curriculum"` so
-a mid-reset `_recover()` fallback can't inherit it. The burn-in draw (28c)
-and the approach queue (28e) both hit this exact trap.
+a mid-reset `_recover()` fallback can't inherit it. Victims: the burn-in draw
+(28c), the approach queue (28e), `_bw_fallback_chain` (avoided pre-emptively,
+28g), and `_ep_start_sta` (29d — WORSE: the wiping line was added BY the
+same feature, because `__init__` and `_begin_episode` contain identical
+anchor lines and the edit landed in the wrong one; 0/3,917 success records
+were usable before it was caught). When adding per-episode attributes,
+verify WHICH function the anchor lives in, initialize load-time-set fields
+at the TOP of `reset()`, and add a semantics test asserting survival.
 
 ### Old checkpoints don't load after capacity changes (fixed run 28, `7dea1c4`)
 
