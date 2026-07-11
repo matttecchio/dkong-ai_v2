@@ -27,6 +27,18 @@ from .eval import _load_model
 KEY_CELLS = "0:57,4:41,9:44"   # wc_154, a1_c446_d21, a1_c457_d4 (2026-07-10)
 
 
+def wilson(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score interval for a binomial rate — honest bounds at the
+    small n and rare-event rates this battery deals in."""
+    if n == 0:
+        return (0.0, 1.0)
+    p = successes / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = (z / denom) * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5)
+    return (round(max(0.0, centre - half), 3), round(min(1.0, centre + half), 3))
+
+
 def run_episode(venv, model, is_lstm, deterministic, max_steps=1200):
     obs = venv.reset()
     lstm_state, ep_start = None, np.ones((1,), dtype=bool)
@@ -76,31 +88,36 @@ def main():
               "model": args.model, "seed": args.seed}
 
     # --- phase 1: bottom-up floor -------------------------------------
-    base._p_curric = 0.0
+    base.set_bottomup_eval()
     for label, det in (("det", True), ("stoch", False)):
         eps = [run_episode(venv, model, is_lstm, det)
                for _ in range(args.bottomups // 2)]
         clean = [e for e in eps if not e["glitch"]]
-        hs = sorted(e["max_h"] for e in clean) or [0]
-        result[f"bottomup_{label}"] = {
-            "n": len(eps), "clean_n": len(clean),
-            "mean_h": round(float(np.mean(hs)), 1),
-            "median_h": hs[len(hs) // 2],
-            "clears": sum(e["cleared"] for e in eps),
-        }
-        print(f"bottomup {label}: clean mean {result[f'bottomup_{label}']['mean_h']}"
-              f" median {result[f'bottomup_{label}']['median_h']}"
-              f" clears {result[f'bottomup_{label}']['clears']}", flush=True)
+        clears = sum(e["cleared"] for e in eps)
+        entry = {"n": len(eps), "clean_n": len(clean), "clears": clears,
+                 "clear_ci": wilson(clears, len(eps))}
+        if clean:
+            hs = sorted(e["max_h"] for e in clean)
+            entry["mean_h"] = round(float(np.mean(hs)), 1)
+            entry["median_h"] = hs[len(hs) // 2]
+        else:
+            # No clean episodes: report null, never a masking 0.0 (a battery
+            # smoke run once printed "mean 0.0" that was really "no data").
+            entry["mean_h"] = entry["median_h"] = None
+            entry["clean_insufficient"] = True
+        result[f"bottomup_{label}"] = entry
+        print(f"bottomup {label}: clean mean {entry['mean_h']}"
+              f" median {entry['median_h']} clears {clears}"
+              f" ci={entry['clear_ci']}"
+              + (" CLEAN_INSUFFICIENT" if not clean else ""), flush=True)
 
     # --- phase 2: key cells through the training path ------------------
-    base._p_curric = 1.0
     result["cells"] = {}
     for spec in args.cells.split(","):
         ci, pos = (int(x) for x in spec.split(":"))
         cell = chains[ci][pos]
         name = os.path.basename(cell["sta"]).replace(".sta", "")
-        base._bw_chains = [[cell]]
-        base._bw_levels = [0]
+        base.pin_backward_cell(ci, pos)
         by_burnin = {}
         for _ in range(args.cell_eps):
             e = run_episode(venv, model, is_lstm, deterministic=False,
@@ -117,7 +134,7 @@ def main():
         print(f"cell {name}: " + " | ".join(
             f"burnin={b} n={len(v)} clear={sum(e['cleared'] for e in v)/len(v):.2f}"
             for b, v in sorted(by_burnin.items())), flush=True)
-        base._bw_chains = chains               # restore for next pin
+        base.unpin_backward()                  # restore for next pin
 
     venv.close()
     os.makedirs("logs/battery", exist_ok=True)

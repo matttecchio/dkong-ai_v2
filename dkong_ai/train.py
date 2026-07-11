@@ -313,7 +313,15 @@ def main():
                     help="curriculum episodes per walk-back decision")
     ap.add_argument("--bw-threshold", type=float, default=0.5,
                     help="clear rate needed to walk the start back one cell")
+    ap.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"],
+                    help="torch device (auto = cuda if available). Hardcoded "
+                         "cuda used to make recovery on a GPU-less host fail "
+                         "confusingly.")
     args = ap.parse_args()
+
+    import torch
+    dev = (("cuda" if torch.cuda.is_available() else "cpu")
+           if args.device == "auto" else args.device)
 
     # NOTE: do NOT set these as DonkeyKongEnv class attributes here — spawn
     # workers re-import the module and revert them. They travel to the
@@ -324,6 +332,27 @@ def main():
         bw_manifest = _os.path.abspath(
             _os.path.join(args.backward_dir, "manifest.json"))
         print(f"backward curriculum: {bw_manifest}")
+
+    # Run metadata beside the checkpoints: which code, dials, and curriculum
+    # produced this run (post-hoc archaeology has reconstructed these from
+    # session memory too many times — e.g. "which manifest was 28c on?").
+    import hashlib
+    import subprocess as _sp
+    import time as _time
+    try:
+        _sha = _sp.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                       text=True, timeout=5).stdout.strip() or "unknown"
+    except Exception:
+        _sha = "unknown"
+    _mhash = "none"
+    if bw_manifest and os.path.exists(bw_manifest):
+        _mhash = hashlib.sha256(open(bw_manifest, "rb").read()).hexdigest()
+    meta = {"ts": _time.strftime("%Y-%m-%d %H:%M:%S"), "git_sha": _sha,
+            "manifest_sha256": _mhash, "device": dev, "args": vars(args)}
+    with open(args.save + "_meta.json", "w") as f:
+        json.dump(meta, f, indent=1)
+    print(f"[meta] git {_sha[:10]} manifest {_mhash[:10]} device {dev} "
+          f"-> {args.save}_meta.json", flush=True)
 
     # Refuse to start on occupied bridge ports: the bridge is the socket
     # SERVER, so a second trainer's envs would silently connect to the FIRST
@@ -405,7 +434,7 @@ def main():
     if args.init_from:
         print(f"warm-starting from {args.init_from}")
         try:
-            model = AlgoClass.load(args.init_from, env=venv, device="cuda",
+            model = AlgoClass.load(args.init_from, env=venv, device=dev,
                                    tensorboard_log=args.logdir)
             model.verbose = 1
             model.ent_coef = args.ent_coef
@@ -424,9 +453,9 @@ def main():
                 n_steps=512, batch_size=256, n_epochs=args.n_epochs,
                 learning_rate=args.lr, gamma=args.gamma, gae_lambda=0.95,
                 clip_range=0.1, ent_coef=args.ent_coef,
-                tensorboard_log=args.logdir, verbose=1, device="cuda",
+                tensorboard_log=args.logdir, verbose=1, device=dev,
             )
-            old = AlgoClass.load(args.init_from, device="cuda")
+            old = AlgoClass.load(args.init_from, device=dev)
             old_sd = old.policy.state_dict()
             new_sd = model.policy.state_dict()
             filtered = {k: v for k, v in old_sd.items()
@@ -442,7 +471,7 @@ def main():
             n_steps=512, batch_size=256, n_epochs=args.n_epochs,
             learning_rate=args.lr, gamma=args.gamma, gae_lambda=0.95,
             clip_range=0.1, ent_coef=args.ent_coef,
-            tensorboard_log=args.logdir, verbose=1, device="cuda",
+            tensorboard_log=args.logdir, verbose=1, device=dev,
         )
         if args.transfer_features_from:
             # Copy features_extractor weights (CNN + RAM MLP) from any saved
@@ -457,7 +486,7 @@ def main():
             # run27_last unloadable). The zip's params need no skeleton.
             from stable_baselines3.common.save_util import load_from_zip_file
             _, _params, _ = load_from_zip_file(
-                args.transfer_features_from, device="cuda")
+                args.transfer_features_from, device=dev)
             src_sd = _params["policy"]
             tgt_sd = model.policy.state_dict()
             transferred = {k: v for k, v in src_sd.items()

@@ -121,6 +121,7 @@ class DonkeyKongEnv(gym.Env):
         # walking the start back toward the bottom. Supersedes the legacy
         # expert-demo curric_<idx> states.
         self._bw_chains: list[list[dict]] | None = None
+        self._bw_chains_all: list[list[dict]] | None = None  # pin/unpin API
         self._bw_level = 0
         self._bw_levels: list[int] | None = None   # per-chain (preferred)
         self._bw_start: tuple | None = None
@@ -1003,6 +1004,30 @@ class DonkeyKongEnv(gym.Env):
         return state, pix
 
     BW_REHEARSAL_CAP = 8   # rehearse only the K cells above the frontier
+
+    # ---- curriculum control API (eval_battery, film_cells, probes) -------
+    # Tooling used to mutate _bw_chains/_bw_levels/_p_curric directly, which
+    # is brittle (a smoke-test pin once grabbed the wrong cell) and easy to
+    # regress. These methods own the invariants; use them instead.
+
+    def pin_backward_cell(self, ci: int, pos: int):
+        """Restrict curriculum draws to exactly one cell (filming/probing).
+        The full chain set is preserved for unpin_backward()."""
+        if not hasattr(self, "_bw_chains_all") or self._bw_chains_all is None:
+            self._bw_chains_all = self._bw_chains
+        cell = self._bw_chains_all[ci][pos]
+        self._bw_chains = [[cell]]
+        self._bw_levels = [0]
+        self._p_curric = 1.0
+
+    def set_bottomup_eval(self):
+        """All episodes start from the bottom (honest-floor evaluation)."""
+        self._p_curric = 0.0
+
+    def unpin_backward(self):
+        """Restore the full chain set after pin_backward_cell()."""
+        if getattr(self, "_bw_chains_all", None) is not None:
+            self._bw_chains = self._bw_chains_all
 
     def _load_backward_start(self):
         """Start from a random winner-chain cell within the walk-back window

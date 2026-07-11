@@ -46,7 +46,6 @@ def main():
                          extra_mame_args=["-snapshot_directory", recdir,
                                           "-aviwrite", args.avi])
     all_chains = base._bw_chains
-    base._p_curric = 1.0          # every reset loads the pinned cell
     base.P_NO_BARRELS = 0.0
     venv = DkFrameStackWrapper(DummyVecEnv([lambda: base]), n_stack=args.stack)
     model, is_lstm = _load_model(args.model)
@@ -56,8 +55,7 @@ def main():
     for spec in args.cells.split(","):
         ci, pos = (int(x) for x in spec.split(":"))
         cell = all_chains[ci][pos]
-        base._bw_chains = [[cell]]     # pin: single chain, single cell
-        base._bw_levels = [0]
+        base.pin_backward_cell(ci, pos)
         print(f"=== chain {ci} pos {pos}: {os.path.basename(cell['sta'])} "
               f"(label h{cell['height']}) ===", flush=True)
         for ep in range(args.eps):
