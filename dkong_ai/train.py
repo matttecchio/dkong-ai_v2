@@ -152,6 +152,11 @@ class SILCallback(BaseCallback):
         if not self._buf:
             return
         policy = self.model.policy
+        # _on_rollout_end runs straight after collection, where SB3 leaves
+        # the policy in eval mode — cudnn refuses RNN backward there
+        # ("cudnn RNN backward can only be called in training mode",
+        # run-29 launch crash). PPO's own train() flips it back anyway.
+        policy.set_training_mode(True)
         rng = _np.random.default_rng()
         losses = []
         for _ in range(min(self.eps_per_update, len(self._buf))):
@@ -178,6 +183,7 @@ class SILCallback(BaseCallback):
             _th.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
             policy.optimizer.step()
             losses.append(float(loss.item()))
+        policy.set_training_mode(False)
         self._updates += 1
         self.logger.record("sil/updates", self._updates)
         self.logger.record("sil/loss", sum(losses) / len(losses))
