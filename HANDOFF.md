@@ -66,9 +66,20 @@ tolerate genuine no-win scenarios.
   mid-stride inputs as approaches for 11 wc cells incl. 7 floor cells).
   Floor chains rebuilt on verified-live cells (wc_011 was a mid-death-
   tumble snapshot sitting as the frontier), frontier = wc_019 (h6,
-  approach-covered). Floor +40px is the live experiment; wc_019 certified
-  a GENUINE skill cell by beeline (dies to traffic identically with/without
-  delay — needs barrel-timed crossing, which is what the curriculum is for).
+  approach-covered; beeline-certified a GENUINE skill cell — dies to
+  traffic identically with/without delay). FLOOR VERDICT after 20K+ draws:
+  best gain 8px — the barrel-timed crossing does not emerge from
+  shaping + approaches + patience alone. THE INJECTOR (in flight
+  2026-07-13): (a) mid-crossing handover — floor frontier moves to wc_020,
+  whose extracted approach IS the pro crossing the kill zone (control
+  lands ~x185 with dodge context in the LSTM); (b) dodge-expert BC-aux —
+  scripted crossing expert (beeline + directional jump on barrel approach,
+  per the user's scoring lore) imitated with a DECAYING aux weight on
+  floor episodes (ArcadeAI pattern; the DETERMINISTIC policy still
+  ratchets — punishment never flips an argmax without a better option to
+  imitate). Harvester replays now replicate the training reset's
+  probe+mode exchanges (same code path — a phase offset failed 23/40
+  reproductions).
 - **Standing diagnostic rules** (proven this week, run by the monitoring
   protocol): DOOM TRIAGE — any frontier cell at 0% over 500+ clean-spawn
   draws gets a scripted beeline probe (clears = policy problem, train on;
@@ -165,7 +176,7 @@ kill -SIGTERM $(cat logs/run_current.pid)   # saves ppo_dkong_run28_last.zip
 ./scripts/playback.sh artifacts/recordings/<file>.inp
 
 # TensorBoard (WSL2: bind to 0.0.0.0 so Windows browser can reach it)
-# Open http://localhost:6006 in Windows browser. Run 29d = RecurrentPPO_61.
+# Open http://localhost:6006 in Windows browser. Run 29e = RecurrentPPO_62.
 
 # Daily scoreboard (honest floor + key cells; ~20 min on port 5100):
 .venv/bin/python -m dkong_ai.eval_battery --rom-dir ./roms --model <newest>
@@ -508,7 +519,8 @@ that the new objective has been learned.
 | 29 | **STAGE A**: liveness probe, PBRS, SIL 0.1, success recording, WC approaches | ~1.5h | — | 0 | 0 | two launch crashes fixed (import-os shadow; cudnn train-mode); 342 successes banked in minutes |
 | 29b | floor chains rebuilt on verified-live cells (wc_011 was a DEAD-Mario snapshot as frontier) | ~1h | — | 0 | 0 | floor loads FIXED: 0 fallbacks, 1,553 draws/h; +40px 0.00 (fresh skill) |
 | 29c | sil-coef 0.05 (clip guardrail: mean ~0.29 rising) | ~1h | — | 0 | 0 | wc_019 beeline: genuine skill cell (dies to traffic, delay-independent) |
-| **29d** | success-record fix (ordering trap #4: _begin_episode wiped the start descriptor — 0/3917 records "exact") | **active** | — | 0 (honest floor rebuilding) | 0 | harvest flywheel finally fed; first exact records confirmed |
+| 29d | success-record fix (ordering trap #4: _begin_episode wiped the start descriptor — 0/3917 records "exact") | ~1h | — | 0 | 0 | harvest flywheel finally fed; first exact records confirmed |
+| **29e** | PBRS floor-band fix (review round 5: girder slope made FLOOR_H=8 inert) | **active** | — | 0 | 0 | overnight: 4 gates (chain 6 → 13, deepest shelf ever; SIL cadence > pre-SIL), governor froze+self-recovered, wc_154 clean 0.14→0.71 in 2 days, floor verdict 20K+ draws best=8px → injector |
 
 ---
 
