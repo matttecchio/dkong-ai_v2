@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--rom-dir", required=True)
     ap.add_argument("--model", required=True)
     ap.add_argument("--manifest",
-                    default="artifacts/backward_dense12/manifest.json")
+                    default="artifacts/backward_dense13/manifest.json")
     ap.add_argument("--cells", required=True,
                     help="comma-separated chain:pos pairs, e.g. 0:57,4:41,9:44")
     ap.add_argument("--eps", type=int, default=4, help="episodes per cell")
