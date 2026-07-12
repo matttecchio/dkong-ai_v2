@@ -90,8 +90,15 @@ def main():
         start = os.path.join(d, r["start"])
         if not os.path.exists(start):
             continue
-        # Replay 1: verify + track the trajectory.
+        # Replay 1: verify + track the trajectory. Training inserts the
+        # liveness probe (VARIABLE 1-3 exchanges, early exit) + one
+        # barrel-mode exchange between the load and the first agent step —
+        # replicate via the SAME code path (deterministic on the same
+        # state) or the replay runs at a phase offset and timing-sensitive
+        # episodes fail to reproduce (first harvest: only 17/40).
         st, _ = env.load_state_file(start)
+        _, st, _ = env._is_live(st)
+        st, _ = env._exchange(env.A_UNFREEZE_BARRELS)
         traj = []
         for a in r["acts"]:
             st, _ = env._exchange(ACTIONS[a])
@@ -116,6 +123,8 @@ def main():
                     # Mint the anchor at j-APPROACH_MAX (fresh replay: a
                     # mid-run save desyncs the remainder).
                     st2, _ = env.load_state_file(start)
+                    _, st2, _ = env._is_live(st2)
+                    st2, _ = env._exchange(env.A_UNFREEZE_BARRELS)
                     for a in r["acts"][:j - APPROACH_MAX]:
                         st2, _ = env._exchange(ACTIONS[a])
                     if st2["is_dead"] != 1 or st2.get("is_jumping", 0):
@@ -138,6 +147,8 @@ def main():
                 if not (lo <= h <= hi):
                     continue
                 st2, _ = env.load_state_file(start)
+                _, st2, _ = env._is_live(st2)
+                st2, _ = env._exchange(env.A_UNFREEZE_BARRELS)
                 for a in r["acts"][:j]:
                     st2, _ = env._exchange(ACTIONS[a])
                 if st2["is_dead"] != 1 or st2.get("is_jumping", 0):
