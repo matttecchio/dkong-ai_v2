@@ -91,6 +91,8 @@ local WATCH_ADDRS = {
   0x6781, 0x6782,  -- barrel 4
   0x67A1, 0x67A2,  -- barrel 5
   0x6380,          -- internal difficulty 1-5 (aggression table index)
+  0x62B1,          -- bonus timer (Stage B; verified 2026-07-13)
+  0x6207,          -- mario facing: bit7 1=right (Stage B; verified)
 }
 
 -- Training-wheels barrel-freeze: Python sends 0xF8 to disable barrels+fireball

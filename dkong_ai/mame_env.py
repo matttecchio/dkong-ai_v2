@@ -200,7 +200,7 @@ class DonkeyKongEnv(gym.Env):
         self._ladder_map = self._build_ladder_map()  # static; barrel board never changes
 
         # Dict obs: "image" = 84×84×2 (pixels + threat/ladder/fall-zone map, stacked ×n
-        # by DkFrameStackWrapper); "ram" = 75 normalised RAM features giving
+        # by DkFrameStackWrapper); "ram" = 83 normalised RAM features giving
         # explicit barrel/fireball/hammer positions, velocities, edge proximity,
         # and barrel type flags (crazy/wild, blue).
         self.observation_space = spaces.Dict({
@@ -454,7 +454,7 @@ class DonkeyKongEnv(gym.Env):
     # edge_dist: normalised [0,1] distance to the girder edge the barrel is heading
     # toward (0 = at edge / about to fall, 1 = far away). Paired with the fall-zone
     # image overlay so the agent can anticipate barrels appearing from above.
-    RAM_FEATURE_DIM = 75   # 2 mario + 6 barrels x 9 + 5 fireballs x 3 + 3 hammer
+    RAM_FEATURE_DIM = 83   # 2 mario + 6 barrels x 10 + 5 fireballs x 3 + 3 hammer
                            # + 1 difficulty (regime-conditional play: wild-barrel
                            # behaviour differs sharply by 0x6380 regime, and the
                            # diff-5 counter-move is unlearnable without knowing
@@ -491,6 +491,7 @@ class DonkeyKongEnv(gym.Env):
                 vx    = float(np.clip((bx - pbx)          /   8.0, -1, 1))
                 vy    = float(np.clip((by - pby)          /  20.0, -1, 1))
                 lad53 = float(np.clip((bx - self.LAD53_X) /  64.0, -1, 1))
+                lad203 = float(np.clip((bx - self.PBRS_LADDER_X) / 64.0, -1, 1))
                 pvx_sign = bx - pbx
                 edge_dist = 1.0
                 for (y_lo, y_hi, x_left, x_right, _) in self.GIRDER_EDGES:
@@ -509,9 +510,9 @@ class DonkeyKongEnv(gym.Env):
                 crazy = float(state.get(f"barrel{i}_crazy", 0) > 0)
                 blue  = float(state.get(f"barrel{i}_blue", 0) > 0)
             else:
-                dx = dy = vx = vy = lad53 = edge_dist = crazy = blue = 0.0
-            feats.extend([dx, dy, vx, vy, lad53, edge_dist, float(st > 0),
-                          crazy, blue])
+                dx = dy = vx = vy = lad53 = lad203 = edge_dist = crazy = blue = 0.0
+            feats.extend([dx, dy, vx, vy, lad53, lad203, edge_dist,
+                          float(st > 0), crazy, blue])
         for i in range(5):
             fst = state.get(f"fireball{i}_st", 0)
             if fst:
@@ -528,6 +529,11 @@ class DonkeyKongEnv(gym.Env):
             dx = dy = 0.0
         feats.extend([dx, dy, float(bool(has_h))])
         feats.append(state.get("difficulty", 1) / 5.0)
+        # Stage B (verified 2026-07-13): the clock that defines the endgame
+        # (user's 000-grace-window lore) and the facing that hammer smashes
+        # depend on ("can't smash a barrel behind you"; stop-before-smash).
+        feats.append(min(state.get("bonus_timer", 48), 48) / 48.0)
+        feats.append(float(state.get("mario_facing", 0) & 0x80 > 0))
         return np.array(feats, dtype=np.float32)
 
     # ---- reward shaping helpers -----------------------------------------

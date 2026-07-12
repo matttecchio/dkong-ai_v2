@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 BRIDGE_LUA = ROOT / "scripts" / "bridge.lua"
-EXPECTED_COUNT = 60
+EXPECTED_COUNT = 62
 
 
 def _parse_lua_addrs():
@@ -60,11 +60,13 @@ def test_appended_entries_positions():
         f"Expected 'is_jumping' at WATCH_ORDER[46], got '{WATCH_ORDER[46]}'"
     )
     expected_tail = [f"barrel{i}_{kind}" for i in range(6)
-                     for kind in ("crazy", "blue")] + ["difficulty"]
+                     for kind in ("crazy", "blue")] + ["difficulty",
+                     "bonus_timer", "mario_facing"]
     assert WATCH_ORDER[47:] == expected_tail, (
         f"Expected barrel type flags + difficulty after is_jumping, "
         f"got {WATCH_ORDER[47:]}"
     )
     lua_addrs = _parse_lua_addrs()
     assert lua_addrs[46] == ADDR["is_jumping"]
-    assert lua_addrs[-1] == ADDR["difficulty"]
+    assert lua_addrs[-3:] == [ADDR["difficulty"], ADDR["bonus_timer"],
+                              ADDR["mario_facing"]]
