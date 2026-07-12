@@ -53,7 +53,7 @@ tolerate genuine no-win scenarios.
   **liveness probe** (curriculum loads check the WORLD moves — 2 NOOPs of
   barrel motion + alive/on-field statics — instead of walking Mario into
   traffic; floor-load fallbacks went 1,300/h → 0); **PBRS floor shaping**
-  (potential over crossing-progress toward the x=143 ladder, telescoping =
+  (potential over crossing-progress toward the first ladder, telescoping =
   unfarmable — the poverty trap finally has a filler; ep_rew NOT comparable
   to any prior run); **SIL** (self-imitation aux loss on the policy's own
   successful episodes, LSTM-correct per-episode sequences; --sil-coef,
@@ -262,9 +262,12 @@ behaviour is regime-dependent (user lore: 3-4 = worst/most erratic, 5 =
 predictable with a static neutral-jump counter) — this makes play
 regime-conditional instead of averaged across regimes.
 
-**⚠️ Missing feature (known gap):** There is no `lad143` — barrel distance to
-the x=143 first ladder. `lad53` helps time the 2nd→3rd girder climb; an
-equivalent for x=143 would help time the first-ladder climb between barrels.
+**⚠️ Missing feature (known gap, Stage B):** There is no `lad203` — barrel
+distance to the REAL first ladder at x=203 (see §12 phantom-ladder entry).
+`lad53` helps time the 2nd→3rd girder climb; the equivalent for the first
+ladder is a verified Stage B feature alongside timer (0x62B1, verified) and
+facing (0x6207 bit 7, verified; idle-persistent). Stage B deploys at the
+first honest bottom-up clear (fresh heads + level reset).
 Consider adding as a future improvement (changes `RAM_FEATURE_DIM` 62→68,
 breaks warm-start from run 25).
 
@@ -520,7 +523,9 @@ that the new objective has been learned.
 | 29b | floor chains rebuilt on verified-live cells (wc_011 was a DEAD-Mario snapshot as frontier) | ~1h | — | 0 | 0 | floor loads FIXED: 0 fallbacks, 1,553 draws/h; +40px 0.00 (fresh skill) |
 | 29c | sil-coef 0.05 (clip guardrail: mean ~0.29 rising) | ~1h | — | 0 | 0 | wc_019 beeline: genuine skill cell (dies to traffic, delay-independent) |
 | 29d | success-record fix (ordering trap #4: _begin_episode wiped the start descriptor — 0/3917 records "exact") | ~1h | — | 0 | 0 | harvest flywheel finally fed; first exact records confirmed |
-| **29e** | PBRS floor-band fix (review round 5: girder slope made FLOOR_H=8 inert) | **active** | — | 0 | 0 | overnight: 4 gates (chain 6 → 13, deepest shelf ever; SIL cadence > pre-SIL), governor froze+self-recovered, wc_154 clean 0.14→0.71 in 2 days, floor verdict 20K+ draws best=8px → injector |
+| 29e | PBRS floor-band fix (review round 5: girder slope made FLOOR_H=8 inert) | ~20M | — | 0 | 0 | overnight: 4 gates (chain 6 → 13, deepest shelf ever), governor self-recovered, wc_154 clean 0.14→0.71, floor 20K+ draws best=8px |
+| 29f | ★★★ **THE FLOOR GEOMETRY CORRECTION**: real first ladder x=203 (phantom x143 removed; guard/corner-tax/PBRS/FIRST_CLIMB re-geometried) | ~3h | — | 8→26 best | 0 | the 'poverty trap' was OUR OWN geometry: guard executed real-rail climbs, corner tax covered its base, PBRS steered away |
+| **29g** | oil-can novelty exclusion (film #5) + 22 harvested approaches merged | **active** | — | **recovery curve: best 8→58, +20px 0→24%, bottomup mean 7.7→21** | 0 | ★ FIRST HONEST FLOOR CROSSINGS (+40px) in project history; SIL flywheel compounding |
 
 ---
 
@@ -772,6 +777,26 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
 ---
 
 ## 12. Critical bugs fixed (do not reintroduce)
+
+### THE PHANTOM FLOOR LADDER: two weeks of 'poverty trap' was our own geometry (fixed run 29f)
+
+`COMPLETE_LADDERS[0] = (143, 175, 224)` — inherited from run-6-era corridor
+analysis and never re-verified — claimed a floor→2nd-girder ladder at x=143.
+THE REAL ONE IS AT x=203 (user ground truth, confirmed by the pro recording's
+climbs and a live probe; the old entry's y-span never even touched the floor
+row). Every floor mechanism keyed on the phantom formed a perfect self-built
+trap: the cumulative glitch guard EXECUTED climbs at the real rail (outside
+all envelopes — 750 explicit -10 lessons taught the policy to avoid the
+correct route), the corner tax (x>156) covered the real ladder's base,
+FIRST_CLIMB paid for climbing at empty space, and PBRS paid Mario to walk
+away from the rail into barrel traffic. The 20,000-draw 8px ceiling was
+GLITCH_PX_MAX + slope. Within hours of the fix: first honest floor crossings
+in project history. Lessons: (1) VERIFY LOAD-BEARING GEOMETRY EMPIRICALLY —
+the pro recording is a geometry oracle (its climbs mark real ladders);
+(2) when a policy avoids the only correct route, check whether YOUR
+penalties taught it to; (3) the user's board knowledge resolves in one
+sentence what instruments circle for hours.
+
 
 ### The glitch-guard ratchet: 100% of "honest" floor was stub glitch (fixed run 28d)
 
