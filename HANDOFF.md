@@ -91,6 +91,10 @@ tolerate genuine no-win scenarios.
   for a night).
 - **Scoreboard**: `eval_battery.py` daily (bottom-up det+stoch clean
   means + key-cell probes split by burnin/approach) → logs/battery/.
+  ⚠️ Battery CELL-probe splits recorded before 2026-07-13 evening are
+  OFF BY ONE EPISODE (DummyVecEnv auto-reset overwrote the env's labels
+  before the caller read them — review round 6); floor series and clear
+  counts were unaffected. Labels are now captured at reset time.
 - **Deployment is scripted**: `scripts/current_launch.sh` is THE canonical
   launch command (edit dials there only); `scripts/auto_resume.sh` relaunches
   from the newest checkpoint after a reboot/crash (guards: `.maintenance`
@@ -777,6 +781,19 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
 ---
 
 ## 12. Critical bugs fixed (do not reintroduce)
+
+### VecEnv auto-reset overwrites env labels before callers read them (fixed round 6)
+
+`DummyVecEnv`/`SubprocVecEnv` auto-reset the env the moment an episode ends,
+so any tooling that reads mutable env fields (start_type, burnin, approach)
+AFTER a rollout returns is reading the NEXT episode's draw. All battery
+cell-probe burn-in splits before 2026-07-13 were mislabeled this way.
+Capture per-episode labels immediately after reset(), inside the runner.
+Related latent fix: bridge freeze-mode persists across episodes and the
+per-episode mode command lands AFTER curriculum loads — a frozen previous
+episode would fail every motion-based liveness probe to bottom. Fixed
+conditionally on the stale flag (an unconditional pre-unfreeze would
+phase-shift every fixed-RNG cell and invalidate recorded reproductions).
 
 ### THE PHANTOM FLOOR LADDER: two weeks of 'poverty trap' was our own geometry (fixed run 29f)
 
