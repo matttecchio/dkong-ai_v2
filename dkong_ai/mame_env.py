@@ -297,7 +297,13 @@ class DonkeyKongEnv(gym.Env):
         self._sock.sendall(b"H")
         data = b""
         while data.count(b"\n") < 2:
-            data += self._sock.recv(4096)
+            chunk = self._sock.recv(4096)
+            if not chunk:
+                # Peer closed mid-handshake: recv returns b"" forever —
+                # without this the loop spins indefinitely instead of
+                # letting reset()'s recovery path relaunch MAME.
+                raise ConnectionError("bridge closed during handshake")
+            data += chunk
         hello, fields, rest = data.split(b"\n", 2)
         self._rxbuf = rest          # keep any obs bytes that piggybacked the handshake
         kv = dict(tok.split(b"=", 1) for tok in hello.split()[1:])
@@ -1128,6 +1134,16 @@ class DonkeyKongEnv(gym.Env):
             hi = min(lo + self.BW_REHEARSAL_CAP, n - 1)
             pos = int(self.np_random.integers(lo, hi + 1))
         cell = chain[pos]
+        # Freeze mode is PERSISTENT in the bridge until explicitly changed,
+        # and the per-episode mode command is sent AFTER this load — so a
+        # barrel-frozen previous episode would leave the world frozen during
+        # the motion-based liveness probe and every valid state would fail
+        # to bottom (external review round 6; latent while P_NO_BARRELS=0).
+        # CONDITIONAL on the stale flag: an unconditional unfreeze would add
+        # an exchange to every load, phase-shifting all fixed-RNG cells and
+        # invalidating recorded success reproductions.
+        if self._no_barrels:
+            self._exchange(self.A_UNFREEZE_BARRELS)
         approach = cell.get("approach")
         # Approach draws are STOCHASTIC (run 28g): when the approach
         # monopolized spawns, a single bad approach starved the cell of the

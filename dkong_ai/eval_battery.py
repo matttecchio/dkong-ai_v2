@@ -39,8 +39,18 @@ def wilson(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (round(max(0.0, centre - half), 3), round(min(1.0, centre + half), 3))
 
 
-def run_episode(venv, model, is_lstm, deterministic, max_steps=1200):
+def run_episode(venv, model, is_lstm, deterministic, max_steps=1200,
+                base=None):
     obs = venv.reset()
+    # Capture per-episode labels NOW: DummyVecEnv auto-resets on done, so by
+    # the time this function returns, the env's mutable fields describe the
+    # NEXT episode (external review round 6 — all prior battery burn-in
+    # splits were off by one episode).
+    meta = {}
+    if base is not None:
+        meta = {"start_type": base._start_type,
+                "burnin": base._burnin_drawn,
+                "approach_len": base._approach_len}
     lstm_state, ep_start = None, np.ones((1,), dtype=bool)
     done, steps, best_h, cleared, glitch = False, 0, 0, 0, 0
     while not done and steps < max_steps:
@@ -57,7 +67,7 @@ def run_episode(venv, model, is_lstm, deterministic, max_steps=1200):
         best_h = max(best_h, infos[0].get("max_height", 0))
         cleared = max(cleared, infos[0].get("cleared", 0))
         glitch = max(glitch, infos[0].get("glitch_kill", 0))
-    return {"steps": steps, "max_h": best_h, "cleared": cleared,
+    return {"steps": steps, "max_h": best_h, "cleared": cleared, **meta,
             "glitch": glitch}
 
 
@@ -121,10 +131,10 @@ def main():
         by_burnin = {}
         for _ in range(args.cell_eps):
             e = run_episode(venv, model, is_lstm, deterministic=False,
-                            max_steps=500)
-            if base._start_type != "curriculum":
+                            max_steps=500, base=base)
+            if e.get("start_type") != "curriculum":
                 continue                      # unresponsive load fallback
-            b = base._burnin_drawn
+            b = e.get("burnin", 0)
             by_burnin.setdefault(b, []).append(e)
         result["cells"][name] = {
             str(b): {"n": len(v),
