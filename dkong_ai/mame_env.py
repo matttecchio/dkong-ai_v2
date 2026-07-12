@@ -72,7 +72,14 @@ class DonkeyKongEnv(gym.Env):
     # only via the frame-perfect broken-ladder exploit (x=99 stub et al.),
     # which the go-explore winners and then the policy both discovered.
     COMPLETE_LADDERS = [
-        (143, 175, 224),  # floor → 2nd girder, right side
+        # FLOOR LADDER CORRECTED (2026-07-13): the only complete floor →
+        # 2nd-girder ladder is on the RIGHT at x=203 (user ground truth +
+        # pro-recording climbs + live probe: x pinned at 203, y 236→211).
+        # The old entry (143, 175, 224) was a PHANTOM — its consumers formed
+        # a perfect self-built trap: the guard glitch-killed climbs at the
+        # real rail, the corner tax covered its base, and PBRS paid Mario to
+        # walk away from it. 20K floor draws capped at 8px because of THIS.
+        (203, 211, 236),  # floor → 2nd girder, RIGHT side (the real one)
         ( 53, 155, 196),  # 2nd → 3rd girder, FAR LEFT (critical)
         (131, 118, 158),  # 3rd → 4th girder, right-ish
         ( 67,  85, 125),  # 4th → 5th girder, left
@@ -105,7 +112,9 @@ class DonkeyKongEnv(gym.Env):
     # the potential still saturates a few px up the ladder, where the
     # milestone system takes over.
     PBRS_FLOOR_H = 25
-    PBRS_LADDER_X = 143       # the legal first ladder
+    PBRS_LADDER_X = 203       # the REAL first ladder (right side; was the
+                              # phantom 143 — shaping steered Mario away
+                              # from the correct rail into barrel traffic)
 
     def _phi(self, s):
         """Crossing-progress potential. State function only — no memory."""
@@ -550,8 +559,8 @@ class DonkeyKongEnv(gym.Env):
     # Same mechanic as CLIMB_BONUS. Without this, the only incentive to climb the
     # first ladder is the one-shot girder milestone (+10), which can't compete with
     # repeatable ground-floor barrel-jump rewards (+0.3 each).
-    FIRST_CLIMB_X_LO, FIRST_CLIMB_X_HI = 133, 155   # first ladder ± tolerance
-    FIRST_CLIMB_H_LO, FIRST_CLIMB_H_HI =  10,  44   # ground floor → 2nd girder
+    FIRST_CLIMB_X_LO, FIRST_CLIMB_X_HI = 196, 210   # REAL first ladder (x=203)
+    FIRST_CLIMB_H_LO, FIRST_CLIMB_H_HI =   2,  30   # floor → 2nd girder (y236→211)
     FIRST_CLIMB_BONUS      = 0.30
     FIRST_LADDER_IDLE_COST = 0.05
 
@@ -618,7 +627,10 @@ class DonkeyKongEnv(gym.Env):
     # was a 5px no-penalty safe harbor beside the ladder base — and eval film
     # showed the policy camping exactly there. The box now starts where the
     # climb zone ends.
-    CORNER_X_RIGHT = 156
+    # 156 -> 214 (2026-07-13, floor-geometry correction): the real first
+    # ladder lives at x=203 — the old box taxed Mario for standing AT its
+    # base. The true dead-end corner is only the sliver past the ladder.
+    CORNER_X_RIGHT = 214
     CORNER_COST    = 0.20
 
     # Broken-ladder stub tax (2026-07-07): the x=99 stub's lower rungs are

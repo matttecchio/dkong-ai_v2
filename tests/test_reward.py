@@ -40,8 +40,8 @@ def _state(mario_y, mario_x, is_jumping=0, lives=3, screen_id=1, score=None,
 def test_milestone_fires_when_grounded():
     """New max height while not jumping → milestone reward."""
     env = _make_env(reward_max_h=20)
-    p = _state(mario_y=220, mario_x=143)          # height = 240-220 = 20
-    s = _state(mario_y=210, mario_x=143)           # height = 30 > max_h(20), is_jumping=0
+    p = _state(mario_y=220, mario_x=203)          # height = 240-220 = 20
+    s = _state(mario_y=210, mario_x=203)           # height = 30 > max_h(20), is_jumping=0
     env._prev = p
     r, done = env._reward(s)
     # milestone: (30 - 20) * 0.5 = 5.0
@@ -52,8 +52,8 @@ def test_milestone_fires_when_grounded():
 def test_milestone_blocked_during_jump():
     """New max height while jumping → NO milestone reward, max_h not updated."""
     env = _make_env(reward_max_h=20)
-    p = _state(mario_y=220, mario_x=143)
-    s = _state(mario_y=210, mario_x=143, is_jumping=1)  # height 30 > max_h but jumping
+    p = _state(mario_y=220, mario_x=203)
+    s = _state(mario_y=210, mario_x=203, is_jumping=1)  # height 30 > max_h but jumping
     env._prev = p
     r, done = env._reward(s)
     assert env._reward_max_h == 20, f"_reward_max_h must NOT update during jump, got {env._reward_max_h}"
@@ -75,8 +75,8 @@ def test_first_climb_bonus_fires_when_grounded():
     """Ascending first ladder while not jumping → +FIRST_CLIMB_BONUS."""
     env = _make_env(reward_max_h=0)
     # height = 25 in FIRST_CLIMB_H range (10-44); x=143 in FIRST_CLIMB_X range (133-155)
-    p = _state(mario_y=220, mario_x=143)           # height 20, y=220
-    s = _state(mario_y=215, mario_x=143)           # height 25, y=215 < p.y → ascending
+    p = _state(mario_y=220, mario_x=203)           # height 20, y=220
+    s = _state(mario_y=215, mario_x=203)           # height 25, y=215 < p.y → ascending
     env._prev = p
     r, done = env._reward(s)
     # Should include FIRST_CLIMB_BONUS (0.30) + milestone for new height + novelty + per-step
@@ -88,15 +88,15 @@ def test_first_climb_bonus_fires_when_grounded():
 def test_first_climb_bonus_blocked_during_jump():
     """Ascending first ladder during jump arc → climb bonus suppressed."""
     env = _make_env(reward_max_h=0)
-    p = _state(mario_y=220, mario_x=143)
-    s = _state(mario_y=215, mario_x=143, is_jumping=1)
+    p = _state(mario_y=220, mario_x=203)
+    s = _state(mario_y=215, mario_x=203, is_jumping=1)
     env._prev = p
     r_jump, _ = env._reward(s)
 
     # Compare against same scenario with is_jumping=0
     env2 = _make_env(reward_max_h=0)
     env2._prev = p
-    r_walk, _ = env2._reward(_state(mario_y=215, mario_x=143, is_jumping=0))
+    r_walk, _ = env2._reward(_state(mario_y=215, mario_x=203, is_jumping=0))
 
     assert r_jump < r_walk, (
         f"jump reward {r_jump:.3f} should be < walk reward {r_walk:.3f} "
@@ -109,11 +109,11 @@ def test_first_climb_bonus_blocked_during_jump():
 def test_first_ladder_idle_cost():
     """Stationary at first ladder (y unchanged) while not jumping → idle penalty."""
     env = _make_env(reward_max_h=25)    # height already paid, so no milestone
-    p = _state(mario_y=215, mario_x=143)           # height 25
-    s = _state(mario_y=215, mario_x=143)           # y unchanged → idle
+    p = _state(mario_y=215, mario_x=203)           # height 25
+    s = _state(mario_y=215, mario_x=203)           # y unchanged → idle
     # Pre-visit the cell so the novelty bonus doesn't offset the idle cost.
     height = BASE_Y - 215  # 25
-    env._visited.add((143 // DonkeyKongEnv.CELL, height // DonkeyKongEnv.CELL))
+    env._visited.add((203 // DonkeyKongEnv.CELL, height // DonkeyKongEnv.CELL))
     env._prev = p
     r, done = env._reward(s)
     # Without novelty: per-step height bonus (~0.00075) << idle cost (-0.05).
@@ -123,14 +123,14 @@ def test_first_ladder_idle_cost():
 def test_idle_cost_blocked_during_jump():
     """Idle cost does NOT fire when is_jumping=1 (can't idle on ladder mid-air)."""
     env = _make_env(reward_max_h=25)
-    p = _state(mario_y=215, mario_x=143)
-    s = _state(mario_y=215, mario_x=143, is_jumping=1)
+    p = _state(mario_y=215, mario_x=203)
+    s = _state(mario_y=215, mario_x=203, is_jumping=1)
     env._prev = p
     r_jump, _ = env._reward(s)
 
     env2 = _make_env(reward_max_h=25)
     env2._prev = p
-    r_idle, _ = env2._reward(_state(mario_y=215, mario_x=143, is_jumping=0))
+    r_idle, _ = env2._reward(_state(mario_y=215, mario_x=203, is_jumping=0))
 
     assert r_jump > r_idle, (
         f"jump r={r_jump:.3f} should be > idle r={r_idle:.3f} (idle cost blocked during jump)"
