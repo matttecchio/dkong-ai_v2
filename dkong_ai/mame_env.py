@@ -640,6 +640,14 @@ class DonkeyKongEnv(gym.Env):
     # (x=143) is bonus-paid, so the gradient points away from the stub.
     STUB_X_LO, STUB_X_HI = 92, 106
     STUB_H_LO, STUB_H_HI = 10, 40
+    # Oil-can corner (bottom-left): film review #5 (user, 2026-07-13) caught
+    # floor spawns wandering LEFT and jumping into the can. Deaths there
+    # already pay -10/-15 and PBRS drains leftward movement — the gap was
+    # the novelty bonus SUBSIDIZING first visits to the death zone. Same
+    # remedy as the stub zone: no novelty/corridor pay, no extra penalty
+    # (the pro route legitimately touches this region when point-milking).
+    OIL_X_HI = 44
+    OIL_H_HI = 20
     STUB_COST = 0.08
 
     # Short stubs that hang from a girder but don't connect below.
@@ -849,9 +857,13 @@ class DonkeyKongEnv(gym.Env):
                     self._visited.add(cell)
                     # No novelty/corridor pay inside the broken-stub zone —
                     # it was a small per-episode bounty for visiting the
-                    # glitch ladder's neighbourhood.
+                    # glitch ladder's neighbourhood. Ditto the oil-can
+                    # corner (film review #5: subsidized wandering into
+                    # fireball/can deaths at the bottom-left).
                     if not (self.STUB_H_LO <= height <= self.STUB_H_HI
-                            and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI):
+                            and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI) \
+                       and not (height <= self.OIL_H_HI
+                                and s["mario_x"] <= self.OIL_X_HI):
                         r += 0.2
                         tx = self._target_x(height)
                         if tx is not None:
