@@ -109,7 +109,13 @@ class SILCallback(BaseCallback):
         self.eps_per_update = eps_per_update
         self.max_ep_len = max_ep_len
         self._acc: list[list] = []      # per-env (obs, act) accumulator
-        self._buf: list[list] = []      # successful episodes
+        # STRATIFIED buffers (2026-07-14): a single FIFO let routine tower
+        # rehearsal wins (arriving ~constantly) evict a rare floor crossing
+        # within minutes — the flywheel never compounded for exactly the
+        # successes that need it most. Classes get reserved space and equal
+        # sampling weight.
+        self._bufs: dict[str, list] = {"floor": [], "clear_bottomup": [],
+                                       "clear": []}
         self._last_obs = None
         self._updates = 0
 
@@ -132,24 +138,37 @@ class SILCallback(BaseCallback):
                     int(info.get("exec_action", 0))))
             if dones[i]:
                 ep = info.get("episode")
-                success = (not info.get("no_barrels")
-                           and not info.get("glitch_kill")
-                           and (info.get("cleared")
-                                or (info.get("start_type") == "curriculum"
-                                    and info.get("max_height", 0)
-                                    - max(0, 240 - info.get("start_y", 240))
-                                    >= 40)))
-                if ep is not None and success and 4 < len(self._acc[i]):
-                    self._buf.append(self._acc[i])
-                    self._buf = self._buf[-self.buffer_eps:]
+                start_h = max(0, 240 - info.get("start_y", 240))
+                gained = info.get("max_height", 0) - start_h
+                honest = (not info.get("no_barrels")
+                          and not info.get("glitch_kill"))
+                cls = None
+                if honest and ep is not None:
+                    if info.get("cleared"):
+                        cls = ("clear_bottomup"
+                               if info.get("start_type") == "bottomup"
+                               else "clear")
+                    elif (info.get("start_type") == "curriculum"
+                          and start_h < 30 and gained >= 40):
+                        cls = "floor"       # the rare crossing successes
+                    elif (info.get("start_type") == "curriculum"
+                          and gained >= 40):
+                        cls = "clear"       # generic curric progress: pool
+                                            # with routine tower successes
+                if cls and 4 < len(self._acc[i]):
+                    per_class = max(4, self.buffer_eps // len(self._bufs))
+                    self._bufs[cls].append(self._acc[i])
+                    self._bufs[cls] = self._bufs[cls][-per_class:]
                 self._acc[i] = []
         return True
 
     def _on_rollout_end(self) -> None:
         import numpy as _np
         import torch as _th
-        self.logger.record("sil/buffer_eps", len(self._buf))
-        if not self._buf:
+        for cls, buf in self._bufs.items():
+            self.logger.record(f"sil/buffer_{cls}", len(buf))
+        nonempty = [b for b in self._bufs.values() if b]
+        if not nonempty:
             return
         policy = self.model.policy
         # _on_rollout_end runs straight after collection, where SB3 leaves
@@ -159,8 +178,11 @@ class SILCallback(BaseCallback):
         policy.set_training_mode(True)
         rng = _np.random.default_rng()
         losses = []
-        for _ in range(min(self.eps_per_update, len(self._buf))):
-            ep = self._buf[int(rng.integers(len(self._buf)))]
+        for _ in range(min(self.eps_per_update, sum(len(b) for b in nonempty))):
+            # Equal weight per CLASS, then uniform within: a floor crossing
+            # gets replayed as often as the whole tower-clear pool does.
+            buf = nonempty[int(rng.integers(len(nonempty)))]
+            ep = buf[int(rng.integers(len(buf)))]
             T = len(ep)
             obs = {k: _th.as_tensor(_np.stack([t[0][k] for t in ep]),
                                     device=policy.device)
