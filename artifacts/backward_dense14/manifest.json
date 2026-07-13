@@ -6625,20 +6625,12 @@
      "height": 38
     },
     {
-     "sta": "hv_8_284.sta",
-     "height": 40
-    },
-    {
      "sta": "hv_13_284.sta",
      "height": 43
     },
     {
-     "sta": "hv_9_284.sta",
-     "height": 44
-    },
-    {
-     "sta": "hv_11_292.sta",
-     "height": 48
+     "sta": "hv_8_284.sta",
+     "height": 40
     }
    ],
    "gate": "progress"
@@ -6654,20 +6646,12 @@
      "height": 38
     },
     {
-     "sta": "hv_8_284.sta",
-     "height": 40
-    },
-    {
      "sta": "hv_13_284.sta",
      "height": 43
     },
     {
-     "sta": "hv_9_284.sta",
-     "height": 44
-    },
-    {
-     "sta": "hv_11_292.sta",
-     "height": 48
+     "sta": "hv_8_284.sta",
+     "height": 40
     }
    ],
    "gate": "progress"
