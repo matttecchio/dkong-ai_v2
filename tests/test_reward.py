@@ -256,3 +256,35 @@ def test_pbrs_saturates_off_floor():
     env._prev = p
     r, _ = env._reward(s)
     assert abs(r) < 0.05, f"off-floor x-moves should not pay PBRS, got {r}"
+
+
+def test_pbrs_stage2_pays_toward_x53():
+    """On girder 2 (h25-44), moving toward the x53 ladder pays; the old
+    behaviour (saturated = inert) left a reward desert where Mario loitered
+    under the girder-3 edge instead of walking to the ladder."""
+    env = _pbrs_env()
+    p = _state(mario_y=205, mario_x=150)   # height 35, mid girder 2
+    s = _state(mario_y=205, mario_x=140)   # 10px closer to x53
+    env._prev = p
+    r, _ = env._reward(s)
+    assert r > 0.3, f"girder-2 progress toward x53 should pay, got {r}"
+
+
+def test_pbrs_stage2_not_farmable_and_saturates():
+    """Stage-2 loop nets ~0; above the ladder base x-moves are inert."""
+    env = _pbrs_env()
+    total = 0.0
+    for px, sx in ((150, 140), (140, 150)):
+        p = _state(mario_y=205, mario_x=px)
+        s = _state(mario_y=205, mario_x=sx)
+        env._prev = p
+        env._visited = {(sx // env.CELL, 2), (px // env.CELL, 2)}
+        r, _ = env._reward(s)
+        total += r
+    assert abs(total) < 0.05, f"stage-2 loop should net ~0, got {total}"
+    env._visited = {(x, h) for x in range(16) for h in range(16)}  # no novelty
+    p = _state(mario_y=190, mario_x=60)    # height 50: above ladder base
+    s = _state(mario_y=190, mario_x=100)
+    env._prev = p
+    r, _ = env._reward(s)
+    assert abs(r) < 0.05, f"above h44 x-moves should not pay PBRS, got {r}"

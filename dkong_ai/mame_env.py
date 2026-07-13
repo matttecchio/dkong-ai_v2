@@ -115,15 +115,31 @@ class DonkeyKongEnv(gym.Env):
     PBRS_LADDER_X = 203       # the REAL first ladder (right side; was the
                               # phantom 143 — shaping steered Mario away
                               # from the correct rail into barrel traffic)
+    # Stage 2 (2026-07-13, user film review of the h~63 wall): between floor
+    # saturation (h25) and the x53 ladder base (h44) lay a reward desert —
+    # the girder-2 walk toward the far-left ladder paid nothing, so Mario
+    # loitered under the girder-3 edge (barrels that roll off it REVERSE on
+    # landing and kill him) instead of reaching the ladder CLIMB_BONUS
+    # covers. Geometry verified before shaping (phantom-ladder rule): the 3
+    # deepest crossing replays all peak ON the ladder column (x51-65,
+    # y163-175). Above h44 the potential is x-independent, so tower play
+    # and descents are unaffected.
+    PBRS_G2_H = 44            # x53 ladder base; CLIMB_BONUS owns the climb
+    PBRS_G2_SPAN = 160        # covers |x-53| back to the ladder-203 arrival
 
     def _phi(self, s):
         """Crossing-progress potential. State function only — no memory."""
         if s.get("screen_id", 1) != 1 or not s.get("mario_y"):
             return None                       # off-board/off-field: no term
         height = max(0, self.BASE_Y - s["mario_y"])
-        prog = 128 - min(abs(s["mario_x"] - self.PBRS_LADDER_X), 128)
-        if height >= self.PBRS_FLOOR_H:
-            prog = 128                        # saturated once off the floor
+        if height < self.PBRS_FLOOR_H:        # floor: toward the x203 ladder
+            prog = 128 - min(abs(s["mario_x"] - self.PBRS_LADDER_X), 128)
+        elif height < self.PBRS_G2_H:         # girder 2: toward the x53 ladder
+            prog = 128 + (self.PBRS_G2_SPAN
+                          - min(abs(s["mario_x"] - self.LAD53_X),
+                                self.PBRS_G2_SPAN))
+        else:                                 # saturated above the ladder base
+            prog = 128 + self.PBRS_G2_SPAN
         return self.PBRS_COEF * prog
 
     # _p_curric is a class-level default (like P_NO_BARRELS). Override it by
