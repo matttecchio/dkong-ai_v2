@@ -1291,6 +1291,16 @@ track barrel state across the ~3s traverse window.
   restart silently loses the pre-restart episodes. Keep hourly-check windows
   inside the current run's lifetime.
 
+- **Cross-OS review divergence (round 8, 2026-07-14)**: a Windows-side
+  reviewer had a REAL, reproducible failure in test_env_semantics while
+  WSL showed 26/26 — FakeDK.load_state_file used `path.split("/")[-1]`,
+  which never splits backslash-joined Windows paths, so every curriculum
+  load silently served BOTTOM (fixed: os.path.basename, d1c8c89).
+  Diagnosis protocol that settled it: CRLF-convert local files and
+  compare sha256 against the reviewer's fingerprints — identical content
+  + divergent OS ⇒ suspect path/locale semantics, not logic. "Does not
+  reproduce" is not "false positive" until fingerprints match.
+
 ## 17. File map
 
 `dkong_ai/`:
