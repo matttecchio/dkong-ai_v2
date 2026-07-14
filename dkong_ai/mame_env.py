@@ -510,7 +510,11 @@ class DonkeyKongEnv(gym.Env):
                 crazy = float(state.get(f"barrel{i}_crazy", 0) > 0)
                 blue  = float(state.get(f"barrel{i}_blue", 0) > 0)
             else:
-                dx = dy = vx = vy = lad53 = lad203 = edge_dist = crazy = blue = 0.0
+                dx = dy = vx = vy = lad53 = lad203 = crazy = blue = 0.0
+                # Inactive barrel: edge_dist defaults SAFE (1.0), not 0.0 —
+                # 0.0 means "at a girder edge, about to fall", so zeroed
+                # inactive slots read as six falling barrels (review r7 #4).
+                edge_dist = 1.0
             feats.extend([dx, dy, vx, vy, lad53, lad203, edge_dist,
                           float(st > 0), crazy, blue])
         for i in range(5):
