@@ -6621,16 +6621,24 @@
      "height": 34
     },
     {
-     "sta": "hv_7_340.sta",
+     "sta": "wr_3_221.sta",
+     "height": 37
+    },
+    {
+     "sta": "wr_2_244.sta",
+     "height": 37
+    },
+    {
+     "sta": "wr_0_246.sta",
+     "height": 37
+    },
+    {
+     "sta": "wr_0_253.sta",
      "height": 38
     },
     {
-     "sta": "hv_13_284.sta",
-     "height": 43
-    },
-    {
-     "sta": "hv_8_284.sta",
-     "height": 40
+     "sta": "hv_7_340.sta",
+     "height": 38
     }
    ],
    "gate": "progress"
@@ -6642,16 +6650,24 @@
      "height": 34
     },
     {
-     "sta": "hv_7_340.sta",
+     "sta": "wr_3_221.sta",
+     "height": 37
+    },
+    {
+     "sta": "wr_2_244.sta",
+     "height": 37
+    },
+    {
+     "sta": "wr_0_246.sta",
+     "height": 37
+    },
+    {
+     "sta": "wr_0_253.sta",
      "height": 38
     },
     {
-     "sta": "hv_13_284.sta",
-     "height": 43
-    },
-    {
-     "sta": "hv_8_284.sta",
-     "height": 40
+     "sta": "hv_7_340.sta",
+     "height": 38
     }
    ],
    "gate": "progress"

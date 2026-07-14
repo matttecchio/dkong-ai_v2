@@ -125,7 +125,14 @@ class DonkeyKongEnv(gym.Env):
     # y163-175). Above h44 the potential is x-independent, so tower play
     # and descents are unaffected.
     PBRS_G2_H = 44            # x53 ladder base; CLIMB_BONUS owns the climb
-    PBRS_G2_SPAN = 160        # covers |x-53| back to the ladder-203 arrival
+    PBRS_G2_SPAN = 160        # covers the walk back to the ladder-203 arrival
+    # Wait spot RIGHT of the ladder base, not the base itself (user film
+    # review 2026-07-14): left of the ladder is a death pocket (girder-3
+    # edge-fall barrels land and reverse there), and the correct play is
+    # to wait on the right for a clean gap, then climb. Peaking the
+    # potential at x53 paid the left approach equally — now walking past
+    # the ladder into the pocket LOSES potential.
+    PBRS_G2_WAIT_X = 59
 
     def _phi(self, s):
         """Crossing-progress potential. State function only — no memory."""
@@ -134,9 +141,9 @@ class DonkeyKongEnv(gym.Env):
         height = max(0, self.BASE_Y - s["mario_y"])
         if height < self.PBRS_FLOOR_H:        # floor: toward the x203 ladder
             prog = 128 - min(abs(s["mario_x"] - self.PBRS_LADDER_X), 128)
-        elif height < self.PBRS_G2_H:         # girder 2: toward the x53 ladder
+        elif height < self.PBRS_G2_H:         # girder 2: toward the wait spot
             prog = 128 + (self.PBRS_G2_SPAN
-                          - min(abs(s["mario_x"] - self.LAD53_X),
+                          - min(abs(s["mario_x"] - self.PBRS_G2_WAIT_X),
                                 self.PBRS_G2_SPAN))
         else:                                 # saturated above the ladder base
             prog = 128 + self.PBRS_G2_SPAN
@@ -654,6 +661,11 @@ class DonkeyKongEnv(gym.Env):
     # base. The true dead-end corner is only the sliver past the ladder.
     CORNER_X_RIGHT = 214
     CORNER_COST    = 0.20
+    # Girder-2 left pocket: x left of the x53 ladder at girder-2 heights.
+    # Death zone (edge-fall barrel landings), no destination beyond it.
+    G2_POCKET_X    = 46
+    G2_POCKET_H_LO, G2_POCKET_H_HI = 28, 44
+    G2_POCKET_COST = 0.06
 
     # Broken-ladder stub tax (2026-07-07): the x=99 stub's lower rungs are
     # legal ladder tiles, so the glitch guard can't fire on them — eval film
@@ -805,6 +817,14 @@ class DonkeyKongEnv(gym.Env):
                         and (s["mario_x"] < self.CORNER_X_LEFT
                              or s["mario_x"] > self.CORNER_X_RIGHT)):
                     r -= self.CORNER_COST
+                # Girder-2 left-pocket tax (user film review 2026-07-14):
+                # left of the x53 ladder is where girder-3 edge-fall
+                # barrels land and reverse — "a bad place to be, unless
+                # absolutely necessary". Small rent so transit is cheap
+                # but waiting there is not.
+                if (self.G2_POCKET_H_LO <= height <= self.G2_POCKET_H_HI
+                        and s["mario_x"] < self.G2_POCKET_X):
+                    r -= self.G2_POCKET_COST
                 # Broken-ladder stub tax: see STUB_* constants.
                 if (self.STUB_H_LO <= height <= self.STUB_H_HI
                         and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI):
