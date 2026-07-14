@@ -15,6 +15,8 @@ import types
 import numpy as np
 import pytest
 
+import os
+
 from dkong_ai.mame_env import DonkeyKongEnv, ACTIONS
 
 
@@ -77,7 +79,7 @@ class FakeDK(DonkeyKongEnv):
         return dict(BOTTOM), b""
 
     def load_state_file(self, path):
-        name = path.split("/")[-1]
+        name = os.path.basename(path)   # portable: Windows joins with backslashes
         self.loaded.append(name)
         st = {"cellA.sta": CELL_A, "cellB.sta": CELL_B,
               "anchorA.sta": CELL_A}.get(name, BOTTOM)
