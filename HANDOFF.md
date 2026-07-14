@@ -533,7 +533,8 @@ that the new objective has been learned.
 | 29h | **stratified SIL buffers** (per-class floor/clear_bottomup/clear, equal-weight sampling — FIFO evicted floor crossings in minutes) | ~10h | ~66 | +40px 0.5→1.0%/h plateau, +20px 33-36% | 0 | buffer_floor RETAINED (11-13); all-day crossings capped at gain 57 — the wall found |
 | 29i | ★★ **PBRS stage 2** (girder-2 walk toward x53) + dense14 rung chains 14/15; mid-session doom-triage: mid-ladder rungs convicted phase-doomed, chains rebuilt girder-level | ~17h | 67-68 | +40px ~2.1%/h regime (2-3.5×), +20px to 39% | 0 | ★ WATERFALL DISCOVERED (§11b 2026-07-14); zombie-trainer incident (procedure rule added); bottomup full routes to h62-64 |
 | 29j | **wait-right doctrine** (user film verdict: the 3 h77 climbs were LUCK): PBRS peak → x59 wait spot, G2_POCKET tax (x<46), chains 14/15 on 4 minted wait-spot rungs (x60-70) | ~35min | 69 | — | 0 | superseded same-day by 29k (no clean baseline) |
-| **29k** | **gap-gated climb bonus** (x53 climb pays ONLY with the column above clear) + SIL floor class <30→<45 (wait-spot wins were never replayed) | **active** | **70** | — | 0 | the "when to climb" judgment now graded directly; watch: first +40 from wait-spot chains = repeatable line |
+| 29k | gap-gated climb bonus (x53 climb pays ONLY with the column above clear) + SIL floor class <30→<45 (wait-spot wins were never replayed) | ~1.5h | 70 | — | 0 | crude gate proved over-strict (tower barrels blocked payment); superseded by the user's pro line |
+| **29l** | ★ **time-race climb gate** (user pro line: climb iff climb-time beats the barrel's arrival at the ladder top) + **CLEAN_MOUNT_BONUS 2.0** one-shot + 11 phase-diverse wait cells (frontiers = different crossings) + review-r7 fixes | **active** | **71** | **FIRST COMMITTED CLIMBS from wait-spot starts: +20px 0 → 0.81 → 1.76%/h, best 25 (h63)** | 0 | the doctrine works: clean-gap mounts within the first hour; kill window h60-63 is now the single contested zone |
 
 ---
 
@@ -801,9 +802,20 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   only into a clean gap. Implemented as: PBRS stage 2 peak at x59;
   G2_POCKET tax (x<46, h28-44, 0.06/step); chains 14/15 = minted
   wait-spot rungs (wr_*, x60-70 h37-38); CLIMB_BONUS gap-gated on
-  `_lad53_column_clear` (no barrel above Mario in x[35,76]). Run-30 obs
-  queue (with Stage B, branch `stage-b` commit 84418bc, checklist
-  docs/STAGE_B.md): danger-above-ladder bit + difficulty byte.
+  `_lad53_column_clear`. The first crude gate (any barrel above in
+  x[35,76]) was over-strict — tower barrels blocked payment; replaced
+  same day (29l) by the USER'S PRO LINE: *a climb is safe iff the time
+  to walk the ladder bottom-to-top beats any barrel's time to reach the
+  ladder top* — equal px-rates reduce it to a distance race: threat iff
+  a barrel above Mario has 130<=y<mario_y and x in [35, 53 + remaining
+  + 20] where remaining = mario_y - 160. Plus CLEAN_MOUNT_BONUS 2.0
+  (one-shot per episode, first clean-gap climb step — pays the commit
+  decision). RESULT (29l hours 1-2): first committed climbs ever from
+  the wait-spot cells, +20px 0 → 0.81 → 1.76%/h, deaths piling at
+  h61-63 — the kill window is now the single contested zone on the
+  board. Run-30 obs queue (with Stage B, branch `stage-b`, checklist
+  docs/STAGE_B.md): danger-above-ladder bit + difficulty byte +
+  edge_dist inactive-default fix (committed on the branch).
 
 ---
 
@@ -1273,6 +1285,11 @@ track barrel state across the ~3s traverse window.
   `-video none`; raw AVI ≈ 10 MB/s of game time, convert with ffmpeg).
 
 ---
+
+- **Monitor CSVs reset on every relaunch** (`logs/episodes/dk_*.monitor.csv`
+  are recreated with a fresh t_start): any analysis window that straddles a
+  restart silently loses the pre-restart episodes. Keep hourly-check windows
+  inside the current run's lifetime.
 
 ## 17. File map
 
