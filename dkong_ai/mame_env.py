@@ -134,19 +134,30 @@ class DonkeyKongEnv(gym.Env):
     # the ladder into the pocket LOSES potential.
     PBRS_G2_WAIT_X = 59
 
+    LAD53_TOP_Y = 160         # ladder-top region on girder 3 (crossings top
+                              # out y163; a few px of margin)
+    GAP_MARGIN_PX = 20        # safety pad on the time-race (below)
+
     def _lad53_column_clear(self, s):
-        """True when no active barrel is ABOVE Mario in (or entering) the
-        x53 ladder column — the 'clean gap' precondition for paying the
-        climb bonus. Width extends past CLIMB_X to catch girder-3 barrels
-        committed to the left-edge fall."""
+        """User pro line (2026-07-14): a climb is safe iff the time to walk
+        the ladder bottom-to-top beats any barrel's time to reach the
+        ladder top. Barrels and Mario move at similar px rates, so the
+        time race reduces to distance: a barrel ABOVE Mario is a threat
+        only if it is in the fall column, or on the girder above within
+        (remaining climb px + margin) to the right of the ladder. Barrels
+        higher up the tower (y < ~130) are irrelevant to the decision and
+        no longer block payment."""
         my = s.get("mario_y") or 240
+        remaining = max(0, my - self.LAD53_TOP_Y)
+        reach_x = self.LAD53_X + remaining + self.GAP_MARGIN_PX
         for i in range(6):
-            if s.get(f"barrel{i}_st", 0) in (1, 2):
-                if (s.get(f"barrel{i}_y", 240) < my
-                        and self.CLIMB_X_LO - 8
-                        <= s.get(f"barrel{i}_x", 0)
-                        <= self.CLIMB_X_HI + 8):
-                    return False
+            if s.get(f"barrel{i}_st", 0) not in (1, 2):
+                continue
+            by = s.get(f"barrel{i}_y", 240)
+            if not (130 <= by < my):          # only threats above Mario but
+                continue                      # near girder 3 or already falling
+            if self.CLIMB_X_LO - 8 <= s.get(f"barrel{i}_x", 0) <= reach_x:
+                return False
         return True
 
     def _phi(self, s):
@@ -615,6 +626,8 @@ class DonkeyKongEnv(gym.Env):
     CLIMB_X_LO, CLIMB_X_HI = 43, 68   # ladder column ± tolerance
     CLIMB_H_LO, CLIMB_H_HI = 40, 100  # height band: start of 2nd girder → 3rd
     CLIMB_BONUS      = 0.30            # per step while actively ascending
+    CLEAN_MOUNT_BONUS = 2.0            # one-shot: first clean-gap climb step
+                                       # of the episode (pays the judgment)
     LADDER_IDLE_COST = 0.05            # per step in ladder zone but y unchanged
 
     # Upper-section final-ladder climb bonus: same mechanic as CLIMB_BONUS but
@@ -901,6 +914,11 @@ class DonkeyKongEnv(gym.Env):
                     if s["mario_y"] < p["mario_y"]:
                         if self._lad53_column_clear(s):
                             r += self.CLIMB_BONUS
+                            if not self._clean_mount_paid:
+                                # One-shot: pays the DECISION to commit into
+                                # a clean gap, not just the climbing.
+                                r += self.CLEAN_MOUNT_BONUS
+                                self._clean_mount_paid = True
                     elif s["mario_y"] == p["mario_y"]:
                         r -= self.LADDER_IDLE_COST
                 # Upper ladder climb bonus: same mechanic for the final ladder
@@ -1358,6 +1376,7 @@ class DonkeyKongEnv(gym.Env):
         self._wp_hit = set()                 # waypoint milestones fired this episode
         self._episode_steps = 0              # for height-timeout termination
         self._glitch_px = 0                  # cumulative off-ladder climb pixels
+        self._clean_mount_paid = False       # one-shot clean-mount bonus flag
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length

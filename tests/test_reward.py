@@ -21,6 +21,7 @@ def _make_env(reward_max_h=0):
     env._corridor = None     # disables novelty corridor bonus (returns None in _target_x)
     env._glitch_px = 0       # glitch-guard accumulators the guard reads/writes
     env._glitch_kill = False
+    env._clean_mount_paid = True   # suppress the one-shot in generic tests
     return env
 
 
@@ -311,3 +312,34 @@ def test_climb_bonus_gap_gated():
     r_below, _ = env._reward(s3)
     assert abs(r_below - r_clear) < 0.05, (
         f"a barrel BELOW must not gate the climb: {r_below} vs {r_clear}")
+
+
+def test_time_race_gate_and_mount_bonus():
+    """User pro line: a girder-3 barrel matters only if it can reach the
+    ladder top before Mario does; tower barrels never block. First clean
+    climb step also pays the one-shot mount bonus."""
+    env = _pbrs_env()
+    p = _state(mario_y=190, mario_x=53)
+    base = _state(mario_y=186, mario_x=53)
+    env._prev = p
+    r_clear, _ = env._reward(base)
+    # far-up-tower barrel (y=100): must NOT gate
+    env._prev = p
+    r_tower, _ = env._reward(dict(base, barrel0_st=1, barrel0_x=55, barrel0_y=100))
+    assert abs(r_tower - r_clear) < 0.05
+    # girder-3 barrel beyond Mario's remaining reach: safe
+    env._prev = p
+    r_far, _ = env._reward(dict(base, barrel0_st=1, barrel0_x=140, barrel0_y=150))
+    assert abs(r_far - r_clear) < 0.05
+    # same barrel close enough to win the race: gated
+    env._prev = p
+    r_near, _ = env._reward(dict(base, barrel0_st=1, barrel0_x=70, barrel0_y=150))
+    assert r_clear - r_near > 0.2
+    # one-shot mount bonus fires exactly once
+    env2 = _pbrs_env()
+    env2._clean_mount_paid = False
+    env2._prev = p
+    r1, _ = env2._reward(dict(base))
+    env2._prev = base
+    r2, _ = env2._reward(_state(mario_y=182, mario_x=53))
+    assert r1 - r2 > 1.5, f"first climb step should carry the one-shot: {r1} vs {r2}"
