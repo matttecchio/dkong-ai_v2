@@ -370,7 +370,7 @@ class BackwardCallback(BaseCallback):
 
 
 def make_env(rom_dir, port, frameskip, backward_manifest=None,
-             p_no_barrels=None, p_curric=None):
+             p_no_barrels=None, p_curric=None, gamma=None):
     def _thunk():
         # record=False -> fast save-state resets (no per-episode .inp; use eval.py
         # with recording for watchable playback of a trained policy).
@@ -387,6 +387,12 @@ def make_env(rom_dir, port, frameskip, backward_manifest=None,
             env.P_NO_BARRELS = p_no_barrels
         if p_curric is not None:
             env._p_curric = p_curric
+        if gamma is not None:
+            # PBRS policy-invariance requires the SAME gamma in shaping and
+            # RL update (review r9): bind the env's shaping gamma to the
+            # training gamma. Instance attr inside the thunk — the spawn
+            # gotcha above applies to this exactly as to _p_curric.
+            env.PBRS_GAMMA = gamma
         # Per-episode CSV: ground truth for auditing the aggregate metrics.
         # clear_rate_bottomup rose while every controlled bottom-start eval
         # scored 0/425 — these rows are how we catch a phantom clear in the
@@ -502,7 +508,7 @@ def main():
     # One MAME instance per env, each on its own socket port.
     thunks = [make_env(args.rom_dir, args.base_port + i, args.frameskip,
                        bw_manifest, p_no_barrels=args.p_no_barrels,
-                       p_curric=args.p_curric)
+                       p_curric=args.p_curric, gamma=args.gamma)
               for i in range(args.n_envs)]
     # Turn SIGTERM into a normal exception so the finally-block cleanup (which
     # shuts MAME down) runs on `kill <pid>`, not just on Ctrl-C / completion.
