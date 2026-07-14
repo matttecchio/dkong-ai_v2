@@ -21,7 +21,8 @@ def _make_env(reward_max_h=0):
     env._corridor = None     # disables novelty corridor bonus (returns None in _target_x)
     env._glitch_px = 0       # glitch-guard accumulators the guard reads/writes
     env._glitch_kill = False
-    env._clean_mount_paid = True   # suppress the one-shot in generic tests
+    env._clean_mount_paid = True   # suppress the one-shots in generic tests
+    env._waterfall_paid = True
     return env
 
 
@@ -343,3 +344,17 @@ def test_time_race_gate_and_mount_bonus():
     env2._prev = base
     r2, _ = env2._reward(_state(mario_y=182, mario_x=53))
     assert r1 - r2 > 1.5, f"first climb step should carry the one-shot: {r1} vs {r2}"
+
+
+def test_waterfall_pass_one_shot():
+    """Climbing past the edge-fall kill window on the x53 column pays the
+    one-shot exactly once."""
+    env = _pbrs_env()
+    env._waterfall_paid = False
+    p = _state(mario_y=174, mario_x=53)    # h66, mid-ladder
+    s = _state(mario_y=170, mario_x=53)    # h70: past the window
+    env._prev = p
+    r1, _ = env._reward(s)
+    env._prev = s
+    r2, _ = env._reward(_state(mario_y=166, mario_x=53))
+    assert r1 - r2 > 4.0, f"first pass should carry the one-shot: {r1} vs {r2}"

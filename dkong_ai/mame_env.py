@@ -625,9 +625,16 @@ class DonkeyKongEnv(gym.Env):
     # (requires mario_y to decrease = actually gaining height on the ladder).
     CLIMB_X_LO, CLIMB_X_HI = 43, 68   # ladder column ± tolerance
     CLIMB_H_LO, CLIMB_H_HI = 40, 100  # height band: start of 2nd girder → 3rd
-    CLIMB_BONUS      = 0.30            # per step while actively ascending
+    # 0.30 -> 0.50 (2026-07-14, mirrors the UPPER_CLIMB fix): once
+    # committed, finish FAST — the game steers barrels down the ladder
+    # Mario is ON (user lore), so stalling invites death; the idle cost
+    # below is deliberately UNCONDITIONAL for the same reason.
+    CLIMB_BONUS      = 0.50            # per step while actively ascending
     CLEAN_MOUNT_BONUS = 2.0            # one-shot: first clean-gap climb step
                                        # of the episode (pays the judgment)
+    WATERFALL_PASS_BONUS = 5.0         # one-shot at h>=68 on the x53 column:
+                                       # survived the edge-fall kill window
+    WATERFALL_PASS_H = 68
     LADDER_IDLE_COST = 0.05            # per step in ladder zone but y unchanged
 
     # Upper-section final-ladder climb bonus: same mechanic as CLIMB_BONUS but
@@ -919,6 +926,13 @@ class DonkeyKongEnv(gym.Env):
                                 # a clean gap, not just the climbing.
                                 r += self.CLEAN_MOUNT_BONUS
                                 self._clean_mount_paid = True
+                        if (not self._waterfall_paid
+                                and height >= self.WATERFALL_PASS_H):
+                            # One-shot: cleared the girder-3 edge-fall kill
+                            # window (h~60-63) — the single event SIL most
+                            # needs to see marked.
+                            r += self.WATERFALL_PASS_BONUS
+                            self._waterfall_paid = True
                     elif s["mario_y"] == p["mario_y"]:
                         r -= self.LADDER_IDLE_COST
                 # Upper ladder climb bonus: same mechanic for the final ladder
@@ -1377,6 +1391,7 @@ class DonkeyKongEnv(gym.Env):
         self._episode_steps = 0              # for height-timeout termination
         self._glitch_px = 0                  # cumulative off-ladder climb pixels
         self._clean_mount_paid = False       # one-shot clean-mount bonus flag
+        self._waterfall_paid = False         # one-shot waterfall-pass flag
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
