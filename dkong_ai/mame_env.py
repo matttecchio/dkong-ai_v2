@@ -480,7 +480,7 @@ class DonkeyKongEnv(gym.Env):
                         m[row, col] = 128
         return m[..., None]  # (84, 84, 1)
 
-    # RAM feature layout (74 values, all in [-1, 1]):
+    # RAM feature layout (75 values, all in [-1, 1]):
     #   [mario_x/255, mario_y/240]                                              —  2
     #   [Δx/128, Δy/120, vx/8, vy/20, lad53/64, edge_dist, active,
     #    crazy, blue]                            × 6 barrels                   — 54
@@ -941,11 +941,11 @@ class DonkeyKongEnv(gym.Env):
                 # Gate: block score when camping (low + right side + not moving
                 # left). Also unconditionally block in the right corner (x>190,
                 # height<15) — no barrel-jump reward for the dead-end wall.
-                in_corner = (s["mario_y"] is not None
+                in_corner = (s["mario_y"]
                              and s["mario_y"] > self.BASE_Y - self.CORNER_H_MAX
                              and s["mario_x"] > self.CORNER_X_RIGHT)
                 in_gate = in_corner or (
-                           s["mario_y"] is not None
+                           s["mario_y"]
                            and s["mario_y"] > self.BASE_Y - self.SCORE_GATE_H
                            and s["mario_x"] > self.SCORE_GATE_X
                            and s["mario_x"] >= p["mario_x"])
@@ -961,7 +961,7 @@ class DonkeyKongEnv(gym.Env):
             # exactly then (external review finding, fixed 2026-07-10).
             if (s.get("has_hammer", 0)
                     and s["mario_x"] < self.HAMMER_WALL_X
-                    and s["mario_y"] is not None
+                    and s["mario_y"]
                     and s["mario_y"] < self.BASE_Y - self.HAMMER_WALL_H_LO):
                 r -= self.HAMMER_WALL_COST
         # Broken-ladder glitch guard: sustained climbing (y falling, x pinned,

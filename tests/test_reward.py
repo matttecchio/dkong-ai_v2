@@ -19,6 +19,8 @@ def _make_env(reward_max_h=0):
     env._visited = set()
     env._episode_steps = 0
     env._corridor = None     # disables novelty corridor bonus (returns None in _target_x)
+    env._glitch_px = 0       # glitch-guard accumulators the guard reads/writes
+    env._glitch_kill = False
     return env
 
 

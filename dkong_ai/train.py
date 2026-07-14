@@ -352,10 +352,10 @@ class BackwardCallback(BaseCallback):
                       f"> {self.CONSOL_OFF} — promotions resume", flush=True)
         self.logger.record("climb/backward_consolidating",
                            int(self._consolidating))
+        self._results = self._results[-self.window:]
         if self._results:
             self.logger.record("climb/backward_clear_rate",
                                sum(self._results) / len(self._results))
-            self._results = self._results[-self.window:]
         rates = [sum(f) / len(f) for f in self._frontier if f]
         if rates:
             self.logger.record("climb/backward_clear_frontier",
