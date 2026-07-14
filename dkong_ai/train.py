@@ -149,8 +149,11 @@ class SILCallback(BaseCallback):
                                if info.get("start_type") == "bottomup"
                                else "clear")
                     elif (info.get("start_type") == "curriculum"
-                          and start_h < 30 and gained >= 40):
-                        cls = "floor"       # the rare crossing successes
+                          and start_h < 45 and gained >= 40):
+                        cls = "floor"       # crossing + wait-spot ladder wins
+                                            # (<45 covers the x53 wait-spot
+                                            # starts at h37-38; was <30 which
+                                            # silently excluded them)
                     elif (info.get("start_type") == "curriculum"
                           and gained >= 40):
                         cls = "clear"       # generic curric progress: pool

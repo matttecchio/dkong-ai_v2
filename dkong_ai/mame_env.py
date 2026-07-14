@@ -134,6 +134,21 @@ class DonkeyKongEnv(gym.Env):
     # the ladder into the pocket LOSES potential.
     PBRS_G2_WAIT_X = 59
 
+    def _lad53_column_clear(self, s):
+        """True when no active barrel is ABOVE Mario in (or entering) the
+        x53 ladder column — the 'clean gap' precondition for paying the
+        climb bonus. Width extends past CLIMB_X to catch girder-3 barrels
+        committed to the left-edge fall."""
+        my = s.get("mario_y") or 240
+        for i in range(6):
+            if s.get(f"barrel{i}_st", 0) in (1, 2):
+                if (s.get(f"barrel{i}_y", 240) < my
+                        and self.CLIMB_X_LO - 8
+                        <= s.get(f"barrel{i}_x", 0)
+                        <= self.CLIMB_X_HI + 8):
+                    return False
+        return True
+
     def _phi(self, s):
         """Crossing-progress potential. State function only — no memory."""
         if s.get("screen_id", 1) != 1 or not s.get("mario_y"):
@@ -875,11 +890,17 @@ class DonkeyKongEnv(gym.Env):
                 # 2nd→3rd girder ladder. Requires mario_y to decrease (gaining
                 # height) while positioned at the ladder column — can't be farmed
                 # by standing still.
+                # GAP-GATED (user doctrine 2026-07-14): climbing only pays when
+                # the column above is clear of barrels — "climb only when he
+                # can make it between barrels". Climbing under a barrel is the
+                # low-percentage gamble that produced the lucky h77 lines; it
+                # now earns nothing (death remains its own lesson).
                 if (not_jumping
                         and self.CLIMB_H_LO <= height <= self.CLIMB_H_HI
                         and self.CLIMB_X_LO <= s["mario_x"] <= self.CLIMB_X_HI):
                     if s["mario_y"] < p["mario_y"]:
-                        r += self.CLIMB_BONUS
+                        if self._lad53_column_clear(s):
+                            r += self.CLIMB_BONUS
                     elif s["mario_y"] == p["mario_y"]:
                         r -= self.LADDER_IDLE_COST
                 # Upper ladder climb bonus: same mechanic for the final ladder

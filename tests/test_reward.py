@@ -288,3 +288,24 @@ def test_pbrs_stage2_not_farmable_and_saturates():
     env._prev = p
     r, _ = env._reward(s)
     assert abs(r) < 0.05, f"above h44 x-moves should not pay PBRS, got {r}"
+
+
+def test_climb_bonus_gap_gated():
+    """Climbing the x53 ladder pays only when the column above is clear —
+    climbing under a barrel is the low-percentage gamble (user doctrine)."""
+    env = _pbrs_env()
+    p = _state(mario_y=190, mario_x=53)    # on the ladder, h50
+    s = _state(mario_y=186, mario_x=53)    # climbed 4px
+    env._prev = p
+    r_clear, _ = env._reward(s)
+    env._prev = p
+    s2 = dict(s, barrel0_st=1, barrel0_x=55, barrel0_y=170)  # barrel ABOVE
+    r_blocked, _ = env._reward(s2)
+    assert r_clear - r_blocked > 0.2, (
+        f"clear-column climb should outpay blocked climb: "
+        f"{r_clear} vs {r_blocked}")
+    env._prev = p
+    s3 = dict(s, barrel0_st=1, barrel0_x=55, barrel0_y=210)  # barrel BELOW
+    r_below, _ = env._reward(s3)
+    assert abs(r_below - r_clear) < 0.05, (
+        f"a barrel BELOW must not gate the climb: {r_below} vs {r_clear}")
