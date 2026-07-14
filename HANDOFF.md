@@ -529,7 +529,11 @@ that the new objective has been learned.
 | 29d | success-record fix (ordering trap #4: _begin_episode wiped the start descriptor — 0/3917 records "exact") | ~1h | — | 0 | 0 | harvest flywheel finally fed; first exact records confirmed |
 | 29e | PBRS floor-band fix (review round 5: girder slope made FLOOR_H=8 inert) | ~20M | — | 0 | 0 | overnight: 4 gates (chain 6 → 13, deepest shelf ever), governor self-recovered, wc_154 clean 0.14→0.71, floor 20K+ draws best=8px |
 | 29f | ★★★ **THE FLOOR GEOMETRY CORRECTION**: real first ladder x=203 (phantom x143 removed; guard/corner-tax/PBRS/FIRST_CLIMB re-geometried) | ~3h | — | 8→26 best | 0 | the 'poverty trap' was OUR OWN geometry: guard executed real-rail climbs, corner tax covered its base, PBRS steered away |
-| **29g** | oil-can novelty exclusion (film #5) + 22 harvested approaches merged | **active** | — | **recovery curve: best 8→58, +20px 0→24%, bottomup mean 7.7→21** | 0 | ★ FIRST HONEST FLOOR CROSSINGS (+40px) in project history; SIL flywheel compounding |
+| 29g | oil-can novelty exclusion (film #5) + 22 harvested approaches merged | ~19h | — | **recovery curve: best 8→58, +20px 0→24%, bottomup mean 7.7→21** | 0 | ★ FIRST HONEST FLOOR CROSSINGS (+40px) in project history; SIL flywheel compounding |
+| 29h | **stratified SIL buffers** (per-class floor/clear_bottomup/clear, equal-weight sampling — FIFO evicted floor crossings in minutes) | ~10h | ~66 | +40px 0.5→1.0%/h plateau, +20px 33-36% | 0 | buffer_floor RETAINED (11-13); all-day crossings capped at gain 57 — the wall found |
+| 29i | ★★ **PBRS stage 2** (girder-2 walk toward x53) + dense14 rung chains 14/15; mid-session doom-triage: mid-ladder rungs convicted phase-doomed, chains rebuilt girder-level | ~17h | 67-68 | +40px ~2.1%/h regime (2-3.5×), +20px to 39% | 0 | ★ WATERFALL DISCOVERED (§11b 2026-07-14); zombie-trainer incident (procedure rule added); bottomup full routes to h62-64 |
+| 29j | **wait-right doctrine** (user film verdict: the 3 h77 climbs were LUCK): PBRS peak → x59 wait spot, G2_POCKET tax (x<46), chains 14/15 on 4 minted wait-spot rungs (x60-70) | ~35min | 69 | — | 0 | superseded same-day by 29k (no clean baseline) |
+| **29k** | **gap-gated climb bonus** (x53 climb pays ONLY with the column above clear) + SIL floor class <30→<45 (wait-spot wins were never replayed) | **active** | **70** | — | 0 | the "when to climb" judgment now graded directly; watch: first +40 from wait-spot chains = repeatable line |
 
 ---
 
@@ -777,6 +781,29 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   old policy never did; (b) re-passed tiers HOLD >30%; (c) burn-in cells
   show height-gain >0 on failures; (d) floor recovery slope (fresh heads
   start ~5 in the poverty trap; judge slope, not level).
+
+- **29h-29k (2026-07-13/14): THE WATERFALL — the wall behind the wall.**
+  Stratified SIL held floor crossings in buffer (retention fixed) and the
+  +40px rate plateaued ~1%/h with EVERY crossing dying at gain 57 (h~63).
+  Empirical mount map (no-barrels girder-2 walk, probing UP each 2px):
+  complete 2nd→3rd ladder at **x48-54** (geometry was right), broken stub
+  x112-120, NOTHING at x59-65 (crossing peaks at x59/65 h77 = standing on
+  girder 3's sloped left end after completing the climb). THE KILLER:
+  barrels rolling off girder 3's left edge rain through the ladder column
+  at h~62 — user film review confirmed ("he lets the barrel fall off the
+  edge... turns back and kills him"). Scripted probes: blind climb dies
+  h62 all phases; wait-then-climb dies h46-48 (a barrel is already
+  committed at cold load) — mid-ladder rung saves are PHASE-DOOMED (28c
+  lesson recurs). User verdict on the 3 recorded h77 climbs: **LUCK**
+  (barrels chose to roll over the top) — imitation/coaching of those
+  lines killed. Doctrine (user, 2026-07-14): wait RIGHT of the ladder
+  (x59), never loiter in the left pocket (edge-fall landing zone), climb
+  only into a clean gap. Implemented as: PBRS stage 2 peak at x59;
+  G2_POCKET tax (x<46, h28-44, 0.06/step); chains 14/15 = minted
+  wait-spot rungs (wr_*, x60-70 h37-38); CLIMB_BONUS gap-gated on
+  `_lad53_column_clear` (no barrel above Mario in x[35,76]). Run-30 obs
+  queue (with Stage B, branch `stage-b` commit 84418bc, checklist
+  docs/STAGE_B.md): danger-above-ladder bit + difficulty byte.
 
 ---
 
@@ -1082,6 +1109,22 @@ crashed whole SubprocVecEnv. **Fix**: `SDL_VIDEODRIVER=dummy`,
 `SDL_AUDIODRIVER=dummy`, drop `DISPLAY`/`WAYLAND_DISPLAY` for headless processes.
 
 ---
+
+- **Zombie-trainer restart (2026-07-13)**: a SIGTERM'd trainer hung in
+  `venv.close()`; the relaunch script's wait loop timed out but proceeded
+  → `pkill mame` triggered `_recover()` respawns from the hung trainer's
+  workers → TWO trainers racing ports 5000-5015 for 50 min. RULE: after
+  TERM, verify exit; on timeout SIGKILL the trainer AND its worker PIDs
+  BEFORE touching MAMEs.
+- **`git add -A` sweep (2026-07-13)**: untracked runtime artifacts
+  (levels.json, manifests, harvest staging) committed to a side branch;
+  the checkout back DELETED 38 files from disk and reverted the live
+  dense13 manifest. RULE: explicit paths only; side-branch work in git
+  worktrees, never branch switches in the live tree.
+- **SIL silent class exclusion (2026-07-14)**: the floor buffer required
+  start_h<30, so wait-spot-start wins (h37-38) were recorded but never
+  replayed. Widened to <45. When adding new curriculum start bands, check
+  the SIL classifier covers them.
 
 ## 13. Temporal awareness / barrel timing
 
