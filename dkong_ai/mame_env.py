@@ -454,7 +454,7 @@ class DonkeyKongEnv(gym.Env):
     # edge_dist: normalised [0,1] distance to the girder edge the barrel is heading
     # toward (0 = at edge / about to fall, 1 = far away). Paired with the fall-zone
     # image overlay so the agent can anticipate barrels appearing from above.
-    RAM_FEATURE_DIM = 83   # 2 mario + 6 barrels x 10 + 5 fireballs x 3 + 3 hammer
+    RAM_FEATURE_DIM = 84   # 2 mario + 6 barrels x 10 + 5 fireballs x 3 + 3 hammer
                            # + 1 difficulty (regime-conditional play: wild-barrel
                            # behaviour differs sharply by 0x6380 regime, and the
                            # diff-5 counter-move is unlearnable without knowing
@@ -538,6 +538,24 @@ class DonkeyKongEnv(gym.Env):
         # depend on ("can't smash a barrel behind you"; stop-before-smash).
         feats.append(min(state.get("bonus_timer", 48), 48) / 48.0)
         feats.append(float(state.get("mario_facing", 0) & 0x80 > 0))
+        # Safe-climb margin for the x53 ladder (run 30): the time-race the
+        # reward gate computes, exposed as an instrument. Positive =
+        # nearest threat is further (in px) than the remaining climb.
+        my = state.get("mario_y") or 240
+        remaining = max(0, my - getattr(self, 'LAD53_TOP_Y', 160))
+        nearest = 999.0
+        for i in range(6):
+            if state.get(f"barrel{i}_st", 0) not in (1, 2):
+                continue
+            by = state.get(f"barrel{i}_y", 240)
+            if not (130 <= by < my):
+                continue
+            bx = state.get(f"barrel{i}_x", 0)
+            if bx >= getattr(self, 'CLIMB_X_LO', 43) - 8:
+                nearest = min(nearest, float(bx - self.LAD53_X))
+        margin = 1.0 if nearest == 999.0 else float(
+            np.clip((nearest - remaining) / 64.0, -1, 1))
+        feats.append(margin)
         return np.array(feats, dtype=np.float32)
 
     # ---- reward shaping helpers -----------------------------------------

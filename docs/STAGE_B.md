@@ -10,8 +10,8 @@
   mirrors lad53; +6), bonus timer /48 (+1), facing bit 7 (+1).
 - edge_dist for INACTIVE barrels now defaults 1.0 (safe), was 0.0 (= at-edge,
   the most dangerous reading; review r7 #4).
-- QUEUED before deploy (not yet coded): danger-above-ladder bit +
-  difficulty byte (83 -> 85).
+- Safe-climb margin feature CODED (83 -> 84): the reward gate's
+  time-race exposed as a continuous input (difficulty already in base 75).
 - Obs shape change ⇒ the running run28/29 model CANNOT load these envs.
 
 ## Deploy day (run 30)
