@@ -140,7 +140,6 @@ function render(){
   const L=0.28;
   for(const p in E){
     const e=E[p];
-    if(!e.tgt||!e.cur){requestAnimationFrame(render);}
     if(e.tgt&&e.cur){
       e.cur.x+=(e.tgt.x-e.cur.x)*L; e.cur.y+=(e.tgt.y-e.cur.y)*L;
       const px=e.cur.x, py=e.cur.y;
