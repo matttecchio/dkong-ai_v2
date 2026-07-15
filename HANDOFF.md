@@ -536,7 +536,9 @@ that the new objective has been learned.
 | 29k | gap-gated climb bonus (x53 climb pays ONLY with the column above clear) + SIL floor class <30→<45 (wait-spot wins were never replayed) | ~1.5h | 70 | — | 0 | crude gate proved over-strict (tower barrels blocked payment); superseded by the user's pro line |
 | 29l | ★ time-race climb gate (user pro line) + CLEAN_MOUNT_BONUS 2.0 + 11 phase-diverse wait cells | ~4h | 71 | first committed climbs: +20px 0→1.8%/h, best 25 | 0 | doctrine works; kill window h60-63 the single contested zone |
 | 29m | clean-climb pay 0.30→0.50 + WATERFALL_PASS_BONUS +5 @h68 (ladder-stall correction: NEVER free holds — the game steers barrels down Mario's ladder) | 17h | 72 | ★ commit rate ×7 (peak 7.1%/h); ceiling 64→**70**; FIRST WATERFALL PASSAGE (h68+); h63+ 11→102; battery BEST EVER det 38.4/40 stoch 34.6/37 | 0 | final baseline: 58,736 low-start eps, h65+: 5, h68+: 1 — volume without tail penetration = the perception argument |
-| **30** | ★★★ **STAGE B DEPLOYED** (user-ordered early): RAM 75→84 (timer, facing, lad203×6, edge_dist fix, **safe-climb margin** = the time-race as an input), watch 60→62; CNN transferred from 29m-final, heads FRESH, levels reset; launcher/auto_resume → run30 family | **active** | **73** | rebuild: curric clears 26.5% in first 22 min | 0 | judge by SLOPE for 1-2 days (bottomup regresses by design); the margin's test = climbs that abort on negative margin |
+| 30 | ★★★ STAGE B DEPLOYED (user-ordered early): RAM 75→84 (timer, facing, lad203×6, edge_dist fix, safe-climb margin), watch 60→62; CNN from 29m-final, heads fresh, levels reset | ~5h | 73 | rebuild burst: 49 gates in 80 min, rehearsal 0.85 | 0 | resume infra moved to run30 family |
+| 30b | ★ geometry corrections (user board.jpg + probes): x53 tops at GIRDER 3 h62 (two-stage theory retracted — h70-77 were jump arcs); verified stub envelopes x82/x116/x99 (the 28d "glitch rail" is a REAL broken ladder); WATERFALL_PASS was unreachable (h68 gate vs h62 top) → now h64 & x45-105 & low start | ~1h | 74 | — | 0 | stub warning pinned: legal span only, never shape into stub columns |
+| **30c** | **G3_TRAVERSE** (user pro line: climb → RIGHT → x131 middle ladder; corridor x_med 96→107→131 confirms) + g2 traverse band trimmed 65→52 (oscillation-pump prevention) | **active** | **75** | — | 0 | the pro line is now a continuous gradient floor→tower; run-31 wishlist: 6-second projected-occupancy channel (user's pro mental model) |
 
 ---
 
@@ -825,6 +827,21 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   incl. the safe-climb margin, CNN from the best-battery-ever 29m final,
   fresh heads, levels reset, resume infra moved to the run30 family
   (run28 checkpoints are SHAPE-INCOMPATIBLE — never resume them).
+- **GEOMETRY SETTLED (2026-07-15 pm, user's annotated board.jpg — kept at
+  /home/claw3/board.jpg — plus frozen-barrel probes):** x53 is ONE
+  complete ladder topping at girder 3's surface (h62); the kill zone is
+  g3's left end under the right-to-left roller sweep; the x82 broken
+  chute right of the arrival is the immediate hazard (pro play: jump its
+  barrel at the BOTTOM, or cross without baiting a steer-down). Board
+  ladder inventory from the user's map: completes ~x94 & ~x201 (g4→g5),
+  ~x196 (g3→g4), far-left h125-150 — spans pending a reset-per-target
+  probe (fireball kills long census sessions; scripts in scratchpad) and
+  NOT in COMPLETE_LADDERS until verified. Broken stubs verified and
+  legalized (x82 h64-76, x116 h34-48, x99 h0-12) — the guard's y-span
+  check keeps the ratchet exploit dead; USER WARNING pinned at the
+  definitions: never widen a stub span unprobed, never shape reward into
+  a stub column. Pro doctrine (user): track all barrels, project ~6s
+  ahead — run-31 candidate: projected-occupancy vision channel.
 
 ---
 
