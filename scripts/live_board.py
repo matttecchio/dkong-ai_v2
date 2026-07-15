@@ -18,11 +18,16 @@ class H(http.server.BaseHTTPRequestHandler):
                 f = f"/dev/shm/dk_live_{p}"
                 try:
                     st = os.stat(f)
-                    x, y, stype, chain = open(f).read().split(",")
+                    raw = open(f).read()
+                    head, bs, fs = (raw.split("|") + ["", ""])[:3]
+                    x, y, stype, chain = head.split(",")
+                    pts = lambda s: [[int(a) for a in pair.split(":")]
+                                     for pair in s.split(";") if ":" in pair]
                     out.append({"port": p, "x": int(x), "y": int(y),
                                 "t": stype, "c": int(chain),
-                                "stale": now - st.st_mtime > 15})  # envs pause
-                                # several seconds during each PPO update
+                                "b": pts(bs), "fb": pts(fs),
+                                # envs pause several seconds during PPO updates
+                                "stale": now - st.st_mtime > 15})
                 except (OSError, ValueError):
                     out.append({"port": p, "stale": True})
             body = json.dumps(out).encode()
@@ -64,9 +69,11 @@ h1 { font:600 14px ui-monospace,monospace; letter-spacing:.15em; color:#F2B33D; 
 <script>
 const NS='http://www.w3.org/2000/svg', ov=document.getElementById('ov');
 const MARIO='data:image/png;base64,__MARIO__';
+const BARREL='data:image/png;base64,__BARREL__';
+const FIRE='data:image/png;base64,__FIRE__';
 // native frame: screen = RAM - (14.5, 7.5); display scale x3
 const ix=x=>(x-14.5)*3, iy=y=>(y-7.5)*3;
-const marks={}, rings={}, trails={};
+const marks={}, rings={}, trails={}, threats={};
 function el(t,a){const e=document.createElementNS(NS,t);
   for(const k in a)e.setAttribute(k,a[k]);ov.appendChild(e);return e;}
 async function tick(){
@@ -79,9 +86,22 @@ async function tick(){
         rings[s.port]=el('ellipse',{rx:18,ry:5,fill:'none','stroke-width':2.5});
         marks[s.port]=el('image',{href:MARIO,width:40,height:56});
       }
+      if(!threats[s.port])threats[s.port]=[];
       const m=marks[s.port], ring=rings[s.port], tr=trails[s.port];
+      const th=threats[s.port];
       if(s.stale){m.setAttribute('opacity',.15);ring.setAttribute('opacity',.15);
-        tr.setAttribute('points','');continue;}
+        tr.setAttribute('points','');th.forEach(e=>e.setAttribute('opacity',0));continue;}
+      // threats: barrels then fireballs, reusing a pooled element list
+      const objs=(s.b||[]).map(p=>({p,href:BARREL,w:18,h:20}))
+        .concat((s.fb||[]).map(p=>({p,href:FIRE,w:20,h:23})));
+      while(th.length<objs.length)th.push(el('image',{opacity:0}));
+      th.forEach((e,i)=>{
+        if(i>=objs.length){e.setAttribute('opacity',0);return;}
+        const o=objs[i];
+        e.setAttribute('href',o.href);e.setAttribute('width',o.w);e.setAttribute('height',o.h);
+        e.setAttribute('x',ix(o.p[0])-o.w/2);e.setAttribute('y',iy(o.p[1])-o.h/2);
+        e.setAttribute('opacity',.85);
+      });
       live++;
       const col=s.t==='bottomup'?'#F2B33D':(s.c>=12?'#7BD88F':'#6FC3D6');
       const px=ix(s.x), py=iy(s.y);
@@ -104,6 +124,8 @@ tick();
 _art = os.path.join(os.path.dirname(__file__), "..", "artifacts")
 HTML = HTML.replace("__BG__", open(os.path.join(_art, "live_bg_b64.txt")).read().strip())
 HTML = HTML.replace("__MARIO__", open(os.path.join(_art, "live_mario_b64.txt")).read().strip())
+HTML = HTML.replace("__BARREL__", open(os.path.join(_art, "live_barrel_b64.txt")).read().strip())
+HTML = HTML.replace("__FIRE__", open(os.path.join(_art, "live_fire_b64.txt")).read().strip())
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8600
