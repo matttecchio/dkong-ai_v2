@@ -253,10 +253,12 @@ def test_pbrs_not_farmable_by_looping():
 
 
 def test_pbrs_saturates_off_floor():
-    """Above the floor band, x-position no longer moves the potential."""
+    """Above the ladder base, x-position no longer moves the potential.
+    Probes h90 — between the g3 and g5 traverse bands, where no
+    directional reward applies either."""
     env = _pbrs_env()
-    p = _state(mario_y=180, mario_x=60)    # height 60: saturated
-    s = _state(mario_y=180, mario_x=100)
+    p = _state(mario_y=150, mario_x=60)    # height 90: saturated
+    s = _state(mario_y=150, mario_x=100)
     env._prev = p
     r, _ = env._reward(s)
     assert abs(r) < 0.05, f"off-floor x-moves should not pay PBRS, got {r}"
@@ -365,3 +367,19 @@ def test_waterfall_pass_one_shot():
     env2._prev = p
     r3, _ = env2._reward(dict(s))
     assert r3 < 4.0, f"tower starts must not earn the pass bonus: {r3}"
+
+
+def test_g3_traverse_pays_right_and_no_pump():
+    """Rightward movement on girder 3 pays; the trimmed girder-2 band no
+    longer pays leftward there (the two would have formed an oscillation
+    pump in the old h36-65 overlap)."""
+    env = _pbrs_env()
+    p = _state(mario_y=176, mario_x=90)    # h64, girder 3
+    s = _state(mario_y=176, mario_x=100)   # 10px right
+    env._prev = p
+    r_right, _ = env._reward(s)
+    assert r_right > 0.3, f"g3 rightward should pay, got {r_right}"
+    env2 = _pbrs_env()
+    env2._prev = _state(mario_y=176, mario_x=100)
+    r_left, _ = env2._reward(_state(mario_y=176, mario_x=90))
+    assert r_left < 0.1, f"g3 leftward must not pay (pump check), got {r_left}"

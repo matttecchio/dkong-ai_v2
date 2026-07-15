@@ -714,7 +714,10 @@ class DonkeyKongEnv(gym.Env):
     # pixel moved left while in the traverse zone. Provides gradient on EVERY
     # step toward the ladder — even failed attempts that end in death generate
     # useful signal rather than just -10. Complements the one-shot waypoints.
-    TRAVERSE_H_LO, TRAVERSE_H_HI = 36, 65
+    # H_HI 65 -> 52 (2026-07-15): the old band bled into girder 3, where
+    # the pro line moves RIGHT — with G3_TRAVERSE below, the overlap would
+    # have paid both directions (an oscillation pump). Girder 2 tops ~h50.
+    TRAVERSE_H_LO, TRAVERSE_H_HI = 36, 52
     TRAVERSE_X_LO, TRAVERSE_X_HI = 53, 143   # ladder entrance to right edge
     TRAVERSE_PROGRESS = 0.05                   # reward per pixel moved left
 
@@ -725,6 +728,13 @@ class DonkeyKongEnv(gym.Env):
     UPPER_TRAVERSE_H_LO, UPPER_TRAVERSE_H_HI = 140, 158   # 5th girder band
     UPPER_TRAVERSE_X_LO, UPPER_TRAVERSE_X_HI =  67, 147   # arrival → top ladder
     UPPER_TRAVERSE_PROGRESS = 0.05                         # per pixel moved right
+    # Dense rightward-progress on girder 3 (user pro line 2026-07-15:
+    # "move right until the middle-of-board ladder"): ladder-top arrival
+    # (x~60, h62) to the x131 complete ladder. Corridor data confirms the
+    # route (h60-84 bands: x_med 96 -> 107 -> 131).
+    G3_TRAVERSE_H_LO, G3_TRAVERSE_H_HI = 56, 84
+    G3_TRAVERSE_X_LO, G3_TRAVERSE_X_HI = 60, 135
+    G3_TRAVERSE_PROGRESS = 0.05                            # per pixel moved right
 
     # Anti-camping: height band and x threshold for the per-step girder penalty.
     # Applies only to the right side of the 2nd girder — the zone where the agent
@@ -953,6 +963,12 @@ class DonkeyKongEnv(gym.Env):
                         and self.UPPER_TRAVERSE_X_LO <= s["mario_x"] < self.UPPER_TRAVERSE_X_HI
                         and s["mario_x"] > p["mario_x"]):
                     r += (s["mario_x"] - p["mario_x"]) * self.UPPER_TRAVERSE_PROGRESS
+                # Girder-3 rightward traverse: the leg of the pro line
+                # between the x53 climb and the x131 middle ladder.
+                if (self.G3_TRAVERSE_H_LO <= height <= self.G3_TRAVERSE_H_HI
+                        and self.G3_TRAVERSE_X_LO <= s["mario_x"] < self.G3_TRAVERSE_X_HI
+                        and s["mario_x"] > p["mario_x"]):
+                    r += (s["mario_x"] - p["mario_x"]) * self.G3_TRAVERSE_PROGRESS
                 # First-ladder climb bonus: per-step reward for actively ascending
                 # the ground-floor → 2nd girder ladder at x≈143. Without this,
                 # the only incentive to climb is the one-shot girder milestone,
