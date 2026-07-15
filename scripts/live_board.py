@@ -223,6 +223,7 @@ body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding
 </div>
 <div id=wrap style="display:flex;gap:16px;align-items:flex-start">
 <div id=grid></div>
+<div id=right style="display:flex;flex-direction:column;gap:12px">
 <aside id=mx style="font-family:ui-monospace,monospace;font-size:12px;
   line-height:1.35;min-width:210px;background:#161322;border:1px solid #2A2440;
   border-radius:4px;padding:10px 14px">
@@ -231,6 +232,8 @@ body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding
     font-weight:700;padding:4px 8px;border-radius:3px;margin:6px 0">&#9733; FIRST CLEAR &#9733;</div>
   <table id=mtable style="border-spacing:0;color:#E2DEEE"></table>
 </aside>
+<div id=deathslot></div>
+</div>
 </div>
 <script>
 const NS='http://www.w3.org/2000/svg';
@@ -267,13 +270,13 @@ for(let i=0;i<8;i++){
   sv.appendChild(rp);
   panels.push(sv);
 }
-// death heatmap panel
+// death heatmap panel (in the right column, under the metrics)
 {
   const cell=document.createElement('div'); cell.className='cell';
-  cell.innerHTML='<img class=bg src="'+BG+'" style="filter:brightness(.45)">'
+  cell.innerHTML='<img class=bg src="'+BG+'" style="filter:brightness(.45);width:260px">'
     +'<svg id=heat viewBox="0 0 672 768" preserveAspectRatio="none"></svg>'
     +'<div class=tag style="color:#E83C3C">DEATH MAP (session)</div>';
-  grid.appendChild(cell);
+  document.getElementById('deathslot').appendChild(cell);
 }
 async function hpoll(){
   try{
