@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# THE canonical launch command for the current run line (run 28 dials).
+# THE canonical launch command for the current run line (RUN 30 resumes).
+# Run 30 (2026-07-15): Stage B obs (RAM 84: timer/facing/lad203/margin,
+# watch 62) — old run28 checkpoints are SHAPE-INCOMPATIBLE; resumes must
+# only ever use run30 artifacts (--init-from below).
 # Edit dials HERE and only here — auto_resume.sh and manual deploys both call this,
 # so a crash-resume can never fire with stale settings.
 #
@@ -21,7 +24,7 @@ log="$2"
 
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
   --timesteps 100000000 --n-envs 16 \
-  --save artifacts/ppo_dkong_run28 --logdir logs \
+  --save artifacts/ppo_dkong_run30 --logdir logs \
   --gamma 0.999 --ent-coef 0.01 --lr 1e-4 --n-epochs 3 \
   --stack 2 --p-no-barrels 0.0 --p-curric 0.8 \
   --lstm --lstm-hidden 512 \

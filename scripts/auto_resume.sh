@@ -37,15 +37,15 @@ fi
 echo "$ts: trainer down — auto-resuming"
 pkill -x mame 2>/dev/null && sleep 2       # clear orphaned emulators (never pkill -f)
 
-model=$(ls -t artifacts/ppo_dkong_run28_last.zip artifacts/checkpoints/ppo_dkong_run28/*.zip 2>/dev/null | head -1)
+model=$(ls -t artifacts/ppo_dkong_run30_last.zip artifacts/checkpoints/ppo_dkong_run30/*.zip 2>/dev/null | head -1)
 if [ -z "$model" ]; then
     echo "$ts: NO MODEL FOUND — aborting"
     exit 1
 fi
 
-log="logs/run28_auto_${ts}.log"
+log="logs/run30_auto_${ts}.log"
 pid=$(scripts/current_launch.sh "$model" "$log")
 echo "$pid" > logs/run_current.pid
-ln -sfn "run28_auto_${ts}.log" logs/run_current.log
+ln -sfn "run30_auto_${ts}.log" logs/run_current.log
 date +%s >> "$journal"
 echo "$ts: relaunched PID $pid from $model (log $log)"
