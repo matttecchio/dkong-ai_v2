@@ -86,7 +86,13 @@ class DonkeyKongEnv(gym.Env):
                           # top was phantom-era. h70-77 readings up there
                           # are JUMP ARCS on girder 3 (user correction).
         # Verified broken-ladder stubs (climbable lower halves — legit
-        # play the guard must not execute; spans probed 2026-07-14/15):
+        # play the guard must not execute; spans probed 2026-07-14/15).
+        # USER WARNING (2026-07-15, do not forget): the stubs were gated
+        # off because the RATCHET GLITCH climbed far beyond their tops.
+        # These entries legalize ONLY the verified span (the guard still
+        # checks yt-6 <= y <= yb+6); never widen a stub's y-span without
+        # a fresh frozen-barrel probe, and never add reward shaping that
+        # pays inside a stub column:
         ( 82, 164, 176),  # g3 broken ladder, lower stub (h64→76)
         (116, 192, 206),  # g2→g3 broken ladder, lower stub (h34→48)
         ( 99, 228, 240),  # floor broken ladder, lower stub (h0→12) — the
