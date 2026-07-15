@@ -76,8 +76,8 @@ async function tick(){
     for(const s of st){
       if(!marks[s.port]){
         trails[s.port]=el('polyline',{fill:'none','stroke-width':1.5,opacity:.45});
-        rings[s.port]=el('ellipse',{rx:16,ry:5,fill:'none','stroke-width':2.5});
-        marks[s.port]=el('image',{href:MARIO,width:32,height:44});
+        rings[s.port]=el('ellipse',{rx:18,ry:5,fill:'none','stroke-width':2.5});
+        marks[s.port]=el('image',{href:MARIO,width:40,height:56});
       }
       const m=marks[s.port], ring=rings[s.port], tr=trails[s.port];
       if(s.stale){m.setAttribute('opacity',.15);ring.setAttribute('opacity',.15);
@@ -85,7 +85,7 @@ async function tick(){
       live++;
       const col=s.t==='bottomup'?'#F2B33D':(s.c>=12?'#7BD88F':'#6FC3D6');
       const px=ix(s.x), py=iy(s.y);
-      m.setAttribute('x',px-16);m.setAttribute('y',py-22);m.setAttribute('opacity',1);
+      m.setAttribute('x',px-20);m.setAttribute('y',py-30);m.setAttribute('opacity',1);
       ring.setAttribute('cx',px);ring.setAttribute('cy',py+24);
       ring.setAttribute('stroke',col);ring.setAttribute('opacity',.9);
       tr.setAttribute('stroke',col);
