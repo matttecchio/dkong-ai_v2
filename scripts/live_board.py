@@ -196,7 +196,7 @@ class H(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers(); self.wfile.write(body)
 
-HTML = r"""<!doctype html><title>DK Live Board</title>
+HTML = r"""<!doctype html><meta charset="utf-8"><title>DK Live Board</title>
 <style>
 body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding:14px; }
 #grid { display:grid; grid-template-columns:repeat(4, max-content); gap:14px; }
@@ -383,10 +383,6 @@ async function mpoll(){
       ['wait-spot best gain', m.ws_best, false],
       ['floor crossing %', m.fl_rate+'%', false],
       ['floor best gain', m.fl_best, false],
-      ['— deaths by route leg —','',false]]
-      .concat((m.legs||[]).map(l=>['&nbsp;&nbsp;'+l[0], l[1], false]))
-      .concat([
-      ['— hammer / quality —','',false],
       ['hammer pickups', m.hammer_pickups, false],
       ['deaths at hammer expiry', m.expiry_deaths, false],
       ['x53 commits', m.commits, false],
