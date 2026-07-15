@@ -16,8 +16,14 @@ from .mame_env import DonkeyKongEnv
 from .dk_policy import DkFeaturesExtractor, DkFrameStackWrapper
 
 
-def _load_model(path, device="cuda"):
-    """Load PPO or RecurrentPPO depending on what was saved."""
+def _load_model(path, device="auto"):
+    """Load PPO or RecurrentPPO depending on what was saved.
+
+    device="auto" (review r14): CUDA when available (this box), CPU
+    fallback elsewhere — same policy as train.py's --device auto."""
+    if device == "auto":
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
         from sb3_contrib import RecurrentPPO
         return RecurrentPPO.load(path, device=device), True
