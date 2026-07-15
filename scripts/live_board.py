@@ -107,12 +107,17 @@ class Tracker:
             if hammer and not ph: self.stats["pickups"] += 1
             if ph and not hammer: self.h_expiry[port] = now
             # mount detection: entering the x53 column ascending
-            if (46 <= x <= 60 and py - y >= 2 and 178 <= y <= 198
+            # episode end FIRST: a reset teleport must clear climb state
+            # before the survive check (a death->tower reload otherwise
+            # counts as 'survived to g3'; caught 2026-07-15).
+            if abs(x - px) + abs(y - py) > 45:
+                self.climb.pop(port, None)
+            elif (46 <= x <= 60 and py - y >= 2 and 178 <= y <= 198
                     and port not in self.climb):
                 self.climb[port] = (now, gap > 0)
                 self.stats["commits"] += 1
                 if gap > 0: self.stats["commits_clear"] += 1
-            if port in self.climb and h >= 64:
+            elif port in self.climb and h >= 64:
                 self.stats["commit_survive"] += 1
                 del self.climb[port]
             # episode end: position teleport
