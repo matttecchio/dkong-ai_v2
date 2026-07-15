@@ -6,7 +6,7 @@ are hard to react to; explicit relative positions from RAM are not.
 
 Architecture:
   - NatureCNN(n_stack×2, 84, 84) → 256-dim image features  (spatial/structural)
-  - Linear(75→128→128)           → 128-dim RAM features    (barrel/fireball/hammer
+  - Linear(83→128→128)           → 128-dim RAM features    (barrel/fireball/hammer
                                      positions/velocities + crazy/blue type flags
                                      + difficulty regime)
   - Concat(256+128=384)          → PPO/RecurrentPPO policy/value heads

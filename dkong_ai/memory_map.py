@@ -65,6 +65,9 @@ ADDR = {
     # tables. TRACKED ONLY (episode CSV/TB) — deliberately NOT in the RAM
     # observation vector yet; fold into the next obs-space change.
     "difficulty": 0x6380,
+    # Stage B (run 30): both empirically verified 2026-07-13.
+    "bonus_timer": 0x62B1,    # ticks down ~1/1.7s; 48 ~= 4800 displayed
+    "mario_facing": 0x6207,   # bit 7: 1=facing right, 0=left; idle-persistent
 }
 
 # Bytes the bridge ships each step, in this order (must match bridge WATCH_ADDRS).
@@ -93,6 +96,7 @@ WATCH_ORDER = [
     "barrel4_crazy", "barrel4_blue",
     "barrel5_crazy", "barrel5_blue",
     "difficulty",
+    "bonus_timer", "mario_facing",
 ]
 
 WATCH_ADDRS = [ADDR[name] for name in WATCH_ORDER]
