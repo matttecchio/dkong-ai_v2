@@ -149,8 +149,11 @@ class SILCallback(BaseCallback):
                                if info.get("start_type") == "bottomup"
                                else "clear")
                     elif (info.get("start_type") == "curriculum"
-                          and start_h < 45 and gained >= 40):
+                          and start_h < 45
+                          and (gained >= 40 or info.get("max_height", 0) >= 68)):
                         cls = "floor"       # crossing + wait-spot ladder wins
+                                            # + waterfall passages (h>=68 from
+                                            # low starts pass at gain ~30)
                                             # (<45 covers the x53 wait-spot
                                             # starts at h37-38; was <30 which
                                             # silently excluded them)

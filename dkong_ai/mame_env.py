@@ -95,11 +95,11 @@ class DonkeyKongEnv(gym.Env):
         # pays inside a stub column:
         ( 82, 164, 176),  # g3 broken ladder, lower stub (h64→76)
         (116, 192, 206),  # g2→g3 broken ladder, lower stub (h34→48)
-        ( 99, 228, 240),  # floor broken ladder, lower stub (h0→12) — the
-                          # 28d "glitch rail" is a REAL broken ladder (user
-                          # board map + span probe 2026-07-15); the exploit
-                          # was RATCHETING past its top, which the
-                          # cumulative guard still catches
+        # (99, 228, 240) floor stub: REMOVED same day it was added (user
+        # order, 2026-07-15 eve): the stub is a dead end, and legalizing
+        # it made its 12px pay height milestones — every bottom start was
+        # baited into a pointless detour. The guard re-executes climbs
+        # there; the ratchet exploit stays dead either way.
         (131, 118, 158),  # 3rd → 4th girder, right-ish
         ( 67,  85, 125),  # 4th → 5th girder, left
         (147,  48, 100),  # top section to Pauline
@@ -1709,7 +1709,12 @@ class DonkeyKongEnv(gym.Env):
         gain = max(0, self.BASE_Y - self._min_y) - max(
             0, self.BASE_Y - (self._start_y or self.BASE_Y))
         curric = self._start_type == "curriculum"
-        if not (cleared or (curric and gain >= 40)):
+        # Waterfall passages (h>=68 from a low start) are era-defining
+        # successes even below the +40 gain bar (wait-spot starts at h37-38
+        # pass the window at gain ~30; review 2026-07-15).
+        passed_wf = (self._start_h < 50
+                     and max(0, self.BASE_Y - self._min_y) >= 68)
+        if not (cleared or passed_wf or (curric and gain >= 40)):
             return
         rec = {"ts": time.time(), "port": self.port,
                "start": (os.path.basename(self._ep_start_sta)
