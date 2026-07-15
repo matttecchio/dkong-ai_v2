@@ -224,12 +224,12 @@ body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding
 <div id=wrap style="display:flex;gap:16px;align-items:flex-start">
 <div id=grid></div>
 <aside id=mx style="font-family:ui-monospace,monospace;font-size:12px;
-  line-height:2;min-width:210px;background:#161322;border:1px solid #2A2440;
-  border-radius:4px;padding:12px 16px">
+  line-height:1.35;min-width:210px;background:#161322;border:1px solid #2A2440;
+  border-radius:4px;padding:10px 14px">
   <div style="font-weight:600;letter-spacing:.14em;color:#F2B33D">RUN 30 &middot; SESSION</div>
   <div id=firstclear style="display:none;background:#E83C3C;color:#fff;
     font-weight:700;padding:4px 8px;border-radius:3px;margin:6px 0">&#9733; FIRST CLEAR &#9733;</div>
-  <table id=mtable style="border-spacing:0 2px;color:#E2DEEE"></table>
+  <table id=mtable style="border-spacing:0;color:#E2DEEE"></table>
 </aside>
 </div>
 <script>
