@@ -375,8 +375,6 @@ async function mpoll(){
       ['tower gates', m.gates, false],
       ['bottom-up mean h', m.bu_mean, false],
       ['bottom-up max h', m.bu_max, false],
-      ['session top h (low starts)', m.top, false],
-      ['reached h63+', m.h63, false],
       ['reached h65+', m.h65, false],
       ['passed waterfall (h68+)', m.h68, m.h68>0],
       ['wait-spot commit %', m.ws_rate+'%', false],
