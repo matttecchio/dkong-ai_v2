@@ -21,7 +21,8 @@ class H(http.server.BaseHTTPRequestHandler):
                     x, y, stype, chain = open(f).read().split(",")
                     out.append({"port": p, "x": int(x), "y": int(y),
                                 "t": stype, "c": int(chain),
-                                "stale": now - st.st_mtime > 3})
+                                "stale": now - st.st_mtime > 15})  # envs pause
+                                # several seconds during each PPO update
                 except (OSError, ValueError):
                     out.append({"port": p, "stale": True})
             body = json.dumps(out).encode()
