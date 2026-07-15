@@ -32,7 +32,11 @@ class H(http.server.BaseHTTPRequestHandler):
                                 "stale": now - st.st_mtime > 15})
                 except (OSError, ValueError):
                     out.append({"port": p, "stale": True})
-            body = json.dumps(out).encode()
+            ages = [now - os.stat(f"/dev/shm/dk_live_{p}").st_mtime
+                    for p in PORTS if os.path.exists(f"/dev/shm/dk_live_{p}")]
+            # all envs silent >0.8s but not dead => PPO update in progress
+            learning = bool(ages) and min(ages) > 0.8 and min(ages) < 15
+            body = json.dumps({"envs": out, "learning": learning}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -66,6 +70,8 @@ body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding
   <span><span class=sw style="background:#7BD88F"></span>floor/ladder chains</span>
   <span><span class=sw style="background:#6FC3D6"></span>tower chains</span>
   <span id=stat style="color:#8B85A3"></span>
+  <span id=learn style="display:none;color:#0D0B14;background:#F2B33D;
+    padding:2px 10px;border-radius:3px;font-weight:600;letter-spacing:.12em">LEARNING&hellip;</span>
 </div>
 <div id=grid></div>
 <script>
@@ -94,7 +100,11 @@ function el(svg,t,a){const e=document.createElementNS(NS,t);
   for(const k in a)e.setAttribute(k,a[k]);svg.appendChild(e);return e;}
 async function poll(){
   try{
-    const st=await (await fetch('/state')).json();
+    const resp=await (await fetch('/state')).json();
+    const st=resp.envs||resp;
+    const lb=document.getElementById('learn');
+    lb.style.display=resp.learning?'inline-block':'none';
+    document.getElementById('grid').style.opacity=resp.learning?.55:1;
     let live=0;
     for(const s of st){
       const sv=panels[P2PANEL[s.port]||0];
