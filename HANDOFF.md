@@ -1147,6 +1147,23 @@ crashed whole SubprocVecEnv. **Fix**: `SDL_VIDEODRIVER=dummy`,
   replayed. Widened to <45. When adding new curriculum start bands, check
   the SIL classifier covers them.
 
+### External review ledger (Copilot rounds, user-supplied — triage before trusting)
+- r4-r6: seed suggestion rejected (RNG is load-bearing); PBRS_FLOOR_H=8
+  slope bug (real, fixed); battery attribution race (real, fixed).
+- r7 (fbe6452 + f548596): mario_y truthiness ×3, window trim, test-stub
+  attrs, edge_dist inactive default (on stage-b) — applied. PBRS terminal
+  clawback — REJECTED (documented deviation: milestone-like terminals;
+  charging -Φ at death prices dying near the x53 ladder at -21.5 = an
+  avoidance gradient exactly where practice is needed).
+- r8 (d1c8c89): "failing test" was REAL ON WINDOWS ONLY — FakeDK used a
+  Unix-only basename split; fingerprint protocol in §16.
+- r9 (2ae72d4): PBRS_GAMMA bound to args.gamma in the thunk — applied.
+  Clean-mount precondition (rejected: open-gap no-wait mounts are optimal
+  play); direction-aware gate, SIL metadata classes, adaptive approach
+  probability — deferred with reasons (memory has details).
+- r10 (ec13267): archive dirty-flag ordering, harvest gain baseline,
+  odd battery counts — all applied; offline tooling only.
+
 ## 13. Temporal awareness / barrel timing
 
 **Current state**: Mario has no explicit "is it safe to climb now?" reward signal.
