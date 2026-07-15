@@ -534,7 +534,9 @@ that the new objective has been learned.
 | 29i | ★★ **PBRS stage 2** (girder-2 walk toward x53) + dense14 rung chains 14/15; mid-session doom-triage: mid-ladder rungs convicted phase-doomed, chains rebuilt girder-level | ~17h | 67-68 | +40px ~2.1%/h regime (2-3.5×), +20px to 39% | 0 | ★ WATERFALL DISCOVERED (§11b 2026-07-14); zombie-trainer incident (procedure rule added); bottomup full routes to h62-64 |
 | 29j | **wait-right doctrine** (user film verdict: the 3 h77 climbs were LUCK): PBRS peak → x59 wait spot, G2_POCKET tax (x<46), chains 14/15 on 4 minted wait-spot rungs (x60-70) | ~35min | 69 | — | 0 | superseded same-day by 29k (no clean baseline) |
 | 29k | gap-gated climb bonus (x53 climb pays ONLY with the column above clear) + SIL floor class <30→<45 (wait-spot wins were never replayed) | ~1.5h | 70 | — | 0 | crude gate proved over-strict (tower barrels blocked payment); superseded by the user's pro line |
-| **29l** | ★ **time-race climb gate** (user pro line: climb iff climb-time beats the barrel's arrival at the ladder top) + **CLEAN_MOUNT_BONUS 2.0** one-shot + 11 phase-diverse wait cells (frontiers = different crossings) + review-r7 fixes | **active** | **71** | **FIRST COMMITTED CLIMBS from wait-spot starts: +20px 0 → 0.81 → 1.76%/h, best 25 (h63)** | 0 | the doctrine works: clean-gap mounts within the first hour; kill window h60-63 is now the single contested zone |
+| 29l | ★ time-race climb gate (user pro line) + CLEAN_MOUNT_BONUS 2.0 + 11 phase-diverse wait cells | ~4h | 71 | first committed climbs: +20px 0→1.8%/h, best 25 | 0 | doctrine works; kill window h60-63 the single contested zone |
+| 29m | clean-climb pay 0.30→0.50 + WATERFALL_PASS_BONUS +5 @h68 (ladder-stall correction: NEVER free holds — the game steers barrels down Mario's ladder) | 17h | 72 | ★ commit rate ×7 (peak 7.1%/h); ceiling 64→**70**; FIRST WATERFALL PASSAGE (h68+); h63+ 11→102; battery BEST EVER det 38.4/40 stoch 34.6/37 | 0 | final baseline: 58,736 low-start eps, h65+: 5, h68+: 1 — volume without tail penetration = the perception argument |
+| **30** | ★★★ **STAGE B DEPLOYED** (user-ordered early): RAM 75→84 (timer, facing, lad203×6, edge_dist fix, **safe-climb margin** = the time-race as an input), watch 60→62; CNN transferred from 29m-final, heads FRESH, levels reset; launcher/auto_resume → run30 family | **active** | **73** | rebuild: curric clears 26.5% in first 22 min | 0 | judge by SLOPE for 1-2 days (bottomup regresses by design); the margin's test = climbs that abort on negative margin |
 
 ---
 
@@ -816,6 +818,13 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   board. Run-30 obs queue (with Stage B, branch `stage-b`, checklist
   docs/STAGE_B.md): danger-above-ladder bit + difficulty byte +
   edge_dist inactive-default fix (committed on the branch).
+  OUTCOME (29m, 17h): commit rate ×7, ceiling h64→h70, ONE waterfall
+  passage in 58.7k low-start episodes — the tail would not accrete on
+  volume, so Stage B went out EARLY (2026-07-15 ~10:25, user-ordered,
+  first-clear gate consciously broken). Run 30 = merge 0fd073b: obs 84
+  incl. the safe-climb margin, CNN from the best-battery-ever 29m final,
+  fresh heads, levels reset, resume infra moved to the run30 family
+  (run28 checkpoints are SHAPE-INCOMPATIBLE — never resume them).
 
 ---
 
