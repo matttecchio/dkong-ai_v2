@@ -74,9 +74,14 @@ def run_episode(venv, model, is_lstm, deterministic, max_steps=1200,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rom-dir", required=True)
-    ap.add_argument("--model", default="artifacts/ppo_dkong_run28_last")
+    # Defaults track the live run family (review r12): run28 weights are
+    # shape-incompatible since Stage B (75->84 features), and dense12 only
+    # exists on this machine as an accident-recovery artifact. KEY_CELLS
+    # indices serve IDENTICAL cells in dense12/13/14 (verified), so the
+    # daily probe series stays comparable.
+    ap.add_argument("--model", default="artifacts/ppo_dkong_run30_last")
     ap.add_argument("--manifest",
-                    default="artifacts/backward_dense12/manifest.json")
+                    default="artifacts/backward_dense14/manifest.json")
     ap.add_argument("--bottomups", type=int, default=60,
                     help="total bottom-up episodes (half det, half stoch)")
     ap.add_argument("--cells", default=KEY_CELLS)
