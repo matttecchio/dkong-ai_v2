@@ -3,14 +3,74 @@
 Reads /dev/shm/dk_live_<port> (written by mame_env.step) at ~7Hz.
 Run:  python3 scripts/live_board.py [port]   then open http://localhost:8600
 """
-import http.server, json, os, sys, time
+import csv, glob, http.server, json, os, sys, time
 
 PORTS = list(range(5000, 5016))
+_MCACHE = {"t": 0, "data": {}}
+
+def metrics():
+    if time.time() - _MCACHE["t"] < 8:
+        return _MCACHE["data"]
+    now = time.time()
+    rows = []
+    for f in glob.glob("logs/episodes/dk_*.monitor.csv"):
+        try:
+            with open(f) as fh:
+                fh.readline()
+                for row in csv.DictReader(fh):
+                    rows.append(row)
+        except OSError:
+            pass
+    def F(r, k, d=0.0):
+        try: return float(r.get(k) or d)
+        except (TypeError, ValueError): return d
+    bu = [r for r in rows if r.get("start_type") == "bottomup"]
+    bu_clean = [r for r in bu if F(r,"glitch_kill")==0 and F(r,"no_barrels")==0]
+    clears = sum(1 for r in bu_clean if F(r,"cleared") == 1)
+    ws = [r for r in rows if r.get("bw_chain") in ("14","15")
+          and F(r,"glitch_kill")==0 and F(r,"no_barrels")==0]
+    wsg = [F(r,"max_height")-(240-F(r,"start_y")) for r in ws]
+    fl = [r for r in rows if r.get("bw_chain") in ("12","13")
+          and F(r,"glitch_kill")==0 and F(r,"no_barrels")==0]
+    flg = [F(r,"max_height")-(240-F(r,"start_y")) for r in fl]
+    low = [r for r in rows if (r.get("start_type")=="bottomup" or
+           r.get("bw_chain") in ("12","13","14","15"))
+           and F(r,"glitch_kill")==0 and F(r,"no_barrels")==0
+           and (240-F(r,"start_y")) < 50]
+    lh = [F(r,"max_height") for r in low]
+    try:
+        gates = sum(json.load(open("artifacts/backward_dense14/levels.json"))["levels"])
+    except OSError:
+        gates = -1
+    d = {
+        "episodes": len(rows),
+        "clears": clears,
+        "bu_n": len(bu_clean),
+        "bu_mean": round(sum(F(r,"max_height") for r in bu_clean)/max(len(bu_clean),1),1),
+        "bu_max": int(max((F(r,"max_height") for r in bu_clean), default=0)),
+        "ws_rate": round(100*sum(g>=20 for g in wsg)/max(len(wsg),1), 2),
+        "ws_best": int(max(wsg, default=0)),
+        "fl_rate": round(100*sum(g>=40 for g in flg)/max(len(flg),1), 2),
+        "fl_best": int(max(flg, default=0)),
+        "h63": sum(h>=63 for h in lh), "h65": sum(h>=65 for h in lh),
+        "h68": sum(h>=68 for h in lh),
+        "top": int(max(lh, default=0)),
+        "gates": gates,
+    }
+    _MCACHE["t"] = now; _MCACHE["data"] = d
+    return d
 HTML = None  # loaded below
 
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
+        if self.path == "/metrics":
+            body = json.dumps(metrics()).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers(); self.wfile.write(body)
+            return
         if self.path == "/state":
             out = []
             now = time.time()
@@ -73,7 +133,17 @@ body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding
   <span id=learn style="display:none;color:#0D0B14;background:#F2B33D;
     padding:2px 10px;border-radius:3px;font-weight:600;letter-spacing:.12em">LEARNING&hellip;</span>
 </div>
+<div id=wrap style="display:flex;gap:16px;align-items:flex-start">
 <div id=grid></div>
+<aside id=mx style="font-family:ui-monospace,monospace;font-size:12px;
+  line-height:2;min-width:210px;background:#161322;border:1px solid #2A2440;
+  border-radius:4px;padding:12px 16px">
+  <div style="font-weight:600;letter-spacing:.14em;color:#F2B33D">RUN 30 &middot; SESSION</div>
+  <div id=firstclear style="display:none;background:#E83C3C;color:#fff;
+    font-weight:700;padding:4px 8px;border-radius:3px;margin:6px 0">&#9733; FIRST CLEAR &#9733;</div>
+  <table id=mtable style="border-spacing:0 2px;color:#E2DEEE"></table>
+</aside>
+</div>
 <script>
 const NS='http://www.w3.org/2000/svg';
 const MARIO='data:image/png;base64,__MARIO__';
@@ -169,7 +239,31 @@ function render(){
   }
   requestAnimationFrame(render);
 }
-poll(); requestAnimationFrame(render);
+async function mpoll(){
+  try{
+    const m=await (await fetch('/metrics')).json();
+    const rows=[
+      ['honest clears', m.clears, m.clears>0],
+      ['episodes', m.episodes, false],
+      ['tower gates', m.gates, false],
+      ['bottom-up mean h', m.bu_mean, false],
+      ['bottom-up max h', m.bu_max, false],
+      ['session top h (low starts)', m.top, false],
+      ['reached h63+', m.h63, false],
+      ['reached h65+', m.h65, false],
+      ['passed waterfall (h68+)', m.h68, m.h68>0],
+      ['wait-spot commit %', m.ws_rate+'%', false],
+      ['wait-spot best gain', m.ws_best, false],
+      ['floor crossing %', m.fl_rate+'%', false],
+      ['floor best gain', m.fl_best, false]];
+    document.getElementById('mtable').innerHTML=rows.map(r=>
+      '<tr><td style="color:#8B85A3;padding-right:12px">'+r[0]+'</td><td style="text-align:right;'+
+      (r[2]?'color:#F2B33D;font-weight:700':'')+'">'+r[1]+'</td></tr>').join('');
+    document.getElementById('firstclear').style.display=m.clears>0?'block':'none';
+  }catch(e){}
+  setTimeout(mpoll,5000);
+}
+poll(); mpoll(); requestAnimationFrame(render);
 </script>"""
 _art = os.path.join(os.path.dirname(__file__), "..", "artifacts")
 HTML = HTML.replace("__BG__", open(os.path.join(_art, "live_bg_b64.txt")).read().strip())
