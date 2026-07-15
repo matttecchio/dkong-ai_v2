@@ -718,7 +718,11 @@ class DonkeyKongEnv(gym.Env):
     # the pro line moves RIGHT — with G3_TRAVERSE below, the overlap would
     # have paid both directions (an oscillation pump). Girder 2 tops ~h50.
     TRAVERSE_H_LO, TRAVERSE_H_HI = 36, 52
-    TRAVERSE_X_LO, TRAVERSE_X_HI = 53, 143   # ladder entrance to right edge
+    # X_HI 143 -> 210 (2026-07-15, user watched Mario jump off g2's right
+    # edge on the live board): 143 was the PHANTOM ladder's x — the
+    # leftward pull must start at the REAL ladder top (x203), or the
+    # first 60px of the walk are a reward desert.
+    TRAVERSE_X_LO, TRAVERSE_X_HI = 53, 210   # x53 ladder to the x203 arrival
     TRAVERSE_PROGRESS = 0.05                   # reward per pixel moved left
 
     # Dense rightward-progress reward on the 5th girder: mirrors TRAVERSE_PROGRESS
@@ -762,6 +766,11 @@ class DonkeyKongEnv(gym.Env):
     G2_POCKET_X    = 46
     G2_POCKET_H_LO, G2_POCKET_H_HI = 28, 44
     G2_POCKET_COST = 0.06
+    # Right-edge sliver past the x203 ladder top on girder 2: a dead end
+    # Mario was jumping off (user, live board 2026-07-15).
+    G2_RIGHT_X     = 210
+    G2_RIGHT_H_LO, G2_RIGHT_H_HI = 26, 52
+    G2_RIGHT_COST  = 0.06
 
     # Broken-ladder stub tax (2026-07-07): the x=99 stub's lower rungs are
     # legal ladder tiles, so the glitch guard can't fire on them — eval film
@@ -930,6 +939,9 @@ class DonkeyKongEnv(gym.Env):
                 if (self.G2_POCKET_H_LO <= height <= self.G2_POCKET_H_HI
                         and s["mario_x"] < self.G2_POCKET_X):
                     r -= self.G2_POCKET_COST
+                if (self.G2_RIGHT_H_LO <= height <= self.G2_RIGHT_H_HI
+                        and s["mario_x"] > self.G2_RIGHT_X):
+                    r -= self.G2_RIGHT_COST
                 # Broken-ladder stub tax: see STUB_* constants.
                 if (self.STUB_H_LO <= height <= self.STUB_H_HI
                         and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI):
