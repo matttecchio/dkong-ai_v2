@@ -47,9 +47,9 @@ class H(http.server.BaseHTTPRequestHandler):
 HTML = r"""<!doctype html><title>DK Live Board</title>
 <style>
 body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding:14px; }
-#grid { display:grid; grid-template-columns:repeat(3, max-content); gap:14px; }
+#grid { display:grid; grid-template-columns:repeat(4, max-content); gap:14px; }
 .cell { position:relative; }
-.cell img.bg { display:block; width:370px; image-rendering:pixelated; }
+.cell img.bg { display:block; width:320px; image-rendering:pixelated; }
 .cell svg { position:absolute; inset:0; width:100%; height:100%; }
 .cell .tag { position:absolute; top:4px; left:6px; font:600 11px ui-monospace,monospace;
   color:#F2B33D; letter-spacing:.12em; text-shadow:0 0 4px #000; }
@@ -61,7 +61,7 @@ body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding
   margin-right:5px; vertical-align:-1px; }
 </style>
 <div id=bar>
-  <h1>DK LIVE &middot; 16 ENVS &middot; 6 BOARDS</h1>
+  <h1>DK LIVE &middot; 16 ENVS &middot; 8 BOARDS</h1>
   <span><span class=sw style="background:#F2B33D"></span>bottom-up</span>
   <span><span class=sw style="background:#7BD88F"></span>floor/ladder chains</span>
   <span><span class=sw style="background:#6FC3D6"></span>tower chains</span>
@@ -77,10 +77,10 @@ const HAMMER='data:image/png;base64,__HAMMER__';
 const BG='data:image/jpeg;base64,__BG__';
 const ix=x=>(x-14.5)*3, iy=y=>(y-7.5)*3;
 const grid=document.getElementById('grid'), panels=[];
-const GROUPS=[[5000,5001,5002],[5003,5004,5005],[5006,5007,5008],
-              [5009,5010,5011],[5012,5013],[5014,5015]];
+const GROUPS=[[5000,5001],[5002,5003],[5004,5005],[5006,5007],
+              [5008,5009],[5010,5011],[5012,5013],[5014,5015]];
 const P2PANEL={}; GROUPS.forEach((g,i)=>g.forEach(p=>P2PANEL[p]=i));
-for(let i=0;i<6;i++){
+for(let i=0;i<8;i++){
   const g=GROUPS[i];
   const cell=document.createElement('div'); cell.className='cell';
   cell.innerHTML='<img class=bg src="'+BG+'">'
