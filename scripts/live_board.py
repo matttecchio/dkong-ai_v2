@@ -92,8 +92,8 @@ async function tick(){
       if(s.stale){m.setAttribute('opacity',.15);ring.setAttribute('opacity',.15);
         tr.setAttribute('points','');th.forEach(e=>e.setAttribute('opacity',0));continue;}
       // threats: barrels then fireballs, reusing a pooled element list
-      const objs=(s.b||[]).map(p=>({p,href:BARREL,w:18,h:20,dy:16}))
-        .concat((s.fb||[]).map(p=>({p,href:FIRE,w:20,h:23,dy:14})));
+      const objs=(s.b||[]).map(p=>({p,href:BARREL,w:18,h:20,dy:24}))
+        .concat((s.fb||[]).map(p=>({p,href:FIRE,w:20,h:23,dy:22})));
       while(th.length<objs.length)th.push(el('image',{opacity:0}));
       th.forEach((e,i)=>{
         if(i>=objs.length){e.setAttribute('opacity',0);return;}
@@ -105,8 +105,8 @@ async function tick(){
       live++;
       const col=s.t==='bottomup'?'#F2B33D':(s.c>=12?'#7BD88F':'#6FC3D6');
       const px=ix(s.x), py=iy(s.y);
-      m.setAttribute('x',px-20);m.setAttribute('y',py-30);m.setAttribute('opacity',1);
-      ring.setAttribute('cx',px);ring.setAttribute('cy',py+24);
+      m.setAttribute('x',px-20);m.setAttribute('y',py-22);m.setAttribute('opacity',1);
+      ring.setAttribute('cx',px);ring.setAttribute('cy',py+32);
       ring.setAttribute('stroke',col);ring.setAttribute('opacity',.9);
       tr.setAttribute('stroke',col);
       const pts=(tr.getAttribute('points')||'').split(' ').filter(Boolean);
