@@ -167,10 +167,12 @@ for(let i=0;i<8;i++){
   // pro route (user doctrine + corridor): floor -> x203 -> g2 left ->
   // wait spot -> x53 climb -> g3 right -> x131 -> g4 left -> x67 ->
   // g5 right -> x147 -> top toward Pauline
-  const ROUTE=[[82,240],[203,236],[203,211],[59,202],[53,196],[53,178],
-    [62,176],[131,158],[131,118],[67,125],[67,85],[147,100],[147,48],[112,48]];
+  // [x, y, extra-y-drop] — per-point tweak for visual girder alignment
+  const ROUTE=[[82,240,0],[203,236,0],[203,211,0],[59,202,0],[53,196,0],
+    [53,178,0],[62,176,10],[131,158,16],[131,118,16],[67,125,10],
+    [67,85,0],[147,100,0],[147,48,0],[112,48,0]];
   const rp=document.createElementNS(NS,'polyline');
-  rp.setAttribute('points',ROUTE.map(p=>((p[0]-14.5)*3)+','+((p[1]-7.5)*3+38)).join(' '));
+  rp.setAttribute('points',ROUTE.map(p=>((p[0]-14.5)*3)+','+((p[1]-7.5)*3+38+(p[2]||0))).join(' '));
   rp.setAttribute('fill','none');rp.setAttribute('stroke','#7BD88F');
   rp.setAttribute('stroke-width',7);rp.setAttribute('opacity',.28);
   rp.setAttribute('stroke-linejoin','round');rp.setAttribute('stroke-linecap','round');
