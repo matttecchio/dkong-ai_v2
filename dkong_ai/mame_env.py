@@ -80,7 +80,20 @@ class DonkeyKongEnv(gym.Env):
         # real rail, the corner tax covered its base, and PBRS paid Mario to
         # walk away from it. 20K floor draws capped at 8px because of THIS.
         (203, 211, 236),  # floor → 2nd girder, RIGHT side (the real one)
-        ( 53, 155, 196),  # 2nd → 3rd girder, FAR LEFT (critical)
+        ( 53, 178, 196),  # 2nd → 3rd girder, FAR LEFT (critical). Top
+                          # corrected 2026-07-15: verified climb ends at
+                          # h62 = girder 3's surface (y178); the old y155
+                          # top was phantom-era. h70-77 readings up there
+                          # are JUMP ARCS on girder 3 (user correction).
+        # Verified broken-ladder stubs (climbable lower halves — legit
+        # play the guard must not execute; spans probed 2026-07-14/15):
+        ( 82, 164, 176),  # g3 broken ladder, lower stub (h64→76)
+        (116, 192, 206),  # g2→g3 broken ladder, lower stub (h34→48)
+        ( 99, 228, 240),  # floor broken ladder, lower stub (h0→12) — the
+                          # 28d "glitch rail" is a REAL broken ladder (user
+                          # board map + span probe 2026-07-15); the exploit
+                          # was RATCHETING past its top, which the
+                          # cumulative guard still catches
         (131, 118, 158),  # 3rd → 4th girder, right-ish
         ( 67,  85, 125),  # 4th → 5th girder, left
         (147,  48, 100),  # top section to Pauline
@@ -661,9 +674,12 @@ class DonkeyKongEnv(gym.Env):
     CLIMB_BONUS      = 0.50            # per step while actively ascending
     CLEAN_MOUNT_BONUS = 2.0            # one-shot: first clean-gap climb step
                                        # of the episode (pays the judgment)
-    WATERFALL_PASS_BONUS = 5.0         # one-shot at h>=68 on the x53 column:
-                                       # survived the edge-fall kill window
-    WATERFALL_PASS_H = 68
+    WATERFALL_PASS_BONUS = 5.0         # one-shot: standing on girder 3 past
+                                       # the left-end barrel sweep (the x53
+                                       # ladder tops at h62 — an h68 climb
+                                       # gate could NEVER fire; user review)
+    WATERFALL_PASS_H = 64
+    WATERFALL_PASS_X_LO, WATERFALL_PASS_X_HI = 45, 105
     LADDER_IDLE_COST = 0.05            # per step in ladder zone but y unchanged
 
     # Upper-section final-ladder climb bonus: same mechanic as CLIMB_BONUS but
@@ -881,6 +897,15 @@ class DonkeyKongEnv(gym.Env):
                         and (s["mario_x"] < self.CORNER_X_LEFT
                              or s["mario_x"] > self.CORNER_X_RIGHT)):
                     r -= self.CORNER_COST
+                # Waterfall-pass one-shot: on girder 3 past the sweep,
+                # from a low start — the survival event SIL must see.
+                if (not self._waterfall_paid
+                        and self._start_h < 50
+                        and height >= self.WATERFALL_PASS_H
+                        and self.WATERFALL_PASS_X_LO <= s["mario_x"]
+                        <= self.WATERFALL_PASS_X_HI):
+                    r += self.WATERFALL_PASS_BONUS
+                    self._waterfall_paid = True
                 # Girder-2 left-pocket tax (user film review 2026-07-14):
                 # left of the x53 ladder is where girder-3 edge-fall
                 # barrels land and reverse — "a bad place to be, unless
@@ -955,13 +980,7 @@ class DonkeyKongEnv(gym.Env):
                                 # a clean gap, not just the climbing.
                                 r += self.CLEAN_MOUNT_BONUS
                                 self._clean_mount_paid = True
-                        if (not self._waterfall_paid
-                                and height >= self.WATERFALL_PASS_H):
-                            # One-shot: cleared the girder-3 edge-fall kill
-                            # window (h~60-63) — the single event SIL most
-                            # needs to see marked.
-                            r += self.WATERFALL_PASS_BONUS
-                            self._waterfall_paid = True
+
                     elif s["mario_y"] == p["mario_y"]:
                         r -= self.LADDER_IDLE_COST
                 # Upper ladder climb bonus: same mechanic for the final ladder
@@ -1421,6 +1440,7 @@ class DonkeyKongEnv(gym.Env):
         self._glitch_px = 0                  # cumulative off-ladder climb pixels
         self._clean_mount_paid = False       # one-shot clean-mount bonus flag
         self._waterfall_paid = False         # one-shot waterfall-pass flag
+        self._start_h = max(0, self.BASE_Y - self._min_y)  # episode start height
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length

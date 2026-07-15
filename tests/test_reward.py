@@ -347,14 +347,21 @@ def test_time_race_gate_and_mount_bonus():
 
 
 def test_waterfall_pass_one_shot():
-    """Climbing past the edge-fall kill window on the x53 column pays the
-    one-shot exactly once."""
+    """Standing on girder 3 past the sweep (from a low start) pays the
+    one-shot exactly once — reachable trigger (the ladder tops at h62)."""
     env = _pbrs_env()
     env._waterfall_paid = False
-    p = _state(mario_y=174, mario_x=53)    # h66, mid-ladder
-    s = _state(mario_y=170, mario_x=53)    # h70: past the window
+    env._start_h = 38                      # wait-spot start
+    p = _state(mario_y=178, mario_x=60)    # h62: ladder top
+    s = _state(mario_y=176, mario_x=64)    # h64 on girder 3
     env._prev = p
     r1, _ = env._reward(s)
     env._prev = s
-    r2, _ = env._reward(_state(mario_y=166, mario_x=53))
+    r2, _ = env._reward(_state(mario_y=175, mario_x=68))
     assert r1 - r2 > 4.0, f"first pass should carry the one-shot: {r1} vs {r2}"
+    env2 = _pbrs_env()
+    env2._waterfall_paid = False
+    env2._start_h = 164                    # tower start: must NOT fire
+    env2._prev = p
+    r3, _ = env2._reward(dict(s))
+    assert r3 < 4.0, f"tower starts must not earn the pass bonus: {r3}"
