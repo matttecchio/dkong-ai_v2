@@ -100,8 +100,9 @@ def main():
     # --- phase 1: bottom-up floor -------------------------------------
     base.set_bottomup_eval()
     for label, det in (("det", True), ("stoch", False)):
+        n_eps = args.bottomups // 2 + (args.bottomups % 2 if det else 0)
         eps = [run_episode(venv, model, is_lstm, det)
-               for _ in range(args.bottomups // 2)]
+               for _ in range(n_eps)]
         clean = [e for e in eps if not e["glitch"]]
         clears = sum(e["cleared"] for e in eps)
         entry = {"n": len(eps), "clean_n": len(clean), "clears": clears,

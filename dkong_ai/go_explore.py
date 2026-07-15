@@ -183,11 +183,13 @@ class Archive:
                     "winners": self.winners,
                     "cells": [r for r in self.by_idx.values()
                               if r["bytes"] is not None]}
-            self.dirty = False
         tmp = os.path.join(self.dir, "archive.json.tmp")
         with open(tmp, "w") as f:
             json.dump(blob, f)
         os.replace(tmp, os.path.join(self.dir, "archive.json"))
+        # only mark clean once the atomic replace has succeeded — clearing
+        # earlier let a failed write masquerade as saved (review r10)
+        self.dirty = False
 
     def load(self) -> bool:
         path = os.path.join(self.dir, "archive.json")

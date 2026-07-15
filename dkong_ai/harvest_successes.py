@@ -99,13 +99,16 @@ def main():
         st, _ = env.load_state_file(start)
         _, st, _ = env._is_live(st)
         st, _ = env._exchange(env.A_UNFREEZE_BARRELS)
+        start_h = max(0, 240 - st["mario_y"]) if st["mario_y"] else 0
         traj = []
         for a in r["acts"]:
             st, _ = env._exchange(ACTIONS[a])
             traj.append((st["mario_x"], st["mario_y"]))
         end_h = max(0, 240 - st["mario_y"]) if st["mario_y"] else 0
+        # gain from the LOADED start state — training semantics; traj[0]
+        # is post-first-action and skewed the baseline (review r10)
         reproduced = (st["screen_id"] > 1) if r["cleared"] else \
-            (end_h - (240 - traj[0][1]) >= r["gain"] - 12 if traj else False)
+            (end_h - start_h >= r["gain"] - 12 if traj else False)
         if not reproduced:
             continue
         n_verified += 1
