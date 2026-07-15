@@ -41,7 +41,7 @@ HTML = r"""<!doctype html><title>DK Live Board</title>
 body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0;
   display:flex; gap:16px; padding:16px; }
 #box { position:relative; }
-#box img { display:block; width:520px; image-rendering:pixelated; }
+#box img.bg { display:block; width:560px; image-rendering:pixelated; }
 #box svg { position:absolute; inset:0; width:100%; height:100%; }
 aside { font-family:ui-monospace,monospace; font-size:12px; line-height:1.9; }
 h1 { font:600 14px ui-monospace,monospace; letter-spacing:.15em; color:#F2B33D; }
@@ -49,8 +49,8 @@ h1 { font:600 14px ui-monospace,monospace; letter-spacing:.15em; color:#F2B33D; 
   margin-right:6px; vertical-align:-1px; }
 </style>
 <div id=box>
-  <img src="data:image/jpeg;base64,__B64__">
-  <svg id=ov viewBox="0 0 668 890" preserveAspectRatio="none"></svg>
+  <img class=bg src="data:image/jpeg;base64,__BG__">
+  <svg id=ov viewBox="0 0 672 768" preserveAspectRatio="none"></svg>
 </div>
 <aside>
   <h1>DK LIVE &middot; 16 ENVS</h1>
@@ -62,8 +62,10 @@ h1 { font:600 14px ui-monospace,monospace; letter-spacing:.15em; color:#F2B33D; 
 </aside>
 <script>
 const NS='http://www.w3.org/2000/svg', ov=document.getElementById('ov');
-const ix=x=>3.107*x-60.7, iy=y=>848-3.79*(240-y);
-const dots={}, trails={};
+const MARIO='data:image/png;base64,__MARIO__';
+// native frame: screen = RAM - (14.5, 7.5); display scale x3
+const ix=x=>(x-14.5)*3, iy=y=>(y-7.5)*3;
+const marks={}, rings={}, trails={};
 function el(t,a){const e=document.createElementNS(NS,t);
   for(const k in a)e.setAttribute(k,a[k]);ov.appendChild(e);return e;}
 async function tick(){
@@ -71,22 +73,25 @@ async function tick(){
     const st=await (await fetch('/state')).json();
     let live=0;
     for(const s of st){
-      if(!dots[s.port]){
-        trails[s.port]=el('polyline',{fill:'none','stroke-width':1.5,opacity:.4});
-        dots[s.port]=el('circle',{r:6,stroke:'#000','stroke-width':1.5});
+      if(!marks[s.port]){
+        trails[s.port]=el('polyline',{fill:'none','stroke-width':1.5,opacity:.45});
+        rings[s.port]=el('ellipse',{rx:16,ry:5,fill:'none','stroke-width':2.5});
+        marks[s.port]=el('image',{href:MARIO,width:32,height:48});
       }
-      const d=dots[s.port], tr=trails[s.port];
-      if(s.stale){d.setAttribute('fill','#666');tr.setAttribute('points','');continue;}
+      const m=marks[s.port], ring=rings[s.port], tr=trails[s.port];
+      if(s.stale){m.setAttribute('opacity',.15);ring.setAttribute('opacity',.15);
+        tr.setAttribute('points','');continue;}
       live++;
       const col=s.t==='bottomup'?'#F2B33D':(s.c>=12?'#7BD88F':'#6FC3D6');
       const px=ix(s.x), py=iy(s.y);
-      d.setAttribute('cx',px);d.setAttribute('cy',py);d.setAttribute('fill',col);
+      m.setAttribute('x',px-16);m.setAttribute('y',py-24);m.setAttribute('opacity',1);
+      ring.setAttribute('cx',px);ring.setAttribute('cy',py+24);
+      ring.setAttribute('stroke',col);ring.setAttribute('opacity',.9);
       tr.setAttribute('stroke',col);
       const pts=(tr.getAttribute('points')||'').split(' ').filter(Boolean);
       pts.push(px+','+py); if(pts.length>40)pts.shift();
-      // reset trail on big jumps (episode reset)
       if(pts.length>1){const [lx,ly]=pts[pts.length-2].split(',').map(Number);
-        if(Math.hypot(px-lx,py-ly)>140)pts.splice(0,pts.length-1);}
+        if(Math.hypot(px-lx,py-ly)>120)pts.splice(0,pts.length-1);}
       tr.setAttribute('points',pts.join(' '));
     }
     document.getElementById('stat').textContent=live+'/16 live';
@@ -95,8 +100,9 @@ async function tick(){
 }
 tick();
 </script>"""
-HTML = HTML.replace("__B64__", open(os.path.join(os.path.dirname(__file__), "..",
-    "artifacts", "live_board_b64.txt")).read().strip())
+_art = os.path.join(os.path.dirname(__file__), "..", "artifacts")
+HTML = HTML.replace("__BG__", open(os.path.join(_art, "live_bg_b64.txt")).read().strip())
+HTML = HTML.replace("__MARIO__", open(os.path.join(_art, "live_mario_b64.txt")).read().strip())
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8600
