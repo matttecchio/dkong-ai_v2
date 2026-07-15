@@ -170,7 +170,7 @@ for(let i=0;i<8;i++){
   const ROUTE=[[82,240],[203,236],[203,211],[59,202],[53,196],[53,178],
     [62,176],[131,158],[131,118],[67,125],[67,85],[147,100],[147,48],[112,48]];
   const rp=document.createElementNS(NS,'polyline');
-  rp.setAttribute('points',ROUTE.map(p=>((p[0]-14.5)*3)+','+((p[1]-7.5)*3+22)).join(' '));
+  rp.setAttribute('points',ROUTE.map(p=>((p[0]-14.5)*3)+','+((p[1]-7.5)*3+38)).join(' '));
   rp.setAttribute('fill','none');rp.setAttribute('stroke','#7BD88F');
   rp.setAttribute('stroke-width',7);rp.setAttribute('opacity',.28);
   rp.setAttribute('stroke-linejoin','round');rp.setAttribute('stroke-linecap','round');
