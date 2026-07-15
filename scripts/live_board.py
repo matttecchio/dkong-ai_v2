@@ -388,7 +388,7 @@ async function mpoll(){
       ['x53 commits', m.commits, false],
       ['commits w/ clear gap %', m.commits_clear_pct+'%', false],
       ['commits surviving to g3', m.commit_survive, m.commit_survive>0],
-      ['guard kills', m.guard_kills, false]]);
+      ['guard kills', m.guard_kills, false]];
     document.getElementById('mtable').innerHTML=rows.map(r=>
       '<tr><td style="color:#8B85A3;padding-right:12px">'+r[0]+'</td><td style="text-align:right;'+
       (r[2]?'color:#F2B33D;font-weight:700':'')+'">'+r[1]+'</td></tr>').join('');
