@@ -1679,6 +1679,16 @@ class DonkeyKongEnv(gym.Env):
         self._prev = state
         if terminated:
             self._maybe_record_success(state)
+        # Live-board tap: positions to tmpfs for the spectator dashboard
+        # (scripts/live_board.py). One tiny RAM write per step; never let
+        # a spectator failure touch training.
+        try:
+            with open(f"/dev/shm/dk_live_{self.port}", "w") as _f:
+                _f.write(f"{state.get('mario_x', 0)},{state.get('mario_y', 0)},"
+                         f"{self._start_type},"
+                         f"{self._bw_start[0] if self._bw_start else -1}")
+        except OSError:
+            pass
         return obs, reward, terminated, False, self._info(state)
 
     def _maybe_record_success(self, state):
