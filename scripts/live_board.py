@@ -57,13 +57,96 @@ def metrics():
         "top": int(max(lh, default=0)),
         "gates": gates,
     }
+    from collections import Counter
+    legs = Counter(e["leg"] for e in TRK.deaths)
+    d["legs"] = [[name, legs.get(name, 0)] for name, _ in LEGS]
+    d.update({"hammer_pickups": TRK.stats["pickups"],
+              "expiry_deaths": TRK.stats["expiry_deaths"],
+              "guard_kills": TRK.stats["guard_kills"],
+              "commits": TRK.stats["commits"],
+              "commits_clear_pct": round(100*TRK.stats["commits_clear"]/max(TRK.stats["commits"],1)),
+              "commit_survive": TRK.stats["commit_survive"]})
     _MCACHE["t"] = now; _MCACHE["data"] = d
     return d
 HTML = None  # loaded below
 
+# ---- streaming analytics: episode ends, legs, hammer economics ----
+LEGS = [("floor walk", lambda x,h: h < 26 and x < 180),
+        ("x203 approach/climb", lambda x,h: h < 33),
+        ("g2 walk", lambda x,h: 33 <= h < 44 and x > 70),
+        ("wait + x53 climb", lambda x,h: 33 <= h < 62 and x <= 70),
+        ("girder 3 (kill zone)", lambda x,h: 44 <= h < 82),
+        ("x131 climb / g4", lambda x,h: 82 <= h < 135),
+        ("g5 / upper", lambda x,h: 135 <= h < 168),
+        ("top section", lambda x,h: h >= 168)]
+def leg_of(x, h):
+    for name, fn in LEGS:
+        if fn(x, h): return name
+    return "other"
+
+class Tracker:
+    def __init__(self):
+        self.last = {}          # port -> (x, y, hammer, glitch, t, score)
+        self.h_expiry = {}      # port -> t of last hammer 1->0
+        self.deaths = []        # ring buffer of end events
+        self.stats = {"pickups": 0, "expiry_deaths": 0, "guard_kills": 0,
+                      "commits": 0, "commits_clear": 0, "commit_survive": 0}
+        self.climb = {}         # port -> (mount_t, gap_was_clear)
+        try:
+            d = json.load(open("/dev/shm/dk_analytics.json"))
+            self.deaths = d.get("deaths", []); self.stats.update(d.get("stats", {}))
+        except (OSError, ValueError):
+            pass
+        self._saved = time.time()
+
+    def feed(self, port, x, y, hammer, glitch, score, gap, now):
+        h = 240 - y
+        prev = self.last.get(port)
+        if prev:
+            px, py, ph, pg, pt, ps = prev
+            if hammer and not ph: self.stats["pickups"] += 1
+            if ph and not hammer: self.h_expiry[port] = now
+            # mount detection: entering the x53 column ascending
+            if (46 <= x <= 60 and py - y >= 2 and 178 <= y <= 198
+                    and port not in self.climb):
+                self.climb[port] = (now, gap > 0)
+                self.stats["commits"] += 1
+                if gap > 0: self.stats["commits_clear"] += 1
+            if port in self.climb and h >= 64:
+                self.stats["commit_survive"] += 1
+                del self.climb[port]
+            # episode end: position teleport
+            if abs(x - px) + abs(y - py) > 45:
+                ev = {"x": px, "h": 240 - py, "t": round(now, 1),
+                      "leg": leg_of(px, 240 - py), "glitch": pg,
+                      "hx": bool(self.h_expiry.get(port) and
+                                 now - self.h_expiry[port] < 2.5)}
+                if pg: self.stats["guard_kills"] += 1
+                if ev["hx"]: self.stats["expiry_deaths"] += 1
+                self.deaths.append(ev)
+                if len(self.deaths) > 6000: self.deaths = self.deaths[-5000:]
+                self.climb.pop(port, None)
+        self.last[port] = (x, y, hammer, glitch, now, score)
+        if now - self._saved > 60:
+            self._saved = now
+            try:
+                json.dump({"deaths": self.deaths[-5000:], "stats": self.stats},
+                          open("/dev/shm/dk_analytics.json", "w"))
+            except OSError:
+                pass
+
+TRK = Tracker()
+
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
+        if self.path == "/deaths":
+            body = json.dumps(TRK.deaths[-2500:]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers(); self.wfile.write(body)
+            return
         if self.path == "/metrics":
             body = json.dumps(metrics()).encode()
             self.send_response(200)
@@ -83,6 +166,11 @@ class H(http.server.BaseHTTPRequestHandler):
                     parts = head.split(",")
                     x, y, stype, chain = parts[:4]
                     hammer = int(parts[4]) if len(parts) > 4 else 0
+                    score = int(parts[5]) if len(parts) > 5 else 0
+                    gap = float(parts[6]) if len(parts) > 6 else 0
+                    glitch = int(parts[7]) if len(parts) > 7 else 0
+                    if now - st.st_mtime < 15:
+                        TRK.feed(p, int(x), int(y), hammer, glitch, score, gap, now)
                     pts = lambda s: [[int(a) for a in pair.split(":")]
                                      for pair in s.split(";") if ":" in pair]
                     out.append({"port": p, "x": int(x), "y": int(y),
@@ -179,6 +267,31 @@ for(let i=0;i<8;i++){
   sv.appendChild(rp);
   panels.push(sv);
 }
+// death heatmap panel
+{
+  const cell=document.createElement('div'); cell.className='cell';
+  cell.innerHTML='<img class=bg src="'+BG+'" style="filter:brightness(.45)">'
+    +'<svg id=heat viewBox="0 0 672 768" preserveAspectRatio="none"></svg>'
+    +'<div class=tag style="color:#E83C3C">DEATH MAP (session)</div>';
+  grid.appendChild(cell);
+}
+async function hpoll(){
+  try{
+    const ds=await (await fetch('/deaths')).json();
+    const hs=document.getElementById('heat');
+    while(hs.firstChild)hs.removeChild(hs.firstChild);
+    for(const e of ds){
+      const c=document.createElementNS(NS,'circle');
+      c.setAttribute('cx',(e.x-14.5)*3);c.setAttribute('cy',(240-e.h-7.5)*3+38);
+      c.setAttribute('r',e.glitch?5:3.5);
+      c.setAttribute('fill',e.glitch?'#B26FD8':(e.hx?'#F2B33D':'#E83C3C'));
+      c.setAttribute('opacity',.32);
+      hs.appendChild(c);
+    }
+  }catch(err){}
+  setTimeout(hpoll,7000);
+}
+hpoll();
 const E={};   // per-port entity state with lerp targets
 function el(svg,t,a){const e=document.createElementNS(NS,t);
   for(const k in a)e.setAttribute(k,a[k]);svg.appendChild(e);return e;}
@@ -269,7 +382,17 @@ async function mpoll(){
       ['wait-spot commit %', m.ws_rate+'%', false],
       ['wait-spot best gain', m.ws_best, false],
       ['floor crossing %', m.fl_rate+'%', false],
-      ['floor best gain', m.fl_best, false]];
+      ['floor best gain', m.fl_best, false],
+      ['— deaths by route leg —','',false]]
+      .concat((m.legs||[]).map(l=>['&nbsp;&nbsp;'+l[0], l[1], false]))
+      .concat([
+      ['— hammer / quality —','',false],
+      ['hammer pickups', m.hammer_pickups, false],
+      ['deaths at hammer expiry', m.expiry_deaths, false],
+      ['x53 commits', m.commits, false],
+      ['commits w/ clear gap %', m.commits_clear_pct+'%', false],
+      ['commits surviving to g3', m.commit_survive, m.commit_survive>0],
+      ['guard kills', m.guard_kills, false]]);
     document.getElementById('mtable').innerHTML=rows.map(r=>
       '<tr><td style="color:#8B85A3;padding-right:12px">'+r[0]+'</td><td style="text-align:right;'+
       (r[2]?'color:#F2B33D;font-weight:700':'')+'">'+r[1]+'</td></tr>').join('');

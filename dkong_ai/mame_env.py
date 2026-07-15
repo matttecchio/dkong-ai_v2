@@ -1699,11 +1699,14 @@ class DonkeyKongEnv(gym.Env):
                           for i in range(6) if state.get(f"barrel{i}_st", 0) in (1, 2))
             _fb = ";".join(f"{state.get(f'fireball{i}_x',0)}:{state.get(f'fireball{i}_y',0)}"
                            for i in range(5) if state.get(f"fireball{i}_st", 0))
+            _mg = 1.0 if self._lad53_column_clear(state) else -1.0
             with open(f"/dev/shm/dk_live_{self.port}", "w") as _f:
                 _f.write(f"{state.get('mario_x', 0)},{state.get('mario_y', 0)},"
                          f"{self._start_type},"
                          f"{self._bw_start[0] if self._bw_start else -1},"
-                         f"{1 if state.get('has_hammer', 0) else 0}|{_b}|{_fb}")
+                         f"{1 if state.get('has_hammer', 0) else 0},"
+                         f"{state.get('score') or 0},{_mg:.0f},"
+                         f"{1 if self._glitch_kill else 0}|{_b}|{_fb}")
         except OSError:
             pass
         return obs, reward, terminated, False, self._info(state)
