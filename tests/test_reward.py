@@ -78,7 +78,7 @@ def test_milestone_not_paid_for_existing_max():
 def test_first_climb_bonus_fires_when_grounded():
     """Ascending first ladder while not jumping → +FIRST_CLIMB_BONUS."""
     env = _make_env(reward_max_h=0)
-    # height = 25 in FIRST_CLIMB_H range (10-44); x=143 in FIRST_CLIMB_X range (133-155)
+    # height = 25 in FIRST_CLIMB_H range (2-30); x=203 in FIRST_CLIMB_X range (196-210)
     p = _state(mario_y=220, mario_x=203)           # height 20, y=220
     s = _state(mario_y=215, mario_x=203)           # height 25, y=215 < p.y → ascending
     env._prev = p

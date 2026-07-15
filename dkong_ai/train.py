@@ -181,34 +181,38 @@ class SILCallback(BaseCallback):
         policy.set_training_mode(True)
         rng = _np.random.default_rng()
         losses = []
-        for _ in range(min(self.eps_per_update, sum(len(b) for b in nonempty))):
-            # Equal weight per CLASS, then uniform within: a floor crossing
-            # gets replayed as often as the whole tower-clear pool does.
-            buf = nonempty[int(rng.integers(len(nonempty)))]
-            ep = buf[int(rng.integers(len(buf)))]
-            T = len(ep)
-            obs = {k: _th.as_tensor(_np.stack([t[0][k] for t in ep]),
-                                    device=policy.device)
-                   for k in ep[0][0]}
-            acts = _th.as_tensor(_np.array([t[1] for t in ep]),
-                                 device=policy.device)
-            starts = _th.zeros(T, device=policy.device)
-            starts[0] = 1.0
-            shp = (policy.lstm_actor.num_layers, 1,
-                   policy.lstm_actor.hidden_size)
-            zeros = (_th.zeros(shp, device=policy.device),
-                     _th.zeros(shp, device=policy.device))
-            from sb3_contrib.common.recurrent.type_aliases import RNNStates
-            lstm_states = RNNStates(zeros, zeros)
-            _, log_prob, _ = policy.evaluate_actions(
-                obs, acts, lstm_states, starts)
-            loss = -self.coef * log_prob.mean()
-            policy.optimizer.zero_grad()
-            loss.backward()
-            _th.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
-            policy.optimizer.step()
-            losses.append(float(loss.item()))
-        policy.set_training_mode(False)
+        # try/finally restores eval mode even if an update raises
+        # (review r11 #6; PPO self-heals, but don't rely on it)
+        try:
+            for _ in range(min(self.eps_per_update, sum(len(b) for b in nonempty))):
+                # Equal weight per CLASS, then uniform within: a floor crossing
+                # gets replayed as often as the whole tower-clear pool does.
+                buf = nonempty[int(rng.integers(len(nonempty)))]
+                ep = buf[int(rng.integers(len(buf)))]
+                T = len(ep)
+                obs = {k: _th.as_tensor(_np.stack([t[0][k] for t in ep]),
+                                        device=policy.device)
+                       for k in ep[0][0]}
+                acts = _th.as_tensor(_np.array([t[1] for t in ep]),
+                                     device=policy.device)
+                starts = _th.zeros(T, device=policy.device)
+                starts[0] = 1.0
+                shp = (policy.lstm_actor.num_layers, 1,
+                       policy.lstm_actor.hidden_size)
+                zeros = (_th.zeros(shp, device=policy.device),
+                         _th.zeros(shp, device=policy.device))
+                from sb3_contrib.common.recurrent.type_aliases import RNNStates
+                lstm_states = RNNStates(zeros, zeros)
+                _, log_prob, _ = policy.evaluate_actions(
+                    obs, acts, lstm_states, starts)
+                loss = -self.coef * log_prob.mean()
+                policy.optimizer.zero_grad()
+                loss.backward()
+                _th.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
+                policy.optimizer.step()
+                losses.append(float(loss.item()))
+        finally:
+            policy.set_training_mode(False)
         self._updates += 1
         self.logger.record("sil/updates", self._updates)
         self.logger.record("sil/loss", sum(losses) / len(losses))

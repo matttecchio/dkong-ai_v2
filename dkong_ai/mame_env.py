@@ -249,7 +249,7 @@ class DonkeyKongEnv(gym.Env):
         self._ladder_map = self._build_ladder_map()  # static; barrel board never changes
 
         # Dict obs: "image" = 84×84×2 (pixels + threat/ladder/fall-zone map, stacked ×n
-        # by DkFrameStackWrapper); "ram" = 83 normalised RAM features giving
+        # by DkFrameStackWrapper); "ram" = 84 normalised RAM features giving
         # explicit barrel/fireball/hammer positions, velocities, edge proximity,
         # and barrel type flags (crazy/wild, blue).
         self.observation_space = spaces.Dict({
@@ -503,8 +503,9 @@ class DonkeyKongEnv(gym.Env):
     # edge_dist: normalised [0,1] distance to the girder edge the barrel is heading
     # toward (0 = at edge / about to fall, 1 = far away). Paired with the fall-zone
     # image overlay so the agent can anticipate barrels appearing from above.
-    RAM_FEATURE_DIM = 84   # 2 mario + 6 barrels x 10 + 5 fireballs x 3 + 3 hammer
-                           # + 1 difficulty (regime-conditional play: wild-barrel
+    RAM_FEATURE_DIM = 84   # 2 mario + 6 barrels x 10 + 5 fireballs x 3 + 3 hammer + 1
+                           # difficulty + timer + facing + safe-climb margin = 84
+                           # (regime-conditional play: wild-barrel
                            # behaviour differs sharply by 0x6380 regime, and the
                            # diff-5 counter-move is unlearnable without knowing
                            # the regime — user lore, see memory/gameplay tips)
@@ -591,7 +592,7 @@ class DonkeyKongEnv(gym.Env):
         # reward gate computes, exposed as an instrument. Positive =
         # nearest threat is further (in px) than the remaining climb.
         my = state.get("mario_y") or 240
-        remaining = max(0, my - getattr(self, 'LAD53_TOP_Y', 160))
+        remaining = max(0, my - self.LAD53_TOP_Y)
         nearest = 999.0
         for i in range(6):
             if state.get(f"barrel{i}_st", 0) not in (1, 2):
@@ -600,7 +601,7 @@ class DonkeyKongEnv(gym.Env):
             if not (130 <= by < my):
                 continue
             bx = state.get(f"barrel{i}_x", 0)
-            if bx >= getattr(self, 'CLIMB_X_LO', 43) - 8:
+            if bx >= self.CLIMB_X_LO - 8:
                 nearest = min(nearest, float(bx - self.LAD53_X))
         margin = 1.0 if nearest == 999.0 else float(
             np.clip((nearest - remaining) / 64.0, -1, 1))

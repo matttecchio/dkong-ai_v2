@@ -9,7 +9,6 @@ byte is a tile code where the low nibble is the digit ('0'=0x10 .. '9'=0x19).
 ADDR = {
     "game_start":   0x622C,   # 1 once a real game/level is underway
     "eol_counter":  0x6388,   # end-of-level counter
-    "bonus":        0x62B1,
     "lives":        0x6228,
     "level":        0x6229,
     "screen_id":    0x6227,   # 1=barrels 2=pie 3=elevator 4=rivet
