@@ -64,6 +64,7 @@ class Archive:
         self.cells_dir = os.path.join(root_dir, "cells")
         os.makedirs(self.cells_dir, exist_ok=True)
         self.lock = threading.Lock()
+        self.gen = 0            # bumps on every mutation (save-race guard)
         self.cells: dict[str, dict] = {}    # key -> live record
         self.by_idx: dict[int, dict] = {}   # idx -> record (incl. retired)
         self.next_idx = 0
@@ -109,7 +110,7 @@ class Archive:
                              if rec["parent"] is not None else 0) + len(traj))
             if rec["height"] > self.best_height:
                 self.best_height = rec["height"]
-            self.dirty = True
+            self.dirty = True; self.gen += 1
 
     def abort(self, idx: int):
         with self.lock:
@@ -144,14 +145,14 @@ class Archive:
                 rec["dead"] = True
                 if self.cells.get(rec["key"]) is rec:
                     del self.cells[rec["key"]]         # key becomes claimable
-                self.dirty = True
+                self.dirty = True; self.gen += 1
 
     def add_winner(self, parent: int, traj: list[int], screen_id: int):
         with self.lock:
             self.winners.append(
                 {"parent": parent, "bytes": list(traj), "screen_id": screen_id,
                  "steps": self.by_idx[parent]["steps"] + len(traj)})
-            self.dirty = True
+            self.dirty = True; self.gen += 1
 
     def count(self, alive_only: bool = True) -> int:
         with self.lock:
@@ -178,6 +179,7 @@ class Archive:
         with self.lock:
             if not (self.dirty or force):
                 return
+            snap_gen = self.gen
             blob = {"next_idx": self.next_idx, "best_height": self.best_height,
                     "rollouts": self.rollouts, "steps": self.steps,
                     "winners": self.winners,
@@ -187,9 +189,12 @@ class Archive:
         with open(tmp, "w") as f:
             json.dump(blob, f)
         os.replace(tmp, os.path.join(self.dir, "archive.json"))
-        # only mark clean once the atomic replace has succeeded — clearing
-        # earlier let a failed write masquerade as saved (review r10)
-        self.dirty = False
+        # Mark clean only if (a) the atomic replace succeeded (r10) AND
+        # (b) nothing mutated while we were writing (r13): a mutation
+        # between snapshot and here belongs to the NEXT save.
+        with self.lock:
+            if self.gen == snap_gen:
+                self.dirty = False
 
     def load(self) -> bool:
         path = os.path.join(self.dir, "archive.json")
