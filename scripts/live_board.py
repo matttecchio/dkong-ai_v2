@@ -92,14 +92,14 @@ async function tick(){
       if(s.stale){m.setAttribute('opacity',.15);ring.setAttribute('opacity',.15);
         tr.setAttribute('points','');th.forEach(e=>e.setAttribute('opacity',0));continue;}
       // threats: barrels then fireballs, reusing a pooled element list
-      const objs=(s.b||[]).map(p=>({p,href:BARREL,w:18,h:20}))
-        .concat((s.fb||[]).map(p=>({p,href:FIRE,w:20,h:23})));
+      const objs=(s.b||[]).map(p=>({p,href:BARREL,w:18,h:20,dy:16}))
+        .concat((s.fb||[]).map(p=>({p,href:FIRE,w:20,h:23,dy:14})));
       while(th.length<objs.length)th.push(el('image',{opacity:0}));
       th.forEach((e,i)=>{
         if(i>=objs.length){e.setAttribute('opacity',0);return;}
         const o=objs[i];
         e.setAttribute('href',o.href);e.setAttribute('width',o.w);e.setAttribute('height',o.h);
-        e.setAttribute('x',ix(o.p[0])-o.w/2);e.setAttribute('y',iy(o.p[1])-o.h/2);
+        e.setAttribute('x',ix(o.p[0])-o.w/2);e.setAttribute('y',iy(o.p[1])-o.h/2+o.dy);
         e.setAttribute('opacity',.85);
       });
       live++;
