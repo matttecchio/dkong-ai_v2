@@ -20,12 +20,14 @@ class H(http.server.BaseHTTPRequestHandler):
                     st = os.stat(f)
                     raw = open(f).read()
                     head, bs, fs = (raw.split("|") + ["", ""])[:3]
-                    x, y, stype, chain = head.split(",")
+                    parts = head.split(",")
+                    x, y, stype, chain = parts[:4]
+                    hammer = int(parts[4]) if len(parts) > 4 else 0
                     pts = lambda s: [[int(a) for a in pair.split(":")]
                                      for pair in s.split(";") if ":" in pair]
                     out.append({"port": p, "x": int(x), "y": int(y),
                                 "t": stype, "c": int(chain),
-                                "b": pts(bs), "fb": pts(fs),
+                                "b": pts(bs), "fb": pts(fs), "h": hammer,
                                 # envs pause several seconds during PPO updates
                                 "stale": now - st.st_mtime > 15})
                 except (OSError, ValueError):
@@ -71,6 +73,7 @@ const NS='http://www.w3.org/2000/svg', ov=document.getElementById('ov');
 const MARIO='data:image/png;base64,__MARIO__';
 const BARREL='data:image/png;base64,__BARREL__';
 const FIRE='data:image/png;base64,__FIRE__';
+const HAMMER='data:image/png;base64,__HAMMER__';
 // native frame: screen = RAM - (14.5, 7.5); display scale x3
 const ix=x=>(x-14.5)*3, iy=y=>(y-7.5)*3;
 const marks={}, rings={}, trails={}, threats={};
@@ -105,7 +108,11 @@ async function tick(){
       live++;
       const col=s.t==='bottomup'?'#F2B33D':(s.c>=12?'#7BD88F':'#6FC3D6');
       const px=ix(s.x), py=iy(s.y);
-      m.setAttribute('x',px-20);m.setAttribute('y',py-14);m.setAttribute('opacity',1);
+      if(s.h){m.setAttribute('href',HAMMER);m.setAttribute('width',66);m.setAttribute('height',38);
+        m.setAttribute('x',px-44);m.setAttribute('y',py+4);}
+      else{m.setAttribute('href',MARIO);m.setAttribute('width',40);m.setAttribute('height',56);
+        m.setAttribute('x',px-20);m.setAttribute('y',py-14);}
+      m.setAttribute('opacity',1);
       ring.setAttribute('cx',px);ring.setAttribute('cy',py+40);
       ring.setAttribute('stroke',col);ring.setAttribute('opacity',.9);
       tr.setAttribute('stroke',col);
@@ -126,6 +133,7 @@ HTML = HTML.replace("__BG__", open(os.path.join(_art, "live_bg_b64.txt")).read()
 HTML = HTML.replace("__MARIO__", open(os.path.join(_art, "live_mario_b64.txt")).read().strip())
 HTML = HTML.replace("__BARREL__", open(os.path.join(_art, "live_barrel_b64.txt")).read().strip())
 HTML = HTML.replace("__FIRE__", open(os.path.join(_art, "live_fire_b64.txt")).read().strip())
+HTML = HTML.replace("__HAMMER__", open(os.path.join(_art, "live_hammer_b64.txt")).read().strip())
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8600

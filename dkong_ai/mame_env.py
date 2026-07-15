@@ -1690,7 +1690,8 @@ class DonkeyKongEnv(gym.Env):
             with open(f"/dev/shm/dk_live_{self.port}", "w") as _f:
                 _f.write(f"{state.get('mario_x', 0)},{state.get('mario_y', 0)},"
                          f"{self._start_type},"
-                         f"{self._bw_start[0] if self._bw_start else -1}|{_b}|{_fb}")
+                         f"{self._bw_start[0] if self._bw_start else -1},"
+                         f"{1 if state.get('has_hammer', 0) else 0}|{_b}|{_fb}")
         except OSError:
             pass
         return obs, reward, terminated, False, self._info(state)
