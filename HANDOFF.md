@@ -1163,6 +1163,12 @@ crashed whole SubprocVecEnv. **Fix**: `SDL_VIDEODRIVER=dummy`,
   probability — deferred with reasons (memory has details).
 - r10 (ec13267): archive dirty-flag ordering, harvest gain baseline,
   odd battery counts — all applied; offline tooling only.
+- r11 (9d1d70f): comment hygiene (84-feature counts, stale test ranges),
+  dead ADDR["bonus"] alias, post-merge getattr scaffolding inlined, SIL
+  set_training_mode in try/finally — all applied. Its "known failing
+  test" claim was stale (the Windows-only issue, fixed in r8/d1c8c89):
+  reviewer workspace memory can lag the repo — re-verify inherited
+  claims.
 
 ## 13. Temporal awareness / barrel timing
 
