@@ -169,8 +169,8 @@ for(let i=0;i<8;i++){
   // g5 right -> x147 -> top toward Pauline
   // [x, y, extra-y-drop] — per-point tweak for visual girder alignment
   const ROUTE=[[82,240,0],[203,236,0],[203,211,0],[59,202,0],[53,196,0],
-    [53,178,0],[62,176,10],[131,158,16],[131,118,16],[67,125,10],
-    [67,85,0],[147,100,0],[147,48,0],[112,48,0]];
+    [53,178,0],[62,176,10],[131,158,16],[131,118,16],[94,122,10],
+    [94,92,0],[200,97,0],[200,68,0],[120,65,0],[110,60,0],[110,35,0]];
   const rp=document.createElementNS(NS,'polyline');
   rp.setAttribute('points',ROUTE.map(p=>((p[0]-14.5)*3)+','+((p[1]-7.5)*3+38+(p[2]||0))).join(' '));
   rp.setAttribute('fill','none');rp.setAttribute('stroke','#7BD88F');
