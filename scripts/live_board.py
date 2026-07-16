@@ -43,7 +43,13 @@ def metrics():
             gates = sum(json.load(_lf)["levels"])
     except OSError:
         gates = -1
+    try:
+        with open("logs/run_label") as _rl:
+            label = _rl.read().strip()
+    except OSError:
+        label = "?"
     d = {
+        "label": label,
         "episodes": len(rows),
         "clears": clears,
         "bu_n": len(bu_clean),
@@ -252,7 +258,7 @@ body { background:#0D0B14; color:#E2DEEE; font:13px system-ui; margin:0; padding
 <aside id=mx style="font-family:ui-monospace,monospace;font-size:12px;
   line-height:1.35;min-width:210px;background:#161322;border:1px solid #2A2440;
   border-radius:4px;padding:10px 14px">
-  <div style="font-weight:600;letter-spacing:.14em;color:#F2B33D">RUN 30 &middot; SESSION</div>
+  <div id=runlabel style="font-weight:600;letter-spacing:.14em;color:#F2B33D">RUN &middot; SESSION</div>
   <div id=firstclear style="display:none;background:#E83C3C;color:#fff;
     font-weight:700;padding:4px 8px;border-radius:3px;margin:6px 0">&#9733; FIRST CLEAR &#9733;</div>
   <table id=mtable style="border-spacing:0;color:#E2DEEE"></table>
@@ -397,6 +403,7 @@ function render(){
 async function mpoll(){
   try{
     const m=await (await fetch('/metrics')).json();
+    document.getElementById('runlabel').textContent='RUN '+(m.label||'?').toUpperCase()+' \u00B7 SESSION';
     const rows=[
       ['honest clears', m.clears, m.clears>0],
       ['episodes', m.episodes, false],
