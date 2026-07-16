@@ -12,8 +12,9 @@ while ($true) {
   foreach ($p in $PORTS) {
     if (-not $procs[$p] -or $procs[$p].HasExited) {
       $env:DK_BRIDGE_PORT = "$p"
-      $procs[$p] = Start-Process -FilePath $MAME -ArgumentList @(
-        "dkong", "-state_directory", $STATES,
+      $procs[$p] = Start-Process -FilePath $MAME -WorkingDirectory "C:\mame" -ArgumentList @(
+        "dkong", "-rompath", "C:\mame\roms",
+        "-state_directory", $STATES,
         "-autoboot_script", $BRIDGE,
         "-video", "none", "-sound", "none", "-nothrottle"
       ) -PassThru -WindowStyle Hidden
