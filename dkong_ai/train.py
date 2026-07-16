@@ -379,12 +379,14 @@ class BackwardCallback(BaseCallback):
 
 
 def make_env(rom_dir, port, frameskip, backward_manifest=None,
-             p_no_barrels=None, p_curric=None, gamma=None):
+             p_no_barrels=None, p_curric=None, gamma=None,
+             host="127.0.0.1", remote_statedir=None):
     def _thunk():
         # record=False -> fast save-state resets (no per-episode .inp; use eval.py
         # with recording for watchable playback of a trained policy).
         env = DonkeyKongEnv(rom_dir=rom_dir, port=port, frameskip=frameskip,
-                            record=False, backward_manifest=backward_manifest)
+                            record=False, backward_manifest=backward_manifest,
+                            host=host, remote_statedir=remote_statedir)
         # Set per-instance INSIDE the thunk: it runs in the worker process.
         # Mutating DonkeyKongEnv class attrs in main() looks equivalent but is
         # silently undone by SubprocVecEnv's spawn start method (workers
@@ -519,6 +521,30 @@ def main():
                        bw_manifest, p_no_barrels=args.p_no_barrels,
                        p_curric=args.p_curric, gamma=args.gamma)
               for i in range(args.n_envs)]
+    # Optional remote farm (2026-07-16, design rule: single machine is THE
+    # default): artifacts/farm.json, when present, appends remote envs.
+    # Unreachable hosts are skipped loudly — the farm can never block
+    # training. No file = this block is inert.
+    farm_path = os.path.join("artifacts", "farm.json")
+    if os.path.exists(farm_path):
+        import socket as _sk
+        with open(farm_path) as _ff:
+            farm = json.load(_ff)
+        for h in farm.get("hosts", []):
+            for rp in h["ports"]:
+                try:
+                    _sk.create_connection((h["host"], rp), timeout=2).close()
+                except OSError:
+                    print(f"[farm] {h['host']}:{rp} unreachable — skipped",
+                          flush=True)
+                    continue
+                thunks.append(make_env(
+                    args.rom_dir, rp, args.frameskip, bw_manifest,
+                    p_no_barrels=args.p_no_barrels, p_curric=args.p_curric,
+                    gamma=args.gamma, host=h["host"],
+                    remote_statedir=h.get("statedir")))
+                print(f"[farm] joined {h['host']}:{rp}", flush=True)
+        print(f"[farm] total envs: {len(thunks)}", flush=True)
     # Turn SIGTERM into a normal exception so the finally-block cleanup (which
     # shuts MAME down) runs on `kill <pid>`, not just on Ctrl-C / completion.
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))

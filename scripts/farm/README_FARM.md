@@ -12,3 +12,9 @@ Trainer side: mount the share (sudo mount -t drvfs '\\192.168.20.59\dkstates' /m
 or cifs with credentials), run scripts/farm/sync_states.sh, then launch with
 remote envs enabled (see launcher notes). Gate on the WiFi probe verdict:
 p99 must stay under ~20ms or the lock-step batch will stall on spikes.
+
+## Activation (trainer side)
+Create `artifacts/farm.json`:
+{"hosts": [{"host": "192.168.20.59", "ports": [5016,5017,5018,5019,5020,5021,5022,5023], "statedir": "/mnt/dkfarm"}]}
+Delete the file to return to the single-machine default. Unreachable
+ports are skipped automatically at launch.
