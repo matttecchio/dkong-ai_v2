@@ -1187,7 +1187,16 @@ class DonkeyKongEnv(gym.Env):
                 glitch_killed = True
                 self._glitch_kill = True
         if glitch_killed:
-            r -= 10.0
+            # -20 base + the same low-height extra as a real death (was -10,
+            # fixed 2026-07-16 30l post-mortem): at -10 a guard execution
+            # UNDERCUT an honest floor death (-10 - 5 farming extra) and the
+            # per-step floor rents, so the optimal floor policy became
+            # suicide-at-the-stub — wave rose 33->93% of bottom-ups while
+            # clip stayed low (smooth optimization, not churn). Execution
+            # must never be the cheapest exit from the poverty trap.
+            r -= 20.0
+            if self._reward_max_h < 40:
+                r -= 5.0
         if died:
             r -= 10.0
             # Extra penalty when the agent never left the farming zone this episode.

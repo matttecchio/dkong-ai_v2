@@ -418,3 +418,19 @@ def test_hammer_rush_tax_range_gated():
     in_range_down = run(10, False)
     assert far_up - in_range_up > 0.03, f"{far_up} vs {in_range_up}"
     assert in_range_down - in_range_up > 0.03, f"{in_range_down} vs {in_range_up}"
+
+
+def test_guard_execution_never_cheapest_death():
+    """A guard execution at the floor must cost MORE than an honest floor
+    death (-10 -5), or suicide-at-the-stub becomes the optimal exit from
+    the poverty trap (30l post-mortem: wave rose 33->93% at low clip)."""
+    env = _pbrs_env()
+    p = _state(mario_x=99, mario_y=236)
+    s = _state(mario_x=99, mario_y=228)  # 8px x-pinned ascend off-envelope
+    s["is_dead"] = p["is_dead"] = 1      # 0x6200: 1 = alive
+    env._prev = p
+    env._glitch_px = 0
+    env._reward_max_h = 12               # floor episode -> low-height extra
+    r, _ = env._reward(s)
+    assert env._glitch_kill, "guard should have executed"
+    assert r <= -24, f"execution too cheap: {r}"
