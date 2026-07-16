@@ -12,6 +12,7 @@ while ($true) {
   foreach ($p in $PORTS) {
     if (-not $procs[$p] -or $procs[$p].HasExited) {
       $env:DK_BRIDGE_PORT = "$p"
+      $env:DK_BRIDGE_BIND = "0.0.0.0"
       New-Item -ItemType Directory -Force -Path "C:\mame\logs" | Out-Null
       $procs[$p] = Start-Process -FilePath $MAME -WorkingDirectory "C:\mame" -ArgumentList @(
         "dkong", "-rompath", "C:\mame\roms",

@@ -225,7 +225,10 @@ emu.register_periodic(function()
   if STATE == "init" then
     if not mac.devices[":maincpu"] then return end
     resolve_devices()
-    local err = socket:open("socket.127.0.0.1:" .. PORT)
+    -- DK_BRIDGE_BIND=0.0.0.0 for remote-farm mode (scripts/farm/);
+    -- the default stays loopback: single machine is THE default.
+    local BIND = os.getenv("DK_BRIDGE_BIND") or "127.0.0.1"
+    local err = socket:open("socket." .. BIND .. ":" .. PORT)
     if err ~= nil then
       open_tries = open_tries + 1
       if open_tries <= 3 then
@@ -236,7 +239,7 @@ emu.register_periodic(function()
       end
       return
     end
-    log("[bridge] listening on 127.0.0.1:" .. PORT)
+    log("[bridge] listening on " .. (os.getenv("DK_BRIDGE_BIND") or "127.0.0.1") .. ":" .. PORT)
     STATE = "listening"
   elseif STATE == "listening" then
     -- Wait (non-blocking) for the client's hello byte before doing anything.
