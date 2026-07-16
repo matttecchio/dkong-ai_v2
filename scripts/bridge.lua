@@ -130,11 +130,25 @@ local cpu, space, screen
 local function u32_be(n) return string.char((n>>24)&0xFF,(n>>16)&0xFF,(n>>8)&0xFF,n&0xFF) end
 local function u16_be(n) return string.char((n>>8)&0xFF, n&0xFF) end
 
+local function reopen_socket()
+  pcall(function() socket:close() end)
+  socket = emu.file("", 7)
+  local BIND = os.getenv("DK_BRIDGE_BIND") or "127.0.0.1"
+  socket:open("socket." .. BIND .. ":" .. PORT)
+  STATE = "listening"
+  log("[bridge] client lost; re-listening on " .. BIND .. ":" .. PORT)
+end
+
 local function read_exact(want)
+  -- Returns nil if the client goes silent for ~6s (dead/disconnected):
+  -- the old infinite spin froze the whole emulator inside frame_done
+  -- (the farm-zombie bug, 2026-07-16). Caller must handle nil.
   local buf = ""
+  local deadline = os.time() + 6
   while #buf < want do
     local chunk = socket:read(want - #buf)
-    if chunk and #chunk > 0 then buf = buf .. chunk end
+    if chunk and #chunk > 0 then buf = buf .. chunk
+    elseif os.time() > deadline then return nil end
   end
   return buf
 end
@@ -260,7 +274,9 @@ emu.register_frame_done(function()
     for _, addr in ipairs(FREEZE_STATUS_ADDRS) do space:write_u8(addr, 0) end
   end
   socket:write(build_obs())
-  local action = string.byte(read_exact(1))
+  local raw = read_exact(1)
+  if not raw then reopen_socket(); return end
+  local action = string.byte(raw)
   if EXTRACT then
     -- playback drives the inputs; the byte from Python is just an advance ack.
     return
