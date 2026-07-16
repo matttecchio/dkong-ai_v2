@@ -12,12 +12,15 @@ while ($true) {
   foreach ($p in $PORTS) {
     if (-not $procs[$p] -or $procs[$p].HasExited) {
       $env:DK_BRIDGE_PORT = "$p"
+      New-Item -ItemType Directory -Force -Path "C:\mame\logs" | Out-Null
       $procs[$p] = Start-Process -FilePath $MAME -WorkingDirectory "C:\mame" -ArgumentList @(
         "dkong", "-rompath", "C:\mame\roms",
         "-state_directory", $STATES,
         "-autoboot_script", $BRIDGE,
         "-video", "none", "-sound", "none", "-nothrottle"
-      ) -PassThru -WindowStyle Hidden
+      ) -PassThru -WindowStyle Hidden `
+        -RedirectStandardOutput "C:\mame\logs\mame_$p.out" `
+        -RedirectStandardError  "C:\mame\logs\mame_$p.err"
       Write-Host "$(Get-Date -f HH:mm:ss) started MAME on port $p (pid $($procs[$p].Id))"
       Start-Sleep -Milliseconds 800
     }
