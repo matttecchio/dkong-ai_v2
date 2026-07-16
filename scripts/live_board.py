@@ -65,7 +65,9 @@ def metrics():
               "guard_kills": TRK.stats["guard_kills"],
               "commits": TRK.stats["commits"],
               "commits_clear_pct": round(100*TRK.stats["commits_clear"]/max(TRK.stats["commits"],1)),
-              "commit_survive": TRK.stats["commit_survive"]})
+              "commit_survive": TRK.stats["commit_survive"],
+              "commit_split": {k: TRK.stats.get(k, 0) for k in
+                               ("c_ws", "c_ws_clear", "c_bu", "c_bu_clear")}})
     _MCACHE["t"] = now; _MCACHE["data"] = d
     return d
 HTML = None  # loaded below
@@ -99,7 +101,7 @@ class Tracker:
             pass
         self._saved = time.time()
 
-    def feed(self, port, x, y, hammer, glitch, score, gap, now):
+    def feed(self, port, x, y, hammer, glitch, score, gap, now, stype="?"):
         h = 240 - y
         prev = self.last.get(port)
         if prev:
@@ -117,6 +119,10 @@ class Tracker:
                 self.climb[port] = (now, gap > 0)
                 self.stats["commits"] += 1
                 if gap > 0: self.stats["commits_clear"] += 1
+                k = "c_" + ("ws" if stype == "curriculum" else "bu")
+                self.stats[k] = self.stats.get(k, 0) + 1
+                if gap > 0:
+                    self.stats[k + "_clear"] = self.stats.get(k + "_clear", 0) + 1
             elif port in self.climb and h >= 64:
                 self.stats["commit_survive"] += 1
                 del self.climb[port]
@@ -175,7 +181,7 @@ class H(http.server.BaseHTTPRequestHandler):
                     gap = float(parts[6]) if len(parts) > 6 else 0
                     glitch = int(parts[7]) if len(parts) > 7 else 0
                     if now - st.st_mtime < 15:
-                        TRK.feed(p, int(x), int(y), hammer, glitch, score, gap, now)
+                        TRK.feed(p, int(x), int(y), hammer, glitch, score, gap, now, stype)
                     pts = lambda s: [[int(a) for a in pair.split(":")]
                                      for pair in s.split(";") if ":" in pair]
                     out.append({"port": p, "x": int(x), "y": int(y),
