@@ -114,6 +114,12 @@ class DonkeyKongEnv(gym.Env):
     # is_jumping-gated, and girder walking moves x. 6px ≈ two ratchet pulls.
     GLITCH_PX_MAX = 6
 
+    # Sticky cause of the most recent episode end, written into the live tap
+    # (9th head field) so the dashboard can attribute deaths reliably even
+    # when its 80ms poll misses the exact death frame: b=barrel f=fireball
+    # s=self (fall; no active threat within 21px) g=guard t=timeout c=clear.
+    _end_cause = "-"
+
     # Potential-based floor shaping (run 29): the floor "poverty trap" —
     # honest play at the bottom nets negative expected reward because the
     # crossing to the x=143 ladder pays nothing and risks death, so the
@@ -1221,6 +1227,20 @@ class DonkeyKongEnv(gym.Env):
         # BOTTOM and the episode continued as a mislabeled, unclearable
         # bottom-up run that drowned the frontier gradient.
         done = died or cleared or timed_out or glitch_killed
+        if done:
+            if glitch_killed: self._end_cause = "g"
+            elif cleared:     self._end_cause = "c"
+            elif timed_out:   self._end_cause = "t"
+            else:
+                best, code = 21, "s"
+                mx, my = s["mario_x"], s["mario_y"]
+                for kind, cnt, c in (("barrel", 6, "b"), ("fireball", 5, "f")):
+                    for i in range(cnt):
+                        if s.get(f"{kind}{i}_st", 0):
+                            d = (abs(s.get(f"{kind}{i}_x", 0) - mx)
+                                 + abs(s.get(f"{kind}{i}_y", 0) - my))
+                            if d < best: best, code = d, c
+                self._end_cause = code
         return r, done
 
     # ---- gym API ---------------------------------------------------------
@@ -1816,7 +1836,8 @@ class DonkeyKongEnv(gym.Env):
                          f"{self._bw_start[0] if self._bw_start else -1},"
                          f"{1 if state.get('has_hammer', 0) else 0},"
                          f"{state.get('score') or 0},{_mg:.0f},"
-                         f"{1 if self._glitch_kill else 0}|{_b}|{_fb}")
+                         f"{1 if self._glitch_kill else 0},"
+                         f"{self._end_cause}|{_b}|{_fb}")
         except OSError:
             pass
         return obs, reward, terminated, False, self._info(state)

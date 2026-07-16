@@ -81,6 +81,9 @@ def metrics():
     d["legs"] = [[name, legs.get(name, 0)] for name, _ in LEGS]
     d.update({"hammer_pickups": TRK.stats["pickups"],
               "expiry_deaths": TRK.stats["expiry_deaths"],
+              "d_barrel": TRK.stats["deaths_barrel"],
+              "d_fireball": TRK.stats["deaths_fireball"],
+              "d_self": TRK.stats["deaths_self"],
               "guard_kills": TRK.stats["guard_kills"],
               "commits": TRK.stats["commits"],
               "commits_clear_pct": round(100*TRK.stats["commits_clear"]/max(TRK.stats["commits"],1)),
@@ -113,12 +116,18 @@ class Tracker:
         self._label = ""        # current run label, TTL-cached
         self._label_t = 0.0
         self.stats = {"pickups": 0, "expiry_deaths": 0, "guard_kills": 0,
+                      "deaths_barrel": 0, "deaths_fireball": 0, "deaths_self": 0,
                       "commits": 0, "commits_clear": 0, "commit_survive": 0}
         self.climb = {}         # port -> (mount_t, gap_was_clear)
         try:
             with open("/dev/shm/dk_analytics.json") as _af:
                 d = json.load(_af)
-            self.deaths = d.get("deaths", []); self.stats.update(d.get("stats", {}))
+            self.deaths = d.get("deaths", [])
+            # Session counters (pickups, expiry deaths, ...) belong to ONE
+            # run letter (user request 2026-07-16): only restore them if the
+            # ledger was written by the run we're still in.
+            if d.get("run") == self.label():
+                self.stats.update(d.get("stats", {}))
         except (OSError, ValueError):
             pass
         self._saved = time.time()
@@ -129,12 +138,18 @@ class Tracker:
             self._label_t = now
             try:
                 with open("logs/run_label") as _rl:
-                    self._label = _rl.read().strip()
+                    lab = _rl.read().strip()
             except OSError:
-                pass
+                return self._label
+            if lab != self._label:
+                if self._label:  # run letter changed -> new session counters
+                    self.stats = {k: 0 for k in self.stats}
+                    self.climb.clear()
+                self._label = lab
         return self._label
 
-    def feed(self, port, x, y, hammer, glitch, score, gap, now, stype="?"):
+    def feed(self, port, x, y, hammer, glitch, score, gap, now, stype="?",
+             cause="?"):
         h = 240 - y
         prev = self.last.get(port)
         if prev:
@@ -161,12 +176,18 @@ class Tracker:
                 del self.climb[port]
             # episode end: position teleport
             if abs(x - px) + abs(y - py) > 45:
+                # cause is STICKY env truth written at the done step, so
+                # the CURRENT tap (first post-teleport frame) carries the
+                # cause of the end we are detecting right now.
                 ev = {"x": px, "h": 240 - py, "t": round(now, 1),
-                      "run": self.label(),
+                      "run": self.label(), "cause": cause,
                       "leg": leg_of(px, 240 - py), "glitch": pg,
                       "hx": bool(self.h_expiry.get(port) and
                                  now - self.h_expiry[port] < 2.5)}
                 if pg: self.stats["guard_kills"] += 1
+                _ck = {"b": "deaths_barrel", "f": "deaths_fireball",
+                       "s": "deaths_self"}.get(cause)
+                if _ck and not pg: self.stats[_ck] += 1
                 if ev["hx"]: self.stats["expiry_deaths"] += 1
                 self.deaths.append(ev)
                 if len(self.deaths) > 6000: self.deaths = self.deaths[-5000:]
@@ -175,7 +196,8 @@ class Tracker:
         if now - self._saved > 60:
             self._saved = now
             try:
-                json.dump({"deaths": self.deaths[-5000:], "stats": self.stats},
+                json.dump({"deaths": self.deaths[-5000:], "stats": self.stats,
+                           "run": self._label},
                           open("/dev/shm/dk_analytics.json", "w"))
             except OSError:
                 pass
@@ -220,8 +242,10 @@ class H(http.server.BaseHTTPRequestHandler):
                     score = int(parts[5]) if len(parts) > 5 else 0
                     gap = float(parts[6]) if len(parts) > 6 else 0
                     glitch = int(parts[7]) if len(parts) > 7 else 0
+                    cause = parts[8] if len(parts) > 8 else "?"
                     if now - st.st_mtime < 15:
-                        TRK.feed(p, int(x), int(y), hammer, glitch, score, gap, now, stype)
+                        TRK.feed(p, int(x), int(y), hammer, glitch, score,
+                                 gap, now, stype, cause)
                     pts = lambda s: [[int(a) for a in pair.split(":")]
                                      for pair in s.split(";") if ":" in pair]
                     out.append({"port": p, "x": int(x), "y": int(y),
@@ -438,6 +462,7 @@ async function mpoll(){
       ['floor best gain', m.fl_best, false],
       ['hammer pickups', m.hammer_pickups, false],
       ['deaths at hammer expiry', m.expiry_deaths, false],
+      ['deaths barrel / fireball / self', (m.d_barrel||0)+' / '+(m.d_fireball||0)+' / '+(m.d_self||0), false],
       ['guard kills', m.guard_kills, false]];
     document.getElementById('mtable').innerHTML=rows.map(r=>
       '<tr><td style="color:#8B85A3;padding-right:12px">'+r[0]+'</td><td style="text-align:right;'+
