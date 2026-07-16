@@ -348,6 +348,11 @@ for(let i=0;i<8;i++){
 // death heatmap panel (in the right column, under the metrics)
 {
   const cell=document.createElement('div'); cell.className='cell';
+  // pin the cell to the img width: it sits in a stretch-aligned flex
+  // column, so without this the absolutely-positioned svg overlay
+  // stretches to the metrics box's width and every dot drifts right
+  // (user screenshot 2026-07-17: left edge fine, drift grows rightward)
+  cell.style.width='260px';
   cell.innerHTML='<img class=bg src="'+BG+'" style="filter:brightness(.45);width:260px">'
     +'<svg id=heat viewBox="0 0 672 768" preserveAspectRatio="none"></svg>'
     +'<div class=tag style="color:#E83C3C">DEATH MAP (session)</div>';
