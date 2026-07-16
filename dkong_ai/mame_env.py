@@ -160,6 +160,22 @@ class DonkeyKongEnv(gym.Env):
                               # out y163; a few px of margin)
     GAP_MARGIN_PX = 20        # safety pad on the time-race (below)
 
+    def _ladder_gap_clear(self, s, lx, top_y):
+        """Generalized time-race gate (user doctrine, generalized
+        2026-07-16): True when no barrel above Mario can reach ladder lx's
+        top before he does. Same distance-race form as the x53 gate."""
+        my = s.get("mario_y") or 240
+        remaining = max(0, my - top_y)
+        for i in range(6):
+            if s.get(f"barrel{i}_st", 0) not in (1, 2):
+                continue
+            by = s.get(f"barrel{i}_y", 240)
+            if not (top_y - 35 <= by < my):
+                continue
+            if lx - 18 <= s.get(f"barrel{i}_x", 0) <= lx + remaining + self.GAP_MARGIN_PX:
+                return False
+        return True
+
     def _lad53_column_clear(self, s):
         """User pro line (2026-07-14): a climb is safe iff the time to walk
         the ladder bottom-to-top beats any barrel's time to reach the
@@ -978,6 +994,19 @@ class DonkeyKongEnv(gym.Env):
                         and self.UPPER_TRAVERSE_X_LO <= s["mario_x"] < self.UPPER_TRAVERSE_X_HI
                         and s["mario_x"] > p["mario_x"]):
                     r += (s["mario_x"] - p["mario_x"]) * self.UPPER_TRAVERSE_PROGRESS
+                # x131 climb doctrine (2026-07-16): the middle ladder —
+                # the route's next contested climb — gets the full x53
+                # treatment: gated pay, one-shot clean mount, stall cost.
+                if (not_jumping and 78 <= height <= 126
+                        and 123 <= s["mario_x"] <= 139):
+                    if s["mario_y"] < p["mario_y"]:
+                        if self._ladder_gap_clear(s, 131, 118):
+                            r += self.CLIMB_BONUS
+                            if not self._x131_mount_paid:
+                                r += self.CLEAN_MOUNT_BONUS
+                                self._x131_mount_paid = True
+                    elif s["mario_y"] == p["mario_y"]:
+                        r -= self.LADDER_IDLE_COST
                 # Girder-3 rightward traverse: the leg of the pro line
                 # between the x53 climb and the x131 middle ladder.
                 if (self.G3_TRAVERSE_H_LO <= height <= self.G3_TRAVERSE_H_HI
@@ -1027,7 +1056,11 @@ class DonkeyKongEnv(gym.Env):
                         and self.UPPER_CLIMB_H_LO <= height <= self.UPPER_CLIMB_H_HI
                         and self.UPPER_CLIMB_X_LO <= s["mario_x"] <= self.UPPER_CLIMB_X_HI):
                     if s["mario_y"] < p["mario_y"]:
-                        r += self.UPPER_CLIMB_BONUS
+                        # Gated 2026-07-16 (ladder forensics: 1,074 deaths
+                        # mid/top on x147 — the largest cluster on the
+                        # board): the final climb only pays into a gap.
+                        if self._ladder_gap_clear(s, 147, 48):
+                            r += self.UPPER_CLIMB_BONUS
                     elif s["mario_y"] == p["mario_y"]:
                         r -= self.UPPER_LADDER_IDLE_COST
                 # Novelty + corridor: reward first visit to a new (x,height)
@@ -1477,6 +1510,7 @@ class DonkeyKongEnv(gym.Env):
         self._glitch_px = 0                  # cumulative off-ladder climb pixels
         self._clean_mount_paid = False       # one-shot clean-mount bonus flag
         self._waterfall_paid = False         # one-shot waterfall-pass flag
+        self._x131_mount_paid = False        # one-shot x131 clean-mount flag
         self._start_h = max(0, self.BASE_Y - self._min_y)  # episode start height
         self._glitch_kill = False            # episode ended by the glitch guard
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)

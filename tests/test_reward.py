@@ -23,6 +23,7 @@ def _make_env(reward_max_h=0):
     env._glitch_kill = False
     env._clean_mount_paid = True   # suppress the one-shots in generic tests
     env._waterfall_paid = True
+    env._x131_mount_paid = True
     return env
 
 
@@ -383,3 +384,16 @@ def test_g3_traverse_pays_right_and_no_pump():
     env2._prev = _state(mario_y=176, mario_x=100)
     r_left, _ = env2._reward(_state(mario_y=176, mario_x=90))
     assert r_left < 0.1, f"g3 leftward must not pay (pump check), got {r_left}"
+
+
+def test_x131_doctrine_gated():
+    """The middle ladder gets the full doctrine: clean-gap climbs pay,
+    gambles do not (generalized time-race, 2026-07-16)."""
+    env = _pbrs_env()
+    p = _state(mario_y=150, mario_x=131)   # h90, on the x131 ladder
+    s = _state(mario_y=146, mario_x=131)
+    env._prev = p
+    r_clear, _ = env._reward(s)
+    env._prev = p
+    r_block, _ = env._reward(dict(s, barrel0_st=1, barrel0_x=140, barrel0_y=110))
+    assert r_clear - r_block > 0.3, f"{r_clear} vs {r_block}"
