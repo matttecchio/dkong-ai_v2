@@ -18,3 +18,10 @@ Create `artifacts/farm.json`:
 {"hosts": [{"host": "192.168.20.59", "ports": [5016,5017,5018,5019,5020,5021,5022,5023], "statedir": "/mnt/dkfarm"}]}
 Delete the file to return to the single-machine default. Unreachable
 ports are skipped automatically at launch.
+
+## Cross-build savestate limit (2026-07-16)
+Remote (Windows-build) MAME cannot load Linux-build .sta files — verified
+by self-load working while archive loads fail. Farm envs therefore run
+BOTTOM-UP ONLY (p_curric 0.0 by default in farm.json hosts): cold starts
+need no states, and bottom-up volume is the farm's purpose (honest
+integration metrics + first-clear watch). No state sync required.

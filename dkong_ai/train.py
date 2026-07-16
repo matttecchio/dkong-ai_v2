@@ -540,7 +540,13 @@ def main():
                     continue
                 thunks.append(make_env(
                     args.rom_dir, rp, args.frameskip, bw_manifest,
-                    p_no_barrels=args.p_no_barrels, p_curric=args.p_curric,
+                    p_no_barrels=args.p_no_barrels,
+                    # farm hosts default to bottomup-only: cross-build
+                    # savestate incompatibility (2026-07-16) means remote
+                    # MAMEs can't load our curriculum states — and pure
+                    # cold starts are what the farm is FOR (integration
+                    # volume, first-clear watch).
+                    p_curric=h.get("p_curric", 0.0),
                     gamma=args.gamma, host=h["host"],
                     remote_statedir=h.get("statedir")))
                 print(f"[farm] joined {h['host']}:{rp}", flush=True)
