@@ -756,7 +756,10 @@ class DonkeyKongEnv(gym.Env):
     # (x~60, h62) to the x131 complete ladder. Corridor data confirms the
     # route (h60-84 bands: x_med 96 -> 107 -> 131).
     G3_TRAVERSE_H_LO, G3_TRAVERSE_H_HI = 56, 84
-    G3_TRAVERSE_X_LO, G3_TRAVERSE_X_HI = 60, 135
+    # X_LO 60 -> 50 (2026-07-16, user watched left-drift at the ladder
+    # top): arrivals stand at x53-59 — the rightward signal must greet
+    # them at the top rung, not 7px later (the g2-desert lesson again).
+    G3_TRAVERSE_X_LO, G3_TRAVERSE_X_HI = 50, 135
     G3_TRAVERSE_PROGRESS = 0.05                            # per pixel moved right
 
     # Anti-camping: height band and x threshold for the per-step girder penalty.
@@ -790,6 +793,11 @@ class DonkeyKongEnv(gym.Env):
     G2_RIGHT_X     = 210
     G2_RIGHT_H_LO, G2_RIGHT_H_HI = 26, 52
     G2_RIGHT_COST  = 0.06
+    # Girder-3 left end: dead end + the sweep's exit ramp; retreating
+    # left off the ladder top was free (user observation 2026-07-16).
+    G3_LEFT_X      = 48
+    G3_LEFT_H_LO, G3_LEFT_H_HI = 56, 84
+    G3_LEFT_COST   = 0.06
 
     # Broken-ladder stub tax (2026-07-07): the x=99 stub's lower rungs are
     # legal ladder tiles, so the glitch guard can't fire on them — eval film
@@ -961,6 +969,9 @@ class DonkeyKongEnv(gym.Env):
                 if (self.G2_RIGHT_H_LO <= height <= self.G2_RIGHT_H_HI
                         and s["mario_x"] > self.G2_RIGHT_X):
                     r -= self.G2_RIGHT_COST
+                if (self.G3_LEFT_H_LO <= height <= self.G3_LEFT_H_HI
+                        and s["mario_x"] < self.G3_LEFT_X):
+                    r -= self.G3_LEFT_COST
                 # Broken-ladder stub tax: see STUB_* constants.
                 if (self.STUB_H_LO <= height <= self.STUB_H_HI
                         and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI):
@@ -1489,6 +1500,19 @@ class DonkeyKongEnv(gym.Env):
         state, pix = self._exchange(
             self.A_FREEZE_BARRELS if self._no_barrels
             else self.A_UNFREEZE_BARRELS)
+        # Capture the start state so deep bottom-up runs replay EXACTLY
+        # (2026-07-16: the h68/h74 waterfall passages were unfilmable —
+        # bottom resets carry unlogged randomness). One save per reset.
+        try:
+            for _ in range(4):
+                self._exchange(self.A_SAVE)
+            import shutil as _sh
+            _dst = os.path.join(os.path.dirname(self.bridge), "..", "logs",
+                                "successes", f"bustart_{self.port}.sta")
+            _sh.copyfile(self._slot_sta_path(), _dst)
+            self._ep_start_sta = f"bustart_{self.port}.sta"
+        except OSError:
+            self._ep_start_sta = None
         return state, pix
 
     def _begin_episode(self, state):
@@ -1768,10 +1792,22 @@ class DonkeyKongEnv(gym.Env):
                      and max(0, self.BASE_Y - self._min_y) >= 68)
         if not (cleared or passed_wf or (curric and gain >= 40)):
             return
+        start_name = (os.path.basename(self._ep_start_sta)
+                      if self._ep_start_sta else "bottom")
+        if start_name.startswith("bustart_"):
+            # the per-port capture is overwritten every reset — preserve
+            # this episode's copy under a unique name (2026-07-16)
+            try:
+                import shutil as _sh
+                kept = f"bustart_{self.port}_{int(time.time())}.sta"
+                _sh.copyfile(os.path.join("logs", "successes", start_name),
+                             os.path.join("logs", "successes", kept))
+                start_name = kept
+            except OSError:
+                start_name = "bottom"
         rec = {"ts": time.time(), "port": self.port,
-               "start": (os.path.basename(self._ep_start_sta)
-                         if self._ep_start_sta else "bottom"),
-               "exact": bool(self._ep_start_sta),
+               "start": start_name,
+               "exact": bool(self._ep_start_sta) and start_name != "bottom",
                "acts": list(self._ep_acts), "cleared": cleared, "gain": gain,
                "bw": list(self._bw_start[:2]) if self._bw_start else None}
         try:
