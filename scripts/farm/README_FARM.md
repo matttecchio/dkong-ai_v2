@@ -25,3 +25,20 @@ by self-load working while archive loads fail. Farm envs therefore run
 BOTTOM-UP ONLY (p_curric 0.0 by default in farm.json hosts): cold starts
 need no states, and bottom-up volume is the farm's purpose (honest
 integration metrics + first-clear watch). No state sync required.
+
+## Start / stop discipline
+- START: double-click fix_and_run.bat (kills strays, installs latest
+  scripts from the share, launches 8 instances).
+- STOP: Ctrl+C in the farm window (clean kill via finally), OR if the
+  window was closed with X — the MAMEs keep running detached — double-
+  click stop_farm.bat.
+- Idle instances run the game UNTHROTTLED (full CPU): stop the farm when
+  training isn't using it.
+
+## Validated 2026-07-16 (dry run)
+- WiFi verdict: p50 2.8ms / p99 16.2ms / max 114ms over 4,558 samples — PASS.
+- Remote steps: p50 ~10ms, p90 14ms, max ~22ms (lock-step compatible).
+- Remote save/self-load round-trip: works. Loading Linux-build .sta: FAILS
+  (cross-build incompatibility) -> farm runs bottom-up only by design.
+- Bridge hardened: DK_BRIDGE_BIND=0.0.0.0 in farm mode; client-disconnect
+  recovery (a dead client used to freeze the emulator mid-frame).

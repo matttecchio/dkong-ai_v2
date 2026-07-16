@@ -8,6 +8,9 @@ $STATES = "C:\mame\dkstates"          # SHARE THIS FOLDER as \\<host>\dkstates
 $PORTS  = 5016..5023
 New-Item -ItemType Directory -Force -Path $STATES | Out-Null
 $procs = @{}
+# Ctrl+C in this window kills all MAMEs cleanly (finally block).
+# If the window is CLOSED instead, children survive — use stop_farm.bat.
+try {
 while ($true) {
   foreach ($p in $PORTS) {
     if (-not $procs[$p] -or $procs[$p].HasExited) {
@@ -27,4 +30,8 @@ while ($true) {
     }
   }
   Start-Sleep -Seconds 5
+}
+} finally {
+  Write-Host "shutting down farm..."
+  Get-Process mame -ErrorAction SilentlyContinue | Stop-Process -Force
 }
