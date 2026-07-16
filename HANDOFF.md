@@ -843,6 +843,24 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   a stub column. Pro doctrine (user): track all barrels, project ~6s
   ahead — run-31 candidate: projected-occupancy vision channel.
 
+- **REMOTE MAME FARM (2026-07-16, built + validated, switch-on pending):**
+  8 extra envs on the Windows box 192.168.20.59 (8c/16t, WiFi — probe
+  verdict p50 2.8ms/p99 16.2ms = PASS). Opt-in ONLY via artifacts/
+  farm.json (absent = single-machine, THE default; unreachable hosts
+  skipped loudly). Windows package scripts/farm/ (fix_and_run.bat /
+  stop_farm.bat buttons on the dkstates share). KEY FACTS: (1) remote
+  MAME must be 0.264 — but even matched versions CANNOT load our
+  Linux-build .sta archive (cross-BUILD incompatibility, verified via
+  self-load-works/archive-load-fails) → farm envs are BOTTOM-UP ONLY
+  (p_curric 0 default) = the integration/first-clear fleet, no state
+  sync needed; (2) bridge.lua now binds DK_BRIDGE_BIND (default
+  loopback) and RECOVERS from client disconnects (a dead client used to
+  freeze the emulator inside frame_done — the farm-zombie bug; NEVER
+  raw-probe a bridge port, the hello byte poisons it); (3) idle farm
+  MAMEs run unthrottled — stop the farm when unused; (4) remote steps
+  p50 ~10ms vs ~3ms local (lock-step tolerable); (5) n_envs 16→24
+  changes PPO batch size = new-metrics-regime boundary.
+
 ---
 
 ## 12. Critical bugs fixed (do not reintroduce)
