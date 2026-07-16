@@ -94,7 +94,10 @@ class DonkeyKongEnv(gym.Env):
         # a fresh frozen-barrel probe, and never add reward shaping that
         # pays inside a stub column:
         ( 82, 164, 176),  # g3 broken ladder, lower stub (h64→76)
-        (116, 192, 206),  # g2→g3 broken ladder, lower stub (h34→48)
+        # (116, 192, 206) g2→g3 lower stub: RE-GATED 2026-07-16 (same
+        # bait pattern as x99 — death ledger showed 8 deaths stacked at
+        # x115 h50-58: mount, top out, strand, die. User-confirmed via
+        # the death map. x82 stays legal (on-route, 1 death).
         # (99, 228, 240) floor stub: REMOVED same day it was added (user
         # order, 2026-07-15 eve): the stub is a dead end, and legalizing
         # it made its 12px pay height milestones — every bottom start was
