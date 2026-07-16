@@ -39,7 +39,8 @@ def metrics():
            and (240-F(r,"start_y")) < 50]
     lh = [F(r,"max_height") for r in low]
     try:
-        gates = sum(json.load(open("artifacts/backward_dense14/levels.json"))["levels"])
+        with open("artifacts/backward_dense14/levels.json") as _lf:
+            gates = sum(json.load(_lf)["levels"])
     except OSError:
         gates = -1
     d = {
@@ -107,7 +108,8 @@ class Tracker:
                       "commits": 0, "commits_clear": 0, "commit_survive": 0}
         self.climb = {}         # port -> (mount_t, gap_was_clear)
         try:
-            d = json.load(open("/dev/shm/dk_analytics.json"))
+            with open("/dev/shm/dk_analytics.json") as _af:
+                d = json.load(_af)
             self.deaths = d.get("deaths", []); self.stats.update(d.get("stats", {}))
         except (OSError, ValueError):
             pass

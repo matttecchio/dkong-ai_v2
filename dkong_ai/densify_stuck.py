@@ -96,7 +96,10 @@ def main():
         and compare against the successor state's ACTUAL loaded height —
         manifest height labels can lag the snapshot by 5-15px (a0 gotcha),
         so the .sta itself is the only trustworthy anchor."""
-        rec = archives[ai].by_idx[leg_idx]
+        rec = archives[ai].by_idx.get(leg_idx)
+        if rec is None:
+            print(f"  leg {leg_idx} missing from archive — skipped")
+            return None
         byts = rec["bytes"]
         st = replay(env, a_path, byts,
                     check_j if check_j is not None else len(byts) - 1)

@@ -15,7 +15,10 @@ from .mame_env import DonkeyKongEnv
 from .dk_policy import DkFeaturesExtractor, DkFrameStackWrapper
 
 
-def _load_model(path, device="cuda"):
+def _load_model(path, device="auto"):
+    if device == "auto":
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
         from sb3_contrib import RecurrentPPO
         return RecurrentPPO.load(path, device=device), True

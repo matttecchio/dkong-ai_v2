@@ -191,6 +191,8 @@ class SILCallback(BaseCallback):
                 # Equal weight per CLASS, then uniform within: a floor crossing
                 # gets replayed as often as the whole tower-clear pool does.
                 buf = nonempty[int(rng.integers(len(nonempty)))]
+                if not buf:
+                    continue          # r15: theoretical clear-during-update
                 ep = buf[int(rng.integers(len(buf)))]
                 T = len(ep)
                 obs = {k: _th.as_tensor(_np.stack([t[0][k] for t in ep]),

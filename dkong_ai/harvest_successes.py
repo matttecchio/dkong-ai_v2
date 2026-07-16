@@ -135,7 +135,7 @@ def main():
                     for _ in range(4):
                         env._exchange(env.A_SAVE)
                     env._hold(env.A_NOOP, 3)
-                    aname = f"hva_{ri}_{os.path.splitext(sta)[0]}.sta"
+                    aname = f"hva_{ri}_{os.path.splitext(os.path.basename(sta))[0]}.sta"
                     shutil.copyfile(env._slot_sta_path(),
                                     os.path.join(args.out, aname))
                     new_approaches[sta] = {
