@@ -462,7 +462,7 @@ async function mpoll(){
       ['floor best gain', m.fl_best, false],
       ['hammer pickups', m.hammer_pickups, false],
       ['deaths at hammer expiry', m.expiry_deaths, false],
-      ['deaths barrel / fireball / self', (m.d_barrel||0)+' / '+(m.d_fireball||0)+' / '+(m.d_self||0), false],
+      ['deaths barrel / fball / self', (m.d_barrel||0)+' / '+(m.d_fireball||0)+' / '+(m.d_self||0), false],
       ['guard kills', m.guard_kills, false]];
     document.getElementById('mtable').innerHTML=rows.map(r=>
       '<tr><td style="color:#8B85A3;padding-right:12px">'+r[0]+'</td><td style="text-align:right;'+
