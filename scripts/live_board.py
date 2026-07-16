@@ -58,6 +58,18 @@ def metrics():
         "gates": gates,
     }
     from collections import Counter
+    # ladder forensics: deaths within a ladder column, split by phase
+    LADS = [(203, 4, 29), (53, 44, 62), (131, 82, 122),
+            (94, 118, 148), (67, 115, 155), (147, 140, 192)]
+    lad = {}
+    for lx, base, top in LADS:
+        near = [e for e in TRK.deaths
+                if abs(e["x"] - lx) <= 10 and base - 6 <= e["h"] <= top + 6]
+        lad[f"x{lx}"] = {
+            "mount": sum(1 for e in near if e["h"] < base + 7),
+            "mid": sum(1 for e in near if base + 7 <= e["h"] <= top - 7),
+            "top": sum(1 for e in near if e["h"] > top - 7)}
+    d["ladders"] = lad
     legs = Counter(e["leg"] for e in TRK.deaths)
     d["legs"] = [[name, legs.get(name, 0)] for name, _ in LEGS]
     d.update({"hammer_pickups": TRK.stats["pickups"],
