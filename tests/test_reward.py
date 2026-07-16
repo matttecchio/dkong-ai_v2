@@ -397,3 +397,24 @@ def test_x131_doctrine_gated():
     env._prev = p
     r_block, _ = env._reward(dict(s, barrel0_st=1, barrel0_x=140, barrel0_y=110))
     assert r_clear - r_block > 0.3, f"{r_clear} vs {r_block}"
+
+
+def test_hammer_rush_tax_range_gated():
+    """Advancing on an in-range threat with the hammer UP costs; the same
+    approach from outside smashing range is free (user refinement)."""
+    def run(threat_dx, hammer_up):
+        env = _pbrs_env()
+        p = _state(mario_y=175, mario_x=100, has_hammer=1)
+        s = _state(mario_y=175, mario_x=104, has_hammer=1)  # moving right
+        s["hammer_y"] = 175 - (16 if hammer_up else 2)
+        s["fireball0_st"] = 1
+        s["fireball0_x"] = 104 + threat_dx
+        s["fireball0_y"] = 175
+        env._prev = p
+        r, _ = env._reward(s)
+        return r
+    in_range_up = run(10, True)
+    far_up = run(40, True)
+    in_range_down = run(10, False)
+    assert far_up - in_range_up > 0.03, f"{far_up} vs {in_range_up}"
+    assert in_range_down - in_range_up > 0.03, f"{in_range_down} vs {in_range_up}"

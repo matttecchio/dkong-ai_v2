@@ -806,6 +806,13 @@ class DonkeyKongEnv(gym.Env):
     G3_LEFT_X      = 48
     G3_LEFT_H_LO, G3_LEFT_H_HI = 56, 84
     G3_LEFT_COST   = 0.06
+    # Stop-before-smash (user doctrine, built 2026-07-16): advancing on a
+    # threat that is ALREADY within smashing range while the hammer is in
+    # its UP phase lets it slip under (fireballs especially). Tax only in
+    # range — approaching from afar is free (user refinement).
+    HAMMER_RUSH_RANGE = 16     # px: within smashing reach
+    HAMMER_RUSH_UP    = 12     # hammer head this far above Mario = up-phase
+    HAMMER_RUSH_COST  = 0.05
 
     # Broken-ladder stub tax (2026-07-07): the x=99 stub's lower rungs are
     # legal ladder tiles, so the glitch guard can't fire on them — eval film
@@ -980,6 +987,27 @@ class DonkeyKongEnv(gym.Env):
                 if (self.G3_LEFT_H_LO <= height <= self.G3_LEFT_H_HI
                         and s["mario_x"] < self.G3_LEFT_X):
                     r -= self.G3_LEFT_COST
+                # Stop-before-smash tax (see constants above).
+                if (s.get("has_hammer", 0)
+                        and (s["mario_y"] - s.get("hammer_y", s["mario_y"])
+                             ) > self.HAMMER_RUSH_UP
+                        and s["mario_x"] != p["mario_x"]):
+                    step_dir = 1 if s["mario_x"] > p["mario_x"] else -1
+                    for _tn in (["barrel", 6], ["fireball", 5]):
+                        kind, cnt = _tn
+                        for _i in range(cnt):
+                            if not s.get(f"{kind}{_i}_st", 0):
+                                continue
+                            _dx = s.get(f"{kind}{_i}_x", 0) - s["mario_x"]
+                            _dy = abs(s.get(f"{kind}{_i}_y", 240) - s["mario_y"])
+                            if (abs(_dx) <= self.HAMMER_RUSH_RANGE
+                                    and _dy <= 14
+                                    and (_dx > 0) == (step_dir > 0)):
+                                r -= self.HAMMER_RUSH_COST
+                                break
+                        else:
+                            continue
+                        break
                 # Broken-ladder stub tax: see STUB_* constants.
                 if (self.STUB_H_LO <= height <= self.STUB_H_HI
                         and self.STUB_X_LO <= s["mario_x"] <= self.STUB_X_HI):
