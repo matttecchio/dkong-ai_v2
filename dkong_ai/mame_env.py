@@ -630,7 +630,12 @@ class DonkeyKongEnv(gym.Env):
             dx = float(np.clip((state.get("hammer_x", 0) - mx) / 128.0, -1, 1))
             dy = float(np.clip((state.get("hammer_y", 0) - my) / 120.0, -1, 1))
         else:
-            dx = dy = 0.0
+            # run-31: while HELD these slots were dead zeros — repurposed
+            # as the SWING PHASE (user: fireballs slip under the up-phase
+            # hammer; pros stop and time the down-swing). Same dims,
+            # meaning instead of filler.
+            dx = float(np.clip((state.get("hammer_x", 0) - mx) / 24.0, -1, 1))
+            dy = float(np.clip((state.get("hammer_y", 0) - my) / 24.0, -1, 1))
         feats.extend([dx, dy, float(bool(has_h))])
         feats.append(state.get("difficulty", 1) / 5.0)
         # Stage B (verified 2026-07-13): the clock that defines the endgame
