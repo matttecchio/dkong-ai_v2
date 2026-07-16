@@ -110,6 +110,8 @@ class Tracker:
         self.last = {}          # port -> (x, y, hammer, glitch, t, score)
         self.h_expiry = {}      # port -> t of last hammer 1->0
         self.deaths = []        # ring buffer of end events
+        self._label = ""        # current run label, TTL-cached
+        self._label_t = 0.0
         self.stats = {"pickups": 0, "expiry_deaths": 0, "guard_kills": 0,
                       "commits": 0, "commits_clear": 0, "commit_survive": 0}
         self.climb = {}         # port -> (mount_t, gap_was_clear)
@@ -120,6 +122,17 @@ class Tracker:
         except (OSError, ValueError):
             pass
         self._saved = time.time()
+
+    def label(self):
+        now = time.time()
+        if now - self._label_t > 30:
+            self._label_t = now
+            try:
+                with open("logs/run_label") as _rl:
+                    self._label = _rl.read().strip()
+            except OSError:
+                pass
+        return self._label
 
     def feed(self, port, x, y, hammer, glitch, score, gap, now, stype="?"):
         h = 240 - y
@@ -149,6 +162,7 @@ class Tracker:
             # episode end: position teleport
             if abs(x - px) + abs(y - py) > 45:
                 ev = {"x": px, "h": 240 - py, "t": round(now, 1),
+                      "run": self.label(),
                       "leg": leg_of(px, 240 - py), "glitch": pg,
                       "hx": bool(self.h_expiry.get(port) and
                                  now - self.h_expiry[port] < 2.5)}
@@ -172,7 +186,13 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
         if self.path == "/deaths":
-            body = json.dumps(TRK.deaths[-2500:]).encode()
+            # Death map shows the CURRENT run letter only (user request
+            # 2026-07-16: "what is happening now as opposed to days ago").
+            # The full ring stays in the ledger for forensics; pre-stamp
+            # entries have no "run" key and age out of the view naturally.
+            lab = TRK.label()
+            body = json.dumps([e for e in TRK.deaths
+                               if e.get("run") == lab][-2500:]).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
