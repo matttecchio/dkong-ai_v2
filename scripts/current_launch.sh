@@ -14,6 +14,11 @@
 # test from the 27y post-mortem — all 12 frontiers flat 0-1% for 5h at 5e-5
 # on 12h-old heads. GUARDRAIL: clip_fraction >0.25 sustained -> back to 5e-5
 # (run-19 collapse was 2.5e-4).
+# GUARDRAIL FIRED (run 30l, 2026-07-16 23:00): 48/48 updates clip 0.25-0.38
+# in the 35 min after the bundle restart — the x99/x116 re-gating shocked
+# the floor value landscape (guard-kill wave 37%->64%, mean_h falling).
+# lr back to 5e-5. Do not re-raise to 1e-4 until clip <0.2 sustained AND
+# the guard-kill wave has decayed (<10% of bottom-ups).
 #
 # Usage: current_launch.sh <init-from-model> <log-file>
 # Prints the trainer PID on stdout.
@@ -25,7 +30,7 @@ log="$2"
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
   --timesteps 100000000 --n-envs 16 \
   --save artifacts/ppo_dkong_run30 --logdir logs \
-  --gamma 0.999 --ent-coef 0.01 --lr 1e-4 --n-epochs 3 \
+  --gamma 0.999 --ent-coef 0.01 --lr 5e-5 --n-epochs 3 \
   --stack 2 --p-no-barrels 0.0 --p-curric 0.8 \
   --lstm --lstm-hidden 512 \
   --backward-dir artifacts/backward_dense14 --bw-threshold 0.3 \
