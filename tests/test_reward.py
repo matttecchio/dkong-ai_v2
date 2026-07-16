@@ -434,3 +434,17 @@ def test_guard_execution_never_cheapest_death():
     r, _ = env._reward(s)
     assert env._glitch_kill, "guard should have executed"
     assert r <= -24, f"execution too cheap: {r}"
+
+
+def test_x82_stub_rent():
+    """Hanging on the g3 broken-ladder stub costs rent; the same spot while
+    jumping (g3 jump arcs read h68-77) and the girder beside it are free."""
+    def r_at(y, x, jumping=0):
+        env = _pbrs_env()
+        s = _state(mario_y=y, mario_x=x, is_jumping=jumping)
+        env._prev = _state(mario_y=y, mario_x=x, is_jumping=jumping)
+        r, _ = env._reward(s)
+        return r
+    on_stub  = r_at(170, 82)          # h70, mid-stub
+    jumping  = r_at(170, 82, 1)       # same spot, jump arc
+    assert jumping - on_stub >= 0.05, f"{jumping} vs {on_stub}"

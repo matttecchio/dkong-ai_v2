@@ -812,6 +812,17 @@ class DonkeyKongEnv(gym.Env):
     G3_LEFT_X      = 48
     G3_LEFT_H_LO, G3_LEFT_H_HI = 56, 84
     G3_LEFT_COST   = 0.06
+    # x82 g3 broken-ladder stub rent (user call 2026-07-17): mounting stays
+    # legal — the one legit use is a beat-long pause to steer-redirect a
+    # barrel down another ladder — but HANGING on the dead-end stub was 31%
+    # of g3 deaths this session (86 stacked at h68, 97/104 barrel kills).
+    # Per-step cost above the girder surface makes seconds expensive while
+    # a redirect beat stays ~free. Jump arcs on g3 read h68-77 (the x53
+    # geometry saga), hence the is_jumping exclusion.
+    X82_RENT_X_LO, X82_RENT_X_HI = 76, 88
+    X82_RENT_H_LO, X82_RENT_H_HI = 66, 80
+    X82_RENT_COST  = 0.06
+
     # Stop-before-smash (user doctrine, built 2026-07-16): advancing on a
     # threat that is ALREADY within smashing range while the hammer is in
     # its UP phase lets it slip under (fireballs especially). Tax only in
@@ -993,6 +1004,11 @@ class DonkeyKongEnv(gym.Env):
                 if (self.G3_LEFT_H_LO <= height <= self.G3_LEFT_H_HI
                         and s["mario_x"] < self.G3_LEFT_X):
                     r -= self.G3_LEFT_COST
+                # x82 stub rent (see constants above).
+                if (self.X82_RENT_H_LO <= height <= self.X82_RENT_H_HI
+                        and self.X82_RENT_X_LO <= s["mario_x"] <= self.X82_RENT_X_HI
+                        and not s.get("is_jumping", 0)):
+                    r -= self.X82_RENT_COST
                 # Stop-before-smash tax (see constants above).
                 if (s.get("has_hammer", 0)
                         and (s["mario_y"] - s.get("hammer_y", s["mario_y"])
