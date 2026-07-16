@@ -322,6 +322,13 @@ const grid=document.getElementById('grid'), panels=[];
 const GROUPS=[[5000,5001],[5002,5003],[5004,5005],[5006,5007],
               [5008,5009],[5010,5011],[5012,5013],[5014,5015]];
 const P2PANEL={}; GROUPS.forEach((g,i)=>g.forEach(p=>P2PANEL[p]=i));
+// pro route (user doctrine + corridor): floor -> x203 -> g2 left ->
+// wait spot -> x53 climb -> g3 right -> x131 -> g4 left -> x67 ->
+// g5 right -> x147 -> top toward Pauline
+// [x, y, extra-y-drop] — per-point tweak for visual girder alignment
+const ROUTE=[[82,240,0],[203,236,0],[203,211,0],[59,202,0],[53,196,0],
+  [53,178,0],[62,176,10],[131,158,16],[131,118,16],[94,122,26],
+  [94,92,22],[200,97,20],[200,68,6],[120,65,6],[110,60,6],[110,35,6]];
 for(let i=0;i<8;i++){
   const g=GROUPS[i];
   const cell=document.createElement('div'); cell.className='cell';
@@ -330,13 +337,6 @@ for(let i=0;i<8;i++){
     +'<div class=tag>ENVS '+g[0]+'-'+g[g.length-1]+'</div>';
   grid.appendChild(cell);
   const sv=cell.querySelector('svg');
-  // pro route (user doctrine + corridor): floor -> x203 -> g2 left ->
-  // wait spot -> x53 climb -> g3 right -> x131 -> g4 left -> x67 ->
-  // g5 right -> x147 -> top toward Pauline
-  // [x, y, extra-y-drop] — per-point tweak for visual girder alignment
-  const ROUTE=[[82,240,0],[203,236,0],[203,211,0],[59,202,0],[53,196,0],
-    [53,178,0],[62,176,10],[131,158,16],[131,118,16],[94,122,26],
-    [94,92,22],[200,97,20],[200,68,6],[120,65,6],[110,60,6],[110,35,6]];
   const rp=document.createElementNS(NS,'polyline');
   rp.setAttribute('points',ROUTE.map(p=>((p[0]-14.5)*3)+','+((p[1]-7.5)*3+38+(p[2]||0))).join(' '));
   rp.setAttribute('fill','none');rp.setAttribute('stroke','#7BD88F');
@@ -360,7 +360,19 @@ async function hpoll(){
     while(hs.firstChild)hs.removeChild(hs.firstChild);
     for(const e of ds){
       const c=document.createElementNS(NS,'circle');
-      c.setAttribute('cx',(e.x-14.5)*3);c.setAttribute('cy',(240-e.h-7.5)*3+38);
+      const gy=240-e.h;
+      // same warp as the route line: the bg frame's girders drift from a
+      // linear RAM->pixel map as you go up the board, so interpolate the
+      // extra drop from the user-calibrated ROUTE anchors (inverse-square
+      // weights; floor anchors carry 0 so the bottom stays put).
+      let wsum=0, osum=0;
+      for(const p of ROUTE){
+        const dx=e.x-p[0], dy=(gy-p[1])*2;
+        const w=1/(dx*dx+dy*dy+25);
+        wsum+=w; osum+=w*(p[2]||0);
+      }
+      c.setAttribute('cx',(e.x-14.5)*3);
+      c.setAttribute('cy',(gy-7.5)*3+38+osum/wsum);
       c.setAttribute('r',e.glitch?5:3.5);
       c.setAttribute('fill',e.glitch?'#B26FD8':(e.hx?'#F2B33D':'#E83C3C'));
       c.setAttribute('opacity',.32);
