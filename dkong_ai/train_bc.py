@@ -65,7 +65,7 @@ def main():
     print(f"dataset: {len(obs)} samples")
 
     venv = VecFrameStack(DummyVecEnv([_Stub]), n_stack=4)
-    model = PPO("CnnPolicy", venv, device="cuda", verbose=0)
+    model = PPO("CnnPolicy", venv, device=("cuda" if __import__("torch").cuda.is_available() else "cpu"), verbose=0)
     policy = model.policy
     policy.train()
     opt = torch.optim.Adam(policy.parameters(), lr=3e-4)
