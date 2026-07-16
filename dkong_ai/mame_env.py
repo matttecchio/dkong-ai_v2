@@ -225,7 +225,15 @@ class DonkeyKongEnv(gym.Env):
                  headless: bool = True, mame_bin: str = "mame",
                  bridge: str | None = None, record: bool = True,
                  backward_manifest: str | None = None,
-                 extra_mame_args: list[str] | None = None):
+                 extra_mame_args: list[str] | None = None,
+                 host: str = "127.0.0.1", remote_statedir: str | None = None):
+        # Remote farm mode (2026-07-16): host != localhost means the MAME
+        # lives on another machine (scripts/farm/) — we connect instead of
+        # launching, reconnect instead of respawning, and state-file copies
+        # go to remote_statedir (the mounted share).
+        self.host = host
+        self.remote = host not in ("127.0.0.1", "localhost")
+        self.remote_statedir = remote_statedir
         super().__init__()
         self.rom_dir = rom_dir
         self.extra_mame_args = list(extra_mame_args or [])
@@ -355,7 +363,7 @@ class DonkeyKongEnv(gym.Env):
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
-                s = socket.create_connection(("127.0.0.1", self.port), timeout=2)
+                s = socket.create_connection((self.host, self.port), timeout=4)
                 s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 s.settimeout(30.0)  # generous per-step timeout once connected
                 self._sock = s
@@ -1260,6 +1268,10 @@ class DonkeyKongEnv(gym.Env):
         self._bw_levels = [int(x) for x in levels]
 
     def _slot_sta_path(self):
+        if self.remote and self.remote_statedir:
+            # farm mode: the remote MAME's state dir, reached via the
+            # mounted share (scripts/farm/README_FARM.md)
+            return os.path.join(self.remote_statedir, f"dk_{self.port}.sta")
         statedir = os.path.abspath(os.path.join(os.path.dirname(self.bridge),
                                                 "..", "artifacts", "states"))
         return os.path.join(statedir, "dkong", f"dk_{self.port}.sta")
