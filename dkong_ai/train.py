@@ -542,6 +542,13 @@ def main():
             # finally-close: a leaked probe socket sat in the bridge's
             # accept backlog for the trainer's whole lifetime.
             _c = _sk.create_connection((host, rp), timeout=2)
+            # RST-close (SO_LINGER 0): a polite FIN leaves the Windows-MAME
+            # bridge BLOCKED inside its socket read forever (whole emulator
+            # frozen, watchdog included) — an RST returns an error the
+            # bridge's recovery can catch. Every farm disconnect must be
+            # abrupt (2026-07-17: FIN froze bridges after every probe).
+            import struct as _st
+            _c.setsockopt(_sk.SOL_SOCKET, _sk.SO_LINGER, _st.pack("ii", 1, 0))
             try:
                 _c.settimeout(4)
                 _c.sendall(b"H")

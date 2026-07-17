@@ -400,6 +400,14 @@ class DonkeyKongEnv(gym.Env):
             try:
                 s = socket.create_connection((self.host, self.port), timeout=4)
                 s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                if self.remote:
+                    # RST on ANY teardown (SO_LINGER 0): a graceful FIN
+                    # freezes the Windows-MAME bridge inside a blocking
+                    # read (emulator-wide, watchdog included); an RST hits
+                    # its error path and it re-listens. Trainer crashes,
+                    # kills and normal closes must all look the same.
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                                 struct.pack("ii", 1, 0))
                 s.settimeout(30.0)  # generous per-step timeout once connected
                 self._sock = s
                 self._rxbuf = b""   # leftover bytes (e.g. obs piggybacking handshake)
