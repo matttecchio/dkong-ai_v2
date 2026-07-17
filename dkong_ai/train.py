@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import signal
+import time
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
@@ -102,9 +103,18 @@ class SILCallback(BaseCallback):
     of an episode boundary."""
 
     def __init__(self, coef=0.1, buffer_eps=40, eps_per_update=2,
-                 max_ep_len=600):
+                 max_ep_len=600, sil_path=None):
         super().__init__()
         self.coef = coef
+        # Persistence (user request 2026-07-17): every restart used to dump
+        # the buffer, so rare floor crossings had to be re-earned from
+        # scratch each deploy (a factor in the 30l suicide spiral). The
+        # buffer now survives restarts; the file is namespaced by the run's
+        # save name and validated against the RAM feature dim, so a new
+        # obs lineage can never load a stale-shaped buffer.
+        self.sil_path = sil_path
+        self._dirty = False
+        self._last_save = time.time()
         self.buffer_eps = buffer_eps
         self.eps_per_update = eps_per_update
         self.max_ep_len = max_ep_len
@@ -121,6 +131,46 @@ class SILCallback(BaseCallback):
 
     def _on_training_start(self) -> None:
         self._acc = [[] for _ in range(self.training_env.num_envs)]
+        if not self.sil_path or not os.path.exists(self.sil_path):
+            return
+        try:
+            import pickle
+            from .mame_env import DonkeyKongEnv
+            with open(self.sil_path, "rb") as fh:
+                d = pickle.load(fh)
+            if d.get("ram_dim") != DonkeyKongEnv.RAM_FEATURE_DIM:
+                print(f"[sil] persisted buffer has ram_dim {d.get('ram_dim')}"
+                      f" != {DonkeyKongEnv.RAM_FEATURE_DIM} — discarded",
+                      flush=True)
+                return
+            for cls in self._bufs:
+                self._bufs[cls] = d.get("bufs", {}).get(cls, [])
+            n = sum(len(b) for b in self._bufs.values())
+            print(f"[sil] restored {n} episodes from {self.sil_path}",
+                  flush=True)
+        except Exception as e:
+            print(f"[sil] buffer restore failed ({e}) — starting empty",
+                  flush=True)
+
+    def _maybe_save(self, force=False) -> None:
+        if not self.sil_path or not self._dirty:
+            return
+        if not force and time.time() - self._last_save < 900:
+            return
+        try:
+            import pickle
+            from .mame_env import DonkeyKongEnv
+            tmp = self.sil_path + ".tmp"
+            with open(tmp, "wb") as fh:
+                pickle.dump({"ram_dim": DonkeyKongEnv.RAM_FEATURE_DIM,
+                             "bufs": self._bufs}, fh, protocol=5)
+            os.replace(tmp, self.sil_path)
+            self._dirty = False
+            self._last_save = time.time()
+            n = sum(len(b) for b in self._bufs.values())
+            print(f"[sil] buffer saved ({n} episodes)", flush=True)
+        except Exception as e:
+            print(f"[sil] buffer save failed ({e})", flush=True)
 
     def _on_step(self) -> bool:
         import numpy as _np
@@ -165,6 +215,7 @@ class SILCallback(BaseCallback):
                     per_class = max(4, self.buffer_eps // len(self._bufs))
                     self._bufs[cls].append(self._acc[i])
                     self._bufs[cls] = self._bufs[cls][-per_class:]
+                    self._dirty = True
                 self._acc[i] = []
         return True
 
@@ -221,6 +272,7 @@ class SILCallback(BaseCallback):
         self._updates += 1
         self.logger.record("sil/updates", self._updates)
         self.logger.record("sil/loss", sum(losses) / len(losses))
+        self._maybe_save()
 
 
 class BackwardCallback(BaseCallback):
@@ -589,7 +641,8 @@ def main():
                               name_prefix=run_name)
     callbacks = [ckpt, ClimbMetricsCallback()]
     if args.sil_coef > 0 and args.lstm:
-        callbacks.append(SILCallback(coef=args.sil_coef))
+        callbacks.append(SILCallback(coef=args.sil_coef,
+                                     sil_path=f"{args.save}_sil.pkl"))
         print(f"[sil] self-imitation on successes, coef={args.sil_coef}")
     if args.backward_dir:
         import json as _json

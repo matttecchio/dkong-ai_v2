@@ -122,6 +122,11 @@ local function log(msg)
   emu.print_info(msg)
 end
 
+-- luasocket ships with MAME; its sleep() turns the lock-step wait loop
+-- from a core-burning spin into ~0.5ms naps (16 idle MAMEs were eating
+-- 16 cores DURING PPO updates, 2026-07-17). pcall: fall back to the
+-- spin if a MAME build lacks the module.
+local has_lsock, lsock = pcall(require, "socket")
 local socket = emu.file("", 7)   -- READ|WRITE|CREATE -> listening server
 local STATE  = "init"            -- init -> listening -> ready
 local listen_t0 = 0              -- when we (re)entered listening (zombie watchdog)
@@ -150,7 +155,9 @@ local function read_exact(want)
   while #buf < want do
     local chunk = socket:read(want - #buf)
     if chunk and #chunk > 0 then buf = buf .. chunk
-    elseif os.time() > deadline then return nil end
+    elseif os.time() > deadline then return nil
+    elseif has_lsock then lsock.sleep(0.0005)   -- nap, don't spin
+    end
   end
   return buf
 end
@@ -338,4 +345,5 @@ emu.register_frame_done(function()
   end
 end)
 
-log("[bridge] loaded; port=" .. PORT .. " frameskip=" .. FRAMESKIP)
+log("[bridge] loaded; port=" .. PORT .. " frameskip=" .. FRAMESKIP
+    .. " nap=" .. tostring(has_lsock))
