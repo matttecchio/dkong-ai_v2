@@ -5,7 +5,7 @@ Run:  python3 scripts/live_board.py [port]   then open http://localhost:8600
 """
 import csv, glob, http.server, json, os, sys, time
 
-PORTS = list(range(5000, 5016))
+PORTS = list(range(5000, 5016)) + list(range(5016, 5024))  # 16 local + 8 farm (taps are local files either way; absent farm = stale entities, hidden)
 _MCACHE = {"t": 0, "data": {}}
 
 def metrics():
@@ -319,8 +319,8 @@ const HAMMER='data:image/png;base64,__HAMMER__';
 const BG='data:image/jpeg;base64,__BG__';
 const ix=x=>(x-14.5)*3, iy=y=>(y-7.5)*3;
 const grid=document.getElementById('grid'), panels=[];
-const GROUPS=[[5000,5001],[5002,5003],[5004,5005],[5006,5007],
-              [5008,5009],[5010,5011],[5012,5013],[5014,5015]];
+const GROUPS=[[5000,5001,5016],[5002,5003,5017],[5004,5005,5018],[5006,5007,5019],
+              [5008,5009,5020],[5010,5011,5021],[5012,5013,5022],[5014,5015,5023]];
 const P2PANEL={}; GROUPS.forEach((g,i)=>g.forEach(p=>P2PANEL[p]=i));
 // pro route (user doctrine + corridor): floor -> x203 -> g2 left ->
 // wait spot -> x53 climb -> g3 right -> x131 -> g4 left -> x67 ->

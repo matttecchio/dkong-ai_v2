@@ -124,6 +124,7 @@ end
 
 local socket = emu.file("", 7)   -- READ|WRITE|CREATE -> listening server
 local STATE  = "init"            -- init -> listening -> ready
+local listen_t0 = 0              -- when we (re)entered listening (zombie watchdog)
 local frame_n = 0
 local cpu, space, screen
 
@@ -136,6 +137,7 @@ local function reopen_socket()
   local BIND = os.getenv("DK_BRIDGE_BIND") or "127.0.0.1"
   socket:open("socket." .. BIND .. ":" .. PORT)
   STATE = "listening"
+  listen_t0 = os.time()
   log("[bridge] client lost; re-listening on " .. BIND .. ":" .. PORT)
 end
 
@@ -255,12 +257,21 @@ emu.register_periodic(function()
     end
     log("[bridge] listening on " .. (os.getenv("DK_BRIDGE_BIND") or "127.0.0.1") .. ":" .. PORT)
     STATE = "listening"
+    listen_t0 = os.time()
   elseif STATE == "listening" then
     -- Wait (non-blocking) for the client's hello byte before doing anything.
     local hello = socket:read(1)
     if hello and #hello > 0 then
       send_handshake()
       STATE = "ready"
+    elseif os.time() - listen_t0 > 20 then
+      -- ZOMBIE WATCHDOG (2026-07-17): a client that connects and closes
+      -- WITHOUT the hello (port scanners, bare TCP probes) wedges this
+      -- single-connection listener forever — the recovery path only ran
+      -- after the handshake. Re-listen every 20s until a real client
+      -- completes the hello. A legit env sends "H" immediately, so the
+      -- reopen race window is microseconds.
+      reopen_socket()
     end
   end
 end)

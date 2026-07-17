@@ -530,10 +530,23 @@ def main():
         import socket as _sk
         with open(farm_path) as _ff:
             farm = json.load(_ff)
+        _farm_probed = False
         for h in farm.get("hosts", []):
             for rp in h["ports"]:
                 try:
-                    _sk.create_connection((h["host"], rp), timeout=2).close()
+                    # FULL-HANDSHAKE probe (2026-07-17): a bare connect-close
+                    # wedges the bridge's single-connection listener before
+                    # the hello (zombied all 8 farm bridges, twice). Send the
+                    # hello and read a handshake byte so the bridge reaches
+                    # its recoverable state, then disconnect; it re-listens
+                    # ~6s later (read deadline), before the env connects.
+                    _c = _sk.create_connection((h["host"], rp), timeout=2)
+                    _c.settimeout(4)
+                    _c.sendall(b"H")
+                    if not _c.recv(1):
+                        raise OSError("no handshake")
+                    _c.close()
+                    _farm_probed = True
                 except OSError:
                     print(f"[farm] {h['host']}:{rp} unreachable — skipped",
                           flush=True)
@@ -551,6 +564,12 @@ def main():
                     remote_statedir=h.get("statedir")))
                 print(f"[farm] joined {h['host']}:{rp}", flush=True)
         print(f"[farm] total envs: {len(thunks)}", flush=True)
+        if _farm_probed:
+            # Give probed bridges time to hit the read deadline and
+            # re-listen before the env workers connect.
+            print("[farm] waiting 10s for probed bridges to re-listen",
+                  flush=True)
+            _time.sleep(10)
     # Turn SIGTERM into a normal exception so the finally-block cleanup (which
     # shuts MAME down) runs on `kill <pid>`, not just on Ctrl-C / completion.
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
