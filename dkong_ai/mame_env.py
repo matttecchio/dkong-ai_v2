@@ -394,7 +394,7 @@ class DonkeyKongEnv(gym.Env):
         # 20s watchdog retry. 90s spans several watchdog cycles (2026-07-17:
         # two spin-ups died on a random 2/8 ports racing that window).
         if self.remote:
-            timeout = max(timeout, 90.0)
+            timeout = max(timeout, 240.0)
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:

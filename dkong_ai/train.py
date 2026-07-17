@@ -530,82 +530,41 @@ def main():
         import socket as _sk
         with open(farm_path) as _ff:
             farm = json.load(_ff)
-        _farm_probed = False
-
-        def _probe(host, rp):
-            # FULL-HANDSHAKE probe (2026-07-17): a bare connect-close
-            # wedges the bridge's single-connection listener before the
-            # hello (zombied all 8 farm bridges, twice). Send the hello
-            # and read a handshake byte so the bridge reaches its
-            # recoverable state, then disconnect; it re-listens ~6s
-            # later (read deadline), before the env workers connect.
-            # finally-close: a leaked probe socket sat in the bridge's
-            # accept backlog for the trainer's whole lifetime.
-            _c = _sk.create_connection((host, rp), timeout=2)
-            # RST-close (SO_LINGER 0): a polite FIN leaves the Windows-MAME
-            # bridge BLOCKED inside its socket read forever (whole emulator
-            # frozen, watchdog included) — an RST returns an error the
-            # bridge's recovery can catch. Every farm disconnect must be
-            # abrupt (2026-07-17: FIN froze bridges after every probe).
-            import struct as _st
-            _c.setsockopt(_sk.SOL_SOCKET, _sk.SO_LINGER, _st.pack("ii", 1, 0))
-            try:
-                _c.settimeout(4)
-                _c.sendall(b"H")
-                if not _c.recv(1):
-                    raise OSError("no handshake")
-            finally:
-                _c.close()
-
-        def _join(h, rp):
-            thunks.append(make_env(
-                args.rom_dir, rp, args.frameskip, bw_manifest,
-                p_no_barrels=args.p_no_barrels,
-                # farm hosts default to bottomup-only: cross-build
-                # savestate incompatibility (2026-07-16) means remote
-                # MAMEs can't load our curriculum states — and pure
-                # cold starts are what the farm is FOR (integration
-                # volume, first-clear watch).
-                p_curric=h.get("p_curric", 0.0),
-                gamma=args.gamma, host=h["host"],
-                remote_statedir=h.get("statedir")))
-            print(f"[farm] joined {h['host']}:{rp}", flush=True)
-
+        # NO PER-PORT PROBING (2026-07-17, final form): every probe
+        # variant — bare, full-handshake, RST-closed — left the Windows
+        # bridge unavailable for minutes (blocking-read freeze / TIME_WAIT
+        # rebind), and the env worker then missed its connect window. The
+        # env's own connection is the ONLY safe first touch: its first act
+        # is the hello, so nothing pre-hello ever dangles. Reachability is
+        # checked once per HOST (bare RST-closed connect to the first
+        # port); that port's listener wedges <=20s and the bridge watchdog
+        # clears it long before the env's 240s connect patience runs out.
+        import struct as _st
         for h in farm.get("hosts", []):
-            _retry = []
+            try:
+                _c = _sk.create_connection((h["host"], h["ports"][0]),
+                                           timeout=3)
+                _c.setsockopt(_sk.SOL_SOCKET, _sk.SO_LINGER,
+                              _st.pack("ii", 1, 0))
+                _c.close()
+            except OSError:
+                print(f"[farm] host {h['host']} unreachable — skipping "
+                      f"{len(h['ports'])} envs", flush=True)
+                continue
             for rp in h["ports"]:
-                try:
-                    _probe(h["host"], rp)
-                    _farm_probed = True
-                except OSError:
-                    _retry.append(rp)
-                    continue
-                _join(h, rp)
-            if _retry:
-                # A bridge whose client just crashed wedges until its 20s
-                # watchdog re-listens — one immediate pass raced that window
-                # and lost 2/8 ports on two straight spin-ups. Wait a full
-                # watchdog cycle and try the stragglers once more; only
-                # then are they declared unreachable.
-                print(f"[farm] {len(_retry)} port(s) mid-recovery; retrying "
-                      "in 30s", flush=True)
-                _time.sleep(30)
-                for rp in _retry:
-                    try:
-                        _probe(h["host"], rp)
-                        _farm_probed = True
-                    except OSError:
-                        print(f"[farm] {h['host']}:{rp} unreachable — "
-                              "skipped", flush=True)
-                        continue
-                    _join(h, rp)
+                thunks.append(make_env(
+                    args.rom_dir, rp, args.frameskip, bw_manifest,
+                    p_no_barrels=args.p_no_barrels,
+                    # farm hosts default to bottomup-only: cross-build
+                    # savestate incompatibility (2026-07-16) means remote
+                    # MAMEs can't load our curriculum states — and pure
+                    # cold starts are what the farm is FOR (integration
+                    # volume, first-clear watch).
+                    p_curric=h.get("p_curric", 0.0),
+                    gamma=args.gamma, host=h["host"],
+                    remote_statedir=h.get("statedir")))
+                print(f"[farm] joined {h['host']}:{rp}", flush=True)
         print(f"[farm] total envs: {len(thunks)}", flush=True)
-        if _farm_probed:
-            # Give probed bridges time to hit the read deadline and
-            # re-listen before the env workers connect.
-            print("[farm] waiting 10s for probed bridges to re-listen",
-                  flush=True)
-            _time.sleep(10)
     # Turn SIGTERM into a normal exception so the finally-block cleanup (which
     # shuts MAME down) runs on `kill <pid>`, not just on Ctrl-C / completion.
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
