@@ -153,7 +153,7 @@ class Tracker:
         h = 240 - y
         prev = self.last.get(port)
         if prev:
-            px, py, ph, pg, pt, ps = prev
+            px, py, ph, pg, pt, ps, pst = prev
             if hammer and not ph: self.stats["pickups"] += 1
             if ph and not hammer: self.h_expiry[port] = now
             # mount detection: entering the x53 column ascending
@@ -180,7 +180,7 @@ class Tracker:
                 # the CURRENT tap (first post-teleport frame) carries the
                 # cause of the end we are detecting right now.
                 ev = {"x": px, "h": 240 - py, "t": round(now, 1),
-                      "run": self.label(), "cause": cause,
+                      "run": self.label(), "cause": cause, "st": pst,
                       "leg": leg_of(px, 240 - py), "glitch": pg,
                       "hx": bool(self.h_expiry.get(port) and
                                  now - self.h_expiry[port] < 2.5)}
@@ -192,7 +192,7 @@ class Tracker:
                 self.deaths.append(ev)
                 if len(self.deaths) > 6000: self.deaths = self.deaths[-5000:]
                 self.climb.pop(port, None)
-        self.last[port] = (x, y, hammer, glitch, now, score)
+        self.last[port] = (x, y, hammer, glitch, now, score, stype)
         if now - self._saved > 60:
             self._saved = now
             try:
@@ -355,7 +355,7 @@ for(let i=0;i<8;i++){
   cell.style.width='260px';
   cell.innerHTML='<img class=bg src="'+BG+'" style="filter:brightness(.45);width:260px">'
     +'<svg id=heat viewBox="0 0 672 768" preserveAspectRatio="none"></svg>'
-    +'<div class=tag style="color:#E83C3C">DEATH MAP (session)</div>';
+    +'<div class=tag style="color:#E83C3C">DEATH MAP <span style="color:#4FA7E8">&bull; blue=bottom-up</span></div>';
   document.getElementById('deathslot').appendChild(cell);
 }
 async function hpoll(){
@@ -379,7 +379,8 @@ async function hpoll(){
       c.setAttribute('cx',(e.x-14.5)*3);
       c.setAttribute('cy',(gy-7.5)*3+38+osum/wsum);
       c.setAttribute('r',e.glitch?5:3.5);
-      c.setAttribute('fill',e.glitch?'#B26FD8':(e.hx?'#F2B33D':'#E83C3C'));
+      c.setAttribute('fill',e.glitch?'#B26FD8':(e.hx?'#F2B33D':
+        (e.st==='bottomup'?'#4FA7E8':'#E83C3C')));
       c.setAttribute('opacity',.32);
       hs.appendChild(c);
     }
