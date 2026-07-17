@@ -16,6 +16,9 @@
 # halving) = frontier-pushing signature, not gradient runaway. Absorption
 # band kl 0.02-0.035 ACCEPTED while heights rise; hard trip = kl >0.04
 # x3 consecutive OR slope reversal -> lr 2.5e-5 + sil-coef 0.03.
+# HARD TRIP FIRED (31c, 2026-07-17 ~22:40): kl 0.040-0.053 x8 AND mean_h
+# slope reversed (23.6->22.0) with variance stretching (best 62 x2 while
+# the middle sagged). Both legs. lr 2.5e-5 + sil-coef 0.03 as written.
 # Run 30 (2026-07-15): Stage B obs (RAM 84: timer/facing/lad203/margin,
 # watch 62) — old run28 checkpoints are SHAPE-INCOMPATIBLE; resumes must
 # only ever use run30 artifacts (--init-from below).
@@ -46,11 +49,11 @@ log="$2"
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
   --timesteps 100000000 --n-envs 16 \
   --save artifacts/ppo_dkong_run31 --logdir logs \
-  --gamma 0.999 --ent-coef 0.01 --lr 5e-5 --n-epochs 3 \
+  --gamma 0.999 --ent-coef 0.01 --lr 2.5e-5 --n-epochs 3 \
   --stack 2 --p-no-barrels 0.0 --p-curric 0.8 \
   --lstm --lstm-hidden 512 \
   --backward-dir artifacts/backward_dense14 --bw-threshold 0.3 \
-  --sil-coef 0.05 \
+  --sil-coef 0.03 \
   --init-from "$model" \
   > "$log" 2>&1 &
 echo $!
