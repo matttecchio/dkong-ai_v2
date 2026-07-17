@@ -182,6 +182,28 @@ class DonkeyKongEnv(gym.Env):
                 return False
         return True
 
+    def _ladder_margin(self, s, lx, top_y):
+        """Signed time-race margin for ladder at lx topping at top_y:
+        +1 = no threat; else (nearest_threat_px - remaining_climb)/64,
+        clipped to [-1, 1]. Run-31 continuous sibling of the boolean
+        _ladder_gap_clear above (reward gates use the bool; obs use this)."""
+        my = s.get("mario_y") or 240
+        remaining = max(0, my - top_y)
+        nearest = 999.0
+        for i in range(6):
+            if s.get(f"barrel{i}_st", 0) not in (1, 2):
+                continue
+            by = s.get(f"barrel{i}_y", 240)
+            if not (top_y - 35 <= by < my):
+                continue
+            bx = s.get(f"barrel{i}_x", 0)
+            if bx >= lx - 18:
+                nearest = min(nearest, float(abs(bx - lx)))
+        if nearest == 999.0:
+            return 1.0
+        import numpy as _np
+        return float(_np.clip((nearest - remaining) / 64.0, -1, 1))
+
     def _lad53_column_clear(self, s):
         """User pro line (2026-07-14): a climb is safe iff the time to walk
         the ladder bottom-to-top beats any barrel's time to reach the
@@ -555,7 +577,7 @@ class DonkeyKongEnv(gym.Env):
     # edge_dist: normalised [0,1] distance to the girder edge the barrel is heading
     # toward (0 = at edge / about to fall, 1 = far away). Paired with the fall-zone
     # image overlay so the agent can anticipate barrels appearing from above.
-    RAM_FEATURE_DIM = 84   # 2 mario + 6 barrels x 10 + 5 fireballs x 3 + 3 hammer + 1
+    RAM_FEATURE_DIM = 102  # run-31: +6 wind-up, +10 fb vel, +1 x131 margin, +1 hammer t
                            # difficulty + timer + facing + safe-climb margin = 84
                            # (regime-conditional play: wild-barrel
                            # behaviour differs sharply by 0x6380 regime, and the
@@ -618,21 +640,33 @@ class DonkeyKongEnv(gym.Env):
                 # inactive slots read as six falling barrels (review r7 #4).
                 edge_dist = 1.0
             feats.extend([dx, dy, vx, vy, lad53, lad203, edge_dist,
-                          float(st > 0), crazy, blue])
+                          float(st > 0), crazy, blue,
+                          float(st == 2)])   # run-31: DK winding up
         for i in range(5):
             fst = state.get(f"fireball{i}_st", 0)
             if fst:
-                dx = float(np.clip((state.get(f"fireball{i}_x", 0) - mx) / 128.0, -1, 1))
-                dy = float(np.clip((state.get(f"fireball{i}_y", 0) - my) / 120.0, -1, 1))
+                fx = state.get(f"fireball{i}_x", 0)
+                fy = state.get(f"fireball{i}_y", 0)
+                dx = float(np.clip((fx - mx) / 128.0, -1, 1))
+                dy = float(np.clip((fy - my) / 120.0, -1, 1))
+                # run-31: fireballs wander — drift direction is the minimum
+                # needed to dodge them deliberately (review of death causes)
+                fvx = float(np.clip((fx - prev.get(f"fireball{i}_x", fx)) / 8.0, -1, 1))
+                fvy = float(np.clip((fy - prev.get(f"fireball{i}_y", fy)) / 20.0, -1, 1))
             else:
-                dx = dy = 0.0
-            feats.extend([dx, dy, float(fst > 0)])
+                dx = dy = fvx = fvy = 0.0
+            feats.extend([dx, dy, float(fst > 0), fvx, fvy])
         has_h = state.get("has_hammer", 0)
         if not has_h:
             dx = float(np.clip((state.get("hammer_x", 0) - mx) / 128.0, -1, 1))
             dy = float(np.clip((state.get("hammer_y", 0) - my) / 120.0, -1, 1))
         else:
-            dx = dy = 0.0
+            # run-31: while HELD these slots were dead zeros — repurposed
+            # as the SWING PHASE (user: fireballs slip under the up-phase
+            # hammer; pros stop and time the down-swing). Same dims,
+            # meaning instead of filler.
+            dx = float(np.clip((state.get("hammer_x", 0) - mx) / 24.0, -1, 1))
+            dy = float(np.clip((state.get("hammer_y", 0) - my) / 24.0, -1, 1))
         feats.extend([dx, dy, float(bool(has_h))])
         feats.append(state.get("difficulty", 1) / 5.0)
         # Stage B (verified 2026-07-13): the clock that defines the endgame
@@ -658,6 +692,16 @@ class DonkeyKongEnv(gym.Env):
         margin = 1.0 if nearest == 999.0 else float(
             np.clip((nearest - remaining) / 64.0, -1, 1))
         feats.append(margin)
+        # run-31: x131 climb margin (the next contested ladder) + hammer
+        # time remaining (duration measured 201-237 exchanges; 201 floor —
+        # cannot jump while wielding, expiry transition is a death trap)
+        feats.append(self._ladder_margin(state, 131, 118))
+        if state.get("has_hammer", 0):
+            self._hammer_steps = getattr(self, "_hammer_steps", 0) + 1
+        else:
+            self._hammer_steps = 0
+        feats.append(max(0.0, 1.0 - self._hammer_steps / 201.0)
+                     if state.get("has_hammer", 0) else 0.0)
         return np.array(feats, dtype=np.float32)
 
     # ---- reward shaping helpers -----------------------------------------
