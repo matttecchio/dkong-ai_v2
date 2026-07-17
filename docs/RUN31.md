@@ -1,4 +1,12 @@
-# Run 31 obs bundle — deploy checklist (branch: run-31)
+# Run 31 obs bundle — DEPLOYED 2026-07-17 (merged to main)
+
+Deployed early alongside the farm attempt (farm since retired — see
+HANDOFF §farm). Transfer from run30_last (det 38.4 = all-time baseline),
+levels reset, lr 1e-4 under the KL-based tripwire. Also riding the
+deploy: x82 stub rent, stop-before-smash hammer tax, guard execution
+repriced -20/-25 (suicide-economics fix), death-cause tap field,
+persistent SIL buffer. Checklist below kept for the next obs bump.
+
 
 **Trigger: either (a) first honest clear consolidation phase, or (b) the
 waterfall wall-verdict (extremes empty ~24h after frontier re-arrival

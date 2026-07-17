@@ -537,6 +537,9 @@ that the new objective has been learned.
 | 29l | ★ time-race climb gate (user pro line) + CLEAN_MOUNT_BONUS 2.0 + 11 phase-diverse wait cells | ~4h | 71 | first committed climbs: +20px 0→1.8%/h, best 25 | 0 | doctrine works; kill window h60-63 the single contested zone |
 | 29m | clean-climb pay 0.30→0.50 + WATERFALL_PASS_BONUS +5 @h68 (ladder-stall correction: NEVER free holds — the game steers barrels down Mario's ladder) | 17h | 72 | ★ commit rate ×7 (peak 7.1%/h); ceiling 64→**70**; FIRST WATERFALL PASSAGE (h68+); h63+ 11→102; battery BEST EVER det 38.4/40 stoch 34.6/37 | 0 | final baseline: 58,736 low-start eps, h65+: 5, h68+: 1 — volume without tail penetration = the perception argument |
 | 30 | ★★★ STAGE B DEPLOYED (user-ordered early): RAM 75→84 (timer, facing, lad203×6, edge_dist fix, safe-climb margin), watch 60→62; CNN from 29m-final, heads fresh, levels reset | ~5h | 73 | rebuild burst: 49 gates in 80 min, rehearsal 0.85 | 0 | resume infra moved to run30 family |
+| 30b-30k | reward-doctrine week: waterfall geometry settled (x53 tops at h62; time-race gates), wait-spot chains, x147 gate, x131 doctrine, stub re-gates (x99/x116), G3 traverse/rents, bustart capture | ~2d | 74 | det battery 38.4 (= all-time baseline) | 0 | plateau at g3; tower cells stuck 0% |
+| 30l-30m | ★ SUICIDE-ECONOMICS fix: guard execution -10 undercut honest floor death (-15) → policy optimized INTO stub executions (wave 33→93% at LOW clip); repriced -20 (-25 at floor) + regression test | ~14h | 64 | wave collapsed to 1-3%; h40+ 5→13% | 0 | RULE: no terminal event may be cheaper than the death it replaces |
+| **31** | ★★★ obs 84→102 (barrel wind-up flags, fireball vx/vy, x131 margin, hammer countdown, swing-phase held slots); CNN transfer from run30_last@38.4, heads fresh, levels reset, lr 1e-4; + x82 stub rent, stop-before-smash tax, death-cause tap field, SIL buffer PERSISTENCE | live | — | chains re-hit L9-10 in hours (vs 2 days in run 30) | 0 | CURRENT. KL-based lr tripwire (>0.02 sustained → 5e-5); battery = first measuring stick |
 | 30b | ★ geometry corrections (user board.jpg + probes): x53 tops at GIRDER 3 h62 (two-stage theory retracted — h70-77 were jump arcs); verified stub envelopes x82/x116/x99 (the 28d "glitch rail" is a REAL broken ladder); WATERFALL_PASS was unreachable (h68 gate vs h62 top) → now h64 & x45-105 & low start | ~1h | 74 | — | 0 | stub warning pinned: legal span only, never shape into stub columns |
 | **30c** | **G3_TRAVERSE** (user pro line: climb → RIGHT → x131 middle ladder; corridor x_med 96→107→131 confirms) + g2 traverse band trimmed 65→52 (oscillation-pump prevention) | **active** | **75** | — | 0 | the pro line is now a continuous gradient floor→tower; run-31 wishlist: 6-second projected-occupancy channel (user's pro mental model) |
 
@@ -843,7 +846,26 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   a stub column. Pro doctrine (user): track all barrels, project ~6s
   ahead — run-31 candidate: projected-occupancy vision channel.
 
-- **REMOTE MAME FARM (2026-07-16, built + validated, switch-on pending):**
+- **REMOTE MAME FARM — TRIED AND RETIRED (2026-07-17, user verdict:
+  "go back to one computer"):** the 24-env run stalled 10 min then died
+  on ECONNRESET; root cause chain (a full day of forensics): (1) ANY
+  pre-hello TCP touch (bare, full-handshake, or RST-closed probe)
+  wedges the bridge's single-connection listener — fixed with a 20s
+  re-listen watchdog + probe-free joins (the env session is the only
+  first touch); (2) an uncaught Lua socket error killed the frame
+  callback permanently — fixed by running the whole drive under pcall;
+  (3) the UNFIXABLE one: WSL2's NAT can silently drop TCP teardown, so
+  the Windows bridge blocks forever in a read on a half-open connection
+  with the entire emulator frozen — no bridge-side code can recover
+  from a packet that never arrives (mitigated by a CPU-flatline reaper
+  in dk_farm.ps1, but lock-step training still gates on the slowest
+  env, so one silent drop stalls/kills the whole vec). Every hardening
+  layer is committed (watchdog, armored driver, RST-close env sockets,
+  single-supervisor lock file, frozen-MAME reaper, remote reset/recover
+  guards) — REVISIT ONLY with a wired link or an async data-feed
+  design. farm.json.disabled on disk; absent = inert.
+
+  Original build notes (kept for that revisit):
   8 extra envs on the Windows box 192.168.20.59 (8c/16t, WiFi — probe
   verdict p50 2.8ms/p99 16.2ms = PASS). Opt-in ONLY via artifacts/
   farm.json (absent = single-machine, THE default; unreachable hosts
@@ -860,6 +882,23 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   MAMEs run unthrottled — stop the farm when unused; (4) remote steps
   p50 ~10ms vs ~3ms local (lock-step tolerable); (5) n_envs 16→24
   changes PPO batch size = new-metrics-regime boundary.
+
+- **SINGLE-MACHINE THROUGHPUT CEILING (2026-07-17, measured):** 16 envs
+  is the sweet spot on the 22-core box — 20 envs tested head-to-head:
+  267.6 fps vs 284.5 at 16 (load 26→39; each MAME busy-spins a core in
+  read_exact while waiting — MAME's Lua has NO sleep facility, luasocket
+  absent, so the spin is unfixable; MAMEs already run nice+10). Do not
+  re-run this experiment. Speed lever that DID land: SIL buffer
+  persistence (<save>_sil.pkl, atomic 15-min saves, ram-dim validated,
+  restored at launch) — restarts no longer dump the success memory.
+
+- **LR TRIPWIRE IS KL-BASED NOW (2026-07-17):** clip_fraction >0.25
+  sustained is NOT the collapse signature — high clip + LOW approx_kl
+  (~0.01) = the clamp bounding a hot lr while learning accelerates
+  (run-31 rebuild ran clip 0.3-0.4 with heights rising). Drop to 5e-5
+  when approx_kl >0.02 SUSTAINED or the height slope flattens across a
+  full hourly window. (Run-19's actual collapse: KL blowout + falling
+  performance.)
 
 ---
 
