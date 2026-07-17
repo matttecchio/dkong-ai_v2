@@ -1713,8 +1713,14 @@ class DonkeyKongEnv(gym.Env):
         self._bw_fallback_chain = -1
         self._ep_start_sta = None
         try:
-            if self._proc is None:           # first reset: launch persistent MAME
-                self._launch_mame()
+            # First reset: launch the persistent MAME (LOCAL only — remote
+            # envs never own a process, so the old `_proc is None` test was
+            # true EVERY reset and spawned a local MAME per episode: the
+            # 134%-CPU orphan storm of 2026-07-17).
+            first = (self._sock is None if self.remote else self._proc is None)
+            if first:
+                if not self.remote:
+                    self._launch_mame()
                 self._connect()
                 self._read_handshake()
                 state, pix = self._start_game()   # full ~19s intro, once
