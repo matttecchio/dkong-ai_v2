@@ -1617,7 +1617,12 @@ class DonkeyKongEnv(gym.Env):
             self._mame_out = None
         self._has_state = False
         self._rxbuf = b""
-        self._launch_mame()
+        if not self.remote:
+            # Remote MAME lifecycle belongs to the farm supervisor
+            # (dk_farm.ps1 restarts dead instances); recovery there is
+            # reconnect-only. Launching here spawned orphan LOCAL MAMEs
+            # squatting on farm port numbers (found 2026-07-17).
+            self._launch_mame()
         self._connect()
         self._read_handshake()
         state, pix = self._start_game()

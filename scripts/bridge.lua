@@ -277,7 +277,12 @@ emu.register_periodic(function()
 end)
 
 -- Lock-step driver: only active once a client is confirmed (STATE == ready).
-emu.register_frame_done(function()
+-- The whole body runs under pcall: an unprotected socket error (an RST'd
+-- connection makes read THROW rather than return empty) killed the frame
+-- callback permanently — the bridge then sat "ready" forever with a full
+-- accept backlog while looking alive from outside (2026-07-17, 6/8 farm
+-- bridges). ANY error now means: drop the client, re-listen.
+local function drive_frame()
   if STATE ~= "ready" then return end
   frame_n = frame_n + 1
   if frame_n % FRAMESKIP ~= 0 then return end
@@ -322,6 +327,14 @@ emu.register_frame_done(function()
     if not ok then log("[bridge] curric load failed: " .. tostring(err)) end
   else
     apply_action(action)
+  end
+end
+
+emu.register_frame_done(function()
+  local ok, err = pcall(drive_frame)
+  if not ok then
+    log("[bridge] frame error: " .. tostring(err) .. " — dropping client")
+    pcall(reopen_socket)
   end
 end)
 

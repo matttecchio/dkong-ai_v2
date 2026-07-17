@@ -539,12 +539,16 @@ def main():
             # and read a handshake byte so the bridge reaches its
             # recoverable state, then disconnect; it re-listens ~6s
             # later (read deadline), before the env workers connect.
+            # finally-close: a leaked probe socket sat in the bridge's
+            # accept backlog for the trainer's whole lifetime.
             _c = _sk.create_connection((host, rp), timeout=2)
-            _c.settimeout(4)
-            _c.sendall(b"H")
-            if not _c.recv(1):
-                raise OSError("no handshake")
-            _c.close()
+            try:
+                _c.settimeout(4)
+                _c.sendall(b"H")
+                if not _c.recv(1):
+                    raise OSError("no handshake")
+            finally:
+                _c.close()
 
         def _join(h, rp):
             thunks.append(make_env(
