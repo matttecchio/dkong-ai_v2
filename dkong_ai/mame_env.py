@@ -388,6 +388,13 @@ class DonkeyKongEnv(gym.Env):
                                       preexec_fn=_die_with_parent)
 
     def _connect(self, timeout=30.0):
+        # Remote (farm) bridges can be mid-recovery when we arrive: after the
+        # launch probe disconnects, the single-connection listener vanishes
+        # until the bridge's reopen lands, and a failed rebind waits for the
+        # 20s watchdog retry. 90s spans several watchdog cycles (2026-07-17:
+        # two spin-ups died on a random 2/8 ports racing that window).
+        if self.remote:
+            timeout = max(timeout, 90.0)
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
