@@ -7,6 +7,11 @@
 # carries, heads fresh); resumes warm-start the full run31 model via
 # --init-from below. lr 1e-4 for the head rebuild — standing guardrail:
 # clip_fraction >0.25 sustained -> 5e-5.
+# KL TRIPWIRE FIRED (31b, 2026-07-18 ~00:30): approx_kl 0.023-0.034
+# sustained after the pro-SIL seed went live (imitation loss adds
+# gradient pressure) -> 5e-5 per the KL rule (>0.02 sustained). Heights
+# were RISING at the time — this is precautionary, not a rescue; re-raise
+# only when kl <0.01 sustained AND the seed's sil/loss has settled.
 # Run 30 (2026-07-15): Stage B obs (RAM 84: timer/facing/lad203/margin,
 # watch 62) — old run28 checkpoints are SHAPE-INCOMPATIBLE; resumes must
 # only ever use run30 artifacts (--init-from below).
@@ -37,7 +42,7 @@ log="$2"
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
   --timesteps 100000000 --n-envs 16 \
   --save artifacts/ppo_dkong_run31 --logdir logs \
-  --gamma 0.999 --ent-coef 0.01 --lr 1e-4 --n-epochs 3 \
+  --gamma 0.999 --ent-coef 0.01 --lr 5e-5 --n-epochs 3 \
   --stack 2 --p-no-barrels 0.0 --p-curric 0.8 \
   --lstm --lstm-hidden 512 \
   --backward-dir artifacts/backward_dense14 --bw-threshold 0.3 \
