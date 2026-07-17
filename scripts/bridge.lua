@@ -284,7 +284,12 @@ emu.register_frame_done(function()
   if freeze_barrels then
     for _, addr in ipairs(FREEZE_STATUS_ADDRS) do space:write_u8(addr, 0) end
   end
-  socket:write(build_obs())
+  -- pcall the write: a dead client makes write THROW, which aborted this
+  -- callback before the read-timeout recovery below could ever run — the
+  -- bridge wedged in "ready" forever (post-crash farm wedge, 2026-07-17;
+  -- 7/8 bridges accepted TCP via OS backlog but answered nothing).
+  local okw = pcall(function() socket:write(build_obs()) end)
+  if not okw then reopen_socket(); return end
   local raw = read_exact(1)
   if not raw then reopen_socket(); return end
   local action = string.byte(raw)
