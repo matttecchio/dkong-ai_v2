@@ -7,11 +7,15 @@
 # carries, heads fresh); resumes warm-start the full run31 model via
 # --init-from below. lr 1e-4 for the head rebuild — standing guardrail:
 # clip_fraction >0.25 sustained -> 5e-5.
-# KL TRIPWIRE FIRED (31b, 2026-07-18 ~00:30): approx_kl 0.023-0.034
+# KL TRIPWIRE FIRED (31b, 2026-07-17 ~19:30): approx_kl 0.023-0.034
 # sustained after the pro-SIL seed went live (imitation loss adds
 # gradient pressure) -> 5e-5 per the KL rule (>0.02 sustained). Heights
 # were RISING at the time — this is precautionary, not a rescue; re-raise
 # only when kl <0.01 sustained AND the seed's sil/loss has settled.
+# AMENDED same evening: kl proved lr-INSENSITIVE (unchanged after the
+# halving) = frontier-pushing signature, not gradient runaway. Absorption
+# band kl 0.02-0.035 ACCEPTED while heights rise; hard trip = kl >0.04
+# x3 consecutive OR slope reversal -> lr 2.5e-5 + sil-coef 0.03.
 # Run 30 (2026-07-15): Stage B obs (RAM 84: timer/facing/lad203/margin,
 # watch 62) — old run28 checkpoints are SHAPE-INCOMPATIBLE; resumes must
 # only ever use run30 artifacts (--init-from below).
