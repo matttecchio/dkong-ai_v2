@@ -1911,6 +1911,8 @@ class DonkeyKongEnv(gym.Env):
         # (scripts/live_board.py). One tiny RAM write per step; never let
         # a spectator failure touch training.
         try:
+            if getattr(self, "_tap_fails", 0) >= 3:
+                raise OSError            # hot loop: stop retrying a dead tap path
             _b = ";".join(f"{state.get(f'barrel{i}_x',0)}:{state.get(f'barrel{i}_y',0)}"
                           for i in range(6) if state.get(f"barrel{i}_st", 0) in (1, 2))
             _fb = ";".join(f"{state.get(f'fireball{i}_x',0)}:{state.get(f'fireball{i}_y',0)}"
@@ -1925,7 +1927,11 @@ class DonkeyKongEnv(gym.Env):
                          f"{1 if self._glitch_kill else 0},"
                          f"{self._end_cause}|{_b}|{_fb}")
         except OSError:
-            pass
+            # 3 consecutive failures = dead path (e.g. no /dev/shm on this
+            # host); a single transient blip must not kill the spectator feed
+            self._tap_fails = getattr(self, "_tap_fails", 0) + 1
+        else:
+            self._tap_fails = 0
         return obs, reward, terminated, False, self._info(state)
 
     def _maybe_record_success(self, state):

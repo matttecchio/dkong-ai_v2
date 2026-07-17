@@ -551,6 +551,8 @@ def main():
         _mhash = hashlib.sha256(open(bw_manifest, "rb").read()).hexdigest()
     meta = {"ts": _time.strftime("%Y-%m-%d %H:%M:%S"), "git_sha": _sha,
             "manifest_sha256": _mhash, "device": dev, "args": vars(args)}
+    _save_dir = os.path.dirname(os.path.abspath(args.save))
+    os.makedirs(_save_dir, exist_ok=True)   # --save runs/exp1/... (review r17)
     with open(args.save + "_meta.json", "w") as f:
         json.dump(meta, f, indent=1)
     print(f"[meta] git {_sha[:10]} manifest {_mhash[:10]} device {dev} "
@@ -626,7 +628,10 @@ def main():
     # shuts MAME down) runs on `kill <pid>`, not just on Ctrl-C / completion.
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
 
-    venv = (SubprocVecEnv(thunks, start_method="spawn") if args.n_envs > 1
+    # Branch on the ACTUAL thunk count (farm hosts append past n_envs):
+    # n_envs=1 + farm.json used to fall into DummyVecEnv and step every
+    # remote env serially in-process (review r17).
+    venv = (SubprocVecEnv(thunks, start_method="spawn") if len(thunks) > 1
             else DummyVecEnv(thunks))
     venv = DkFrameStackWrapper(venv, n_stack=args.stack)
 
