@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# THE canonical launch command for the current run line (RUN 30 resumes).
+# THE canonical launch command for the current run line (RUN 31 resumes).
+# Run 31 (2026-07-17): obs 84 -> 102 (wind-up flags, fireball velocities,
+# x131 margin, hammer countdown, swing-phase held slots) + first farm run
+# (artifacts/farm.json: 8 remote envs on 192.168.20.59, bottomup-only) =
+# 24 envs. First launch used --transfer-features-from run30_last (CNN
+# carries, heads fresh); resumes warm-start the full run31 model via
+# --init-from below. lr 1e-4 for the head rebuild — standing guardrail:
+# clip_fraction >0.25 sustained -> 5e-5.
 # Run 30 (2026-07-15): Stage B obs (RAM 84: timer/facing/lad203/margin,
 # watch 62) — old run28 checkpoints are SHAPE-INCOMPATIBLE; resumes must
 # only ever use run30 artifacts (--init-from below).
@@ -28,9 +35,9 @@ model="$1"
 log="$2"
 
 nohup .venv/bin/python -m dkong_ai.train --rom-dir ./roms \
-  --timesteps 100000000 --n-envs 16 \
-  --save artifacts/ppo_dkong_run30 --logdir logs \
-  --gamma 0.999 --ent-coef 0.01 --lr 5e-5 --n-epochs 3 \
+  --timesteps 100000000 --n-envs 20 \
+  --save artifacts/ppo_dkong_run31 --logdir logs \
+  --gamma 0.999 --ent-coef 0.01 --lr 1e-4 --n-epochs 3 \
   --stack 2 --p-no-barrels 0.0 --p-curric 0.8 \
   --lstm --lstm-hidden 512 \
   --backward-dir artifacts/backward_dense14 --bw-threshold 0.3 \
