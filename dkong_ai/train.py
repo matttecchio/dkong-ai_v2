@@ -541,13 +541,18 @@ def main():
         # clears it long before the env's 240s connect patience runs out.
         import struct as _st
         for h in farm.get("hosts", []):
-            try:
-                _c = _sk.create_connection((h["host"], h["ports"][0]),
-                                           timeout=3)
-                _c.setsockopt(_sk.SOL_SOCKET, _sk.SO_LINGER,
-                              _st.pack("ii", 1, 0))
-                _c.close()
-            except OSError:
+            for _hp in h["ports"]:
+                # ANY accepting port proves the host is up — a single
+                # port can be mid-recovery from an earlier disconnect.
+                try:
+                    _c = _sk.create_connection((h["host"], _hp), timeout=3)
+                    _c.setsockopt(_sk.SOL_SOCKET, _sk.SO_LINGER,
+                                  _st.pack("ii", 1, 0))
+                    _c.close()
+                    break
+                except OSError:
+                    continue
+            else:
                 print(f"[farm] host {h['host']} unreachable — skipping "
                       f"{len(h['ports'])} envs", flush=True)
                 continue
