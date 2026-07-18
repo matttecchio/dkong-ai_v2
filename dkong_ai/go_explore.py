@@ -203,6 +203,10 @@ class Archive:
         with open(path) as f:
             blob = json.load(f)
         with self.lock:
+            # REPLACE semantics (review r18): a reused instance must not
+            # retain stale in-memory cells across loads.
+            self.cells.clear()
+            self.by_idx.clear()
             self.next_idx = blob["next_idx"]
             self.best_height = blob["best_height"]
             self.rollouts = blob.get("rollouts", 0)

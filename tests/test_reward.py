@@ -488,3 +488,32 @@ def test_green_light_shifts_peak_up_ladder():
     # green peak exceeds the wait-spot value
     s_wait = _state(mario_y=202, mario_x=59)
     assert phi(180, False) > env._phi(s_wait)
+
+
+def test_margin_feature_agrees_with_gate():
+    """The exported climb margins and the reward gates must share a zero
+    crossing (review r18: a 20px band used to read 'safe' while the gate
+    blocked)."""
+    env = _pbrs_env()
+    for bx_off in (5, 15, 19, 21, 30, 50):
+        s = _state(mario_y=196, mario_x=131)
+        s["barrel0_st"] = 1
+        s["barrel0_x"] = 131 + (196 - 118) + bx_off   # remaining + offset
+        s["barrel0_y"] = 150
+        gate = env._ladder_gap_clear(s, 131, 118)
+        marg = env._ladder_margin(s, 131, 118)
+        if abs(bx_off - env.GAP_MARGIN_PX) > 2:       # off the exact boundary
+            assert gate == (marg > 0), f"off {bx_off}: gate {gate} marg {marg}"
+
+
+def test_x200_east_ladder_climb_is_legal():
+    """Climbing the legalized east route ladder must not trip the guard
+    (review r18: legal but untested)."""
+    env = _pbrs_env()
+    env._glitch_px = 0
+    p = _state(mario_y=98, mario_x=200)
+    s = _state(mario_y=90, mario_x=200)     # 8px ascend, x pinned, in-envelope
+    s["is_dead"] = p["is_dead"] = 1
+    env._prev = p
+    env._reward(s)
+    assert not env._glitch_kill, "guard fired on the legal east ladder"

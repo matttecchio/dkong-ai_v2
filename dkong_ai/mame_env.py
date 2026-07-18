@@ -219,7 +219,9 @@ class DonkeyKongEnv(gym.Env):
         if nearest == 999.0:
             return 1.0
         import numpy as _np
-        return float(_np.clip((nearest - remaining) / 64.0, -1, 1))
+        # aligned with _ladder_gap_clear's reach window (review r18)
+        return float(_np.clip((nearest - remaining - self.GAP_MARGIN_PX)
+                              / 64.0, -1, 1))
 
     def _lad53_column_clear(self, s):
         """User pro line (2026-07-14): a climb is safe iff the time to walk
@@ -730,8 +732,11 @@ class DonkeyKongEnv(gym.Env):
             bx = state.get(f"barrel{i}_x", 0)
             if bx >= self.CLIMB_X_LO - 8:
                 nearest = min(nearest, float(bx - self.LAD53_X))
+        # Zero-crossing ALIGNED with the reward gate (review r18): the gate
+        # blocks within remaining+GAP_MARGIN_PX, so the margin subtracts the
+        # same pad — feature > 0 now means exactly "the gate would pay".
         margin = 1.0 if nearest == 999.0 else float(
-            np.clip((nearest - remaining) / 64.0, -1, 1))
+            np.clip((nearest - remaining - self.GAP_MARGIN_PX) / 64.0, -1, 1))
         feats.append(margin)
         # run-31: x131 climb margin (the next contested ladder) + hammer
         # time remaining (duration measured 201-237 exchanges; 201 floor —
