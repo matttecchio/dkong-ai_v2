@@ -86,10 +86,9 @@ class DonkeyKongEnv(gym.Env):
         (131, 141, 173),  # g3 → g4                     (3 climbs)
         ( 51, 112, 136),  # g4 → g5, left (was "x67"!)  (3 climbs)
         ( 91, 110, 138),  # g4 → g5, mid  (was "x94")   (2 climbs)
-        (147,  48, 100),  # top girder → Pauline level: census measured
-                          # 48-74. NO logged climb has ever touched 76-100 —
-                          # the "g5 connection" may be phantom (user asked;
-                          # harmless to keep: no rail = nothing to climb)
+        (147,  48,  76),  # top girder (DK's level) → Pauline level ONLY —
+                          # user confirmed 2026-07-18: it does NOT reach g5;
+                          # census span 48-74 (+2 base margin)
         (203,  79, 103),  # g5 → top girder, east entry (3 climbs)
     ]
 
@@ -140,7 +139,7 @@ class DonkeyKongEnv(gym.Env):
     # deepest crossing replays all peak ON the ladder column (x51-65,
     # y163-175). Above h44 the potential is x-independent, so tower play
     # and descents are unaffected.
-    PBRS_G2_H = 44            # x53 ladder base; CLIMB_BONUS owns the climb
+    PBRS_G2_H = 38            # ladder base h (census: y202); CLIMB_BONUS owns the climb
     PBRS_G2_SPAN = 160        # covers the walk back to the ladder-203 arrival
     # GREEN LIGHT (user-approved 2026-07-19): with the x53 column CLEAR by
     # the time-race rule, the potential peak SHIFTS UP THE LADDER — the wait
@@ -150,8 +149,8 @@ class DonkeyKongEnv(gym.Env):
     # mid-climb collapses the extra (the sting of being mid-ladder under
     # threat, exactly the doctrine). State-function-only: the gap test reads
     # barrel positions from s, so PBRS policy-invariance is preserved.
-    GREEN_LIGHT_X_TOL = 3     # ON the rail (climb pins x=53; wider caught jump arcs beside it)
-    GREEN_LIGHT_PX_MAX = 16   # ladder bottom y196 -> y180 (mount excluded)
+    GREEN_LIGHT_X_TOL = 3     # ON the rail (census rail 51; wider caught jump arcs)
+    GREEN_LIGHT_PX_MAX = 22   # ladder bottom y202 -> y180 (census span; mount excluded)
     # Wait spot RIGHT of the ladder base, not the base itself (user film
     # review 2026-07-14): left of the ladder is a death pocket (girder-3
     # edge-fall barrels land and reverse there), and the correct play is
@@ -160,8 +159,9 @@ class DonkeyKongEnv(gym.Env):
     # the ladder into the pocket LOSES potential.
     PBRS_G2_WAIT_X = 59
 
-    LAD53_TOP_Y = 160         # ladder-top region on girder 3 (crossings top
-                              # out y163; a few px of margin)
+    LAD53_TOP_Y = 178         # CENSUS 2026-07-18: real climbs top out at
+                              # y178 (girder-3 surface at the rail). Was 160
+                              # — every margin/gate ran 18px overcautious.
     GAP_MARGIN_PX = 20        # safety pad on the time-race (below)
 
     def _ladder_gap_clear(self, s, lx, top_y):
@@ -256,14 +256,14 @@ class DonkeyKongEnv(gym.Env):
                                 self.PBRS_G2_SPAN))
         else:                                 # saturated above the ladder base
             prog = 128 + self.PBRS_G2_SPAN
-            if (abs(s["mario_x"] - 53) <= self.GREEN_LIGHT_X_TOL
+            if (abs(s["mario_x"] - self.LAD53_X) <= self.GREEN_LIGHT_X_TOL
                     and s["mario_y"] >= 180
                     and self._lad53_column_clear(s)):
                 # y>=180: ladder only, never g3's surface — walking across
                 # the ladder top must not wobble phi (anti-farm tests).
                 # The mount step (y<180) drops the extra; CLEAN_MOUNT_BONUS
                 # (+2.0) dwarfs that sting.
-                prog += min(max(0, 196 - s["mario_y"]),
+                prog += min(max(0, 202 - s["mario_y"]),
                             self.GREEN_LIGHT_PX_MAX)   # green light: climb!
         return self.PBRS_COEF * prog
 
@@ -646,7 +646,7 @@ class DonkeyKongEnv(gym.Env):
                            # behaviour differs sharply by 0x6380 regime, and the
                            # diff-5 counter-move is unlearnable without knowing
                            # the regime — user lore, see memory/gameplay tips)
-    LAD53_X = 53    # x of the critical left ladder (2nd→3rd girder)
+    LAD53_X = 51    # rail x of the critical left ladder (census: pinned 51)
 
     # Girder edge lookup: (barrel_y_lo, barrel_y_hi, x_left, x_right, landing_y).
     # barrel_y in same coord system as mario_y (0=top, 240=floor).
@@ -1205,8 +1205,10 @@ class DonkeyKongEnv(gym.Env):
                 # x131 climb doctrine (2026-07-16): the middle ladder —
                 # the route's next contested climb — gets the full x53
                 # treatment: gated pay, one-shot clean mount, stall cost.
-                if (not_jumping and 78 <= height <= 126
-                        and 123 <= s["mario_x"] <= 139):
+                if (not_jumping and 61 <= height <= 105
+                        and 125 <= s["mario_x"] <= 137):
+                    # census re-anchor 2026-07-18: real x131 span y141-173
+                    # = h67-99 (old block 78-126 hung above the real ladder)
                     if s["mario_y"] < p["mario_y"]:
                         if self._ladder_gap_clear(s, 131, 141):
                             r += self.CLIMB_BONUS
