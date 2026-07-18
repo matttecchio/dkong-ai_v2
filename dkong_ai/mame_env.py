@@ -555,7 +555,10 @@ class DonkeyKongEnv(gym.Env):
                         for _dx in (-1, 0, 1):
                             _c = max(0, min(83, _cx + _dx))
                             if threat[_ly, _c, 0] == 255:
-                                threat[_ly, _c, 0] = 100
+                                threat[_ly, _c, 0] = 60   # 60 ≠ 128 (broken-
+                                # stub grey): three visual classes — 255 safe,
+                                # 128 broken, 60 unsafe (user caught the
+                                # near-collision on the vision render)
             sx, sy = 84.0 / 256.0, 84.0 / 224.0
             for i in range(6):
                 st = state.get(f"barrel{i}_st", 0)

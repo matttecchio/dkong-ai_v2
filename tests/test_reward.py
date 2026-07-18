@@ -542,7 +542,7 @@ def test_ladder_safety_shading():
     band_clear = obs_clear["image"][ly, cx-1:cx+2, 1]
     band_blk = obs_blk["image"][ly, cx-1:cx+2, 1]
     assert band_clear.max() == 255, f"expected bright ladder, {band_clear}"
-    assert band_blk.max() == 100, f"expected dimmed ladder, {band_blk}"
+    assert band_blk.max() == 60, f"expected dimmed ladder, {band_blk}"
 
 
 def test_gate_sees_fireballs_and_wild_barrels():
