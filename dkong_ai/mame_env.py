@@ -72,60 +72,24 @@ class DonkeyKongEnv(gym.Env):
     # only via the frame-perfect broken-ladder exploit (x=99 stub et al.),
     # which the go-explore winners and then the policy both discovered.
     COMPLETE_LADDERS = [
-        # FLOOR LADDER CORRECTED (2026-07-13): the only complete floor →
-        # 2nd-girder ladder is on the RIGHT at x=203 (user ground truth +
-        # pro-recording climbs + live probe: x pinned at 203, y 236→211).
-        # The old entry (143, 175, 224) was a PHANTOM — its consumers formed
-        # a perfect self-built trap: the guard glitch-killed climbs at the
-        # real rail, the corner tax covered its base, and PBRS paid Mario to
-        # walk away from it. 20K floor draws capped at 8px because of THIS.
-        (203, 211, 236),  # floor → 2nd girder, RIGHT side (the real one)
-        ( 53, 178, 196),  # 2nd → 3rd girder, FAR LEFT (critical). Top
-                          # corrected 2026-07-15: verified climb ends at
-                          # h62 = girder 3's surface (y178); the old y155
-                          # top was phantom-era. h70-77 readings up there
-                          # are JUMP ARCS on girder 3 (user correction).
-        # Verified broken-ladder stubs (climbable lower halves — legit
-        # play the guard must not execute; spans probed 2026-07-14/15).
-        # USER WARNING (2026-07-15, do not forget): the stubs were gated
-        # off because the RATCHET GLITCH climbed far beyond their tops.
-        # These entries legalize ONLY the verified span (the guard still
-        # checks yt-6 <= y <= yb+6); never widen a stub's y-span without
-        # a fresh frozen-barrel probe, and never add reward shaping that
-        # pays inside a stub column:
-        # (82, 164, 176) g3 broken-ladder stub: RE-GATED 2026-07-19 (user:
-        # climbs it "much more than passing it by" despite the rent). The
-        # steer-redirect correction removed its only rationale — redirects
-        # read the held direction from ANYWHERE, no ladder needed. Same
-        # bait pattern as x99/x116; the guard re-executes climbs here.
-        (116, 162, 206),  # g2→g3 at mid-board: FULL CONNECTOR (user map
-                          # 2026-07-19, "should no longer be gated"). History:
-                          # its LOWER-STUB envelope (192-206) was re-gated
-                          # 07-16 after bait deaths — the stub STRANDED him
-                          # mid-ladder; as a full ladder it's a route option.
-                          # Span girder-derived; tighten by probe.
-        # (99, 228, 240) floor stub: REMOVED same day it was added (user
-        # order, 2026-07-15 eve): the stub is a dead end, and legalizing
-        # it made its 12px pay height milestones — every bottom start was
-        # baited into a pointless detour. The guard re-executes climbs
-        # there; the ratchet exploit stays dead either way.
-        (131, 118, 158),  # 3rd → 4th girder, right-ish
-        ( 67,  85, 125),  # 4th → 5th girder, left
-        (147,  48, 100),  # top section to Pauline
-        ( 94,  92, 122),  # g4 → g5, mid-left (user map 2026-07-19: was on
-                          # the route arrows but NEVER legalized — the guard
-                          # executed the pro line here). Span from the route
-                          # + forensics (h118-148); tighten by probe.
-        (201, 147, 173),  # g2→g3 band, RIGHT side (user map 2026-07-19:
-                          # "perfectly playable"). Span from the user's
-                          # drawing; tighten by probe.
-        (200,  74, 102),  # g5 -> top girder, EAST (the pro route's entry;
-                          # USER-AUTHORIZED 2026-07-18 "you can unblock that
-                          # one"). Span TRIANGULATED, not frame-probed: a
-                          # guard execution at x200/y88 proves mid-ladder
-                          # climbing there; top girder ~y76 at x200, g5 base
-                          # ~y100 (+margins). Tighten when a probe lands —
-                          # scripted probes died 3x before locating the base.
+        # CENSUS-MEASURED 2026-07-18 (user's threat-free walk, logged at
+        # 30Hz — logs/census_walk.csv): each span is the min/max mario_y
+        # observed while x stayed rail-pinned during real climbs. This
+        # SUPERSEDES all drawn/triangulated/derived spans. Notables: the
+        # g4→g5-left ladder is at x51 NOT x67 (the old envelope watched an
+        # empty column); x131 sits 17px LOWER than the old span (real
+        # mounts were guard-exposed); three ladders stack at x203.
+        (203, 211, 235),  # floor → g2, right           (6 climbs)
+        ( 51, 178, 202),  # g2 → g3, left  (the "x53")  (2 climbs)
+        (115, 174, 206),  # g2 → g3, mid   full connector (2 climbs)
+        (203, 145, 169),  # g2 → g3, right              (2 climbs)
+        (131, 141, 173),  # g3 → g4                     (3 climbs)
+        ( 51, 112, 136),  # g4 → g5, left (was "x67"!)  (3 climbs)
+        ( 91, 110, 138),  # g4 → g5, mid  (was "x94")   (2 climbs)
+        (147,  48, 100),  # g5 → top → Pauline level: census climbed 48-76
+                          # (top section); 76-100 verified by probe + every
+                          # training clear — keep the full tube
+        (203,  79, 103),  # g5 → top girder, east entry (3 climbs)
     ]
 
     # Max cumulative off-ladder climb pixels per episode before the glitch
@@ -796,7 +760,7 @@ class DonkeyKongEnv(gym.Env):
         # run-31: x131 climb margin (the next contested ladder) + hammer
         # time remaining (duration measured 201-237 exchanges; 201 floor —
         # cannot jump while wielding, expiry transition is a death trap)
-        feats.append(self._ladder_margin(state, 131, 118))
+        feats.append(self._ladder_margin(state, 131, 141))
         if state.get("has_hammer", 0):
             self._hammer_steps = getattr(self, "_hammer_steps", 0) + 1
         else:
@@ -1238,7 +1202,7 @@ class DonkeyKongEnv(gym.Env):
                 if (not_jumping and 78 <= height <= 126
                         and 123 <= s["mario_x"] <= 139):
                     if s["mario_y"] < p["mario_y"]:
-                        if self._ladder_gap_clear(s, 131, 118):
+                        if self._ladder_gap_clear(s, 131, 141):
                             r += self.CLIMB_BONUS
                             if not self._x131_mount_paid:
                                 r += self.CLEAN_MOUNT_BONUS

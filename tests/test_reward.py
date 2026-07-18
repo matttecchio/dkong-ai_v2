@@ -498,10 +498,10 @@ def test_margin_feature_agrees_with_gate():
     for bx_off in (5, 15, 19, 21, 30, 50):
         s = _state(mario_y=196, mario_x=131)
         s["barrel0_st"] = 1
-        s["barrel0_x"] = 131 + (196 - 118) + bx_off   # remaining + offset
+        s["barrel0_x"] = 131 + (196 - 141) + bx_off   # remaining + offset
         s["barrel0_y"] = 150
-        gate = env._ladder_gap_clear(s, 131, 118)
-        marg = env._ladder_margin(s, 131, 118)
+        gate = env._ladder_gap_clear(s, 131, 141)
+        marg = env._ladder_margin(s, 131, 141)
         if abs(bx_off - env.GAP_MARGIN_PX) > 2:       # off the exact boundary
             assert gate == (marg > 0), f"off {bx_off}: gate {gate} marg {marg}"
 
