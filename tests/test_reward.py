@@ -560,3 +560,32 @@ def test_gate_sees_fireballs_and_wild_barrels():
     tame = dict(wild); tame["barrel0_crazy"] = 0
     assert env._ladder_gap_clear(tame, 131, 118), \
         "normal barrel left of the column should not block"
+
+
+def test_clean_jump_bonus_paid_capped_unfarmable():
+    """A barrel passing beneath a jump pays once per arc, caps at 3/episode;
+    no barrel = no pay (user: must pale vs the climb, never farmable)."""
+    env = _pbrs_env()
+    env._clean_jumps = 0
+    env._jump_paid = False
+    def leap(with_barrel):
+        s = _state(mario_y=190, mario_x=100, is_jumping=1)
+        p = _state(mario_y=196, mario_x=100, is_jumping=0)
+        if with_barrel:
+            s["barrel0_st"] = 1
+            s["barrel0_x"] = 102
+            s["barrel0_y"] = 205
+        env._prev = p
+        r, _ = env._reward(s)
+        # land (resets the latch)
+        env._prev = _state(mario_y=196, mario_x=100, is_jumping=0)
+        land = _state(mario_y=196, mario_x=100, is_jumping=0)
+        env._reward(land)
+        return r
+    base = leap(False)
+    paid = leap(True)
+    assert paid - base >= 0.25, f"{paid} vs {base}"
+    # cap: two more pay, the fourth does not
+    leap(True); leap(True)
+    fourth = leap(True)
+    assert fourth - base < 0.05, f"cap failed: {fourth} vs {base}"

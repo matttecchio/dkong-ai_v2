@@ -107,6 +107,11 @@ class DonkeyKongEnv(gym.Env):
     # s=self (fall; no active threat within 21px) g=guard t=timeout c=clear.
     _end_cause = "-"
 
+    # Clean-jump bonus state (class defaults so guard/reward tests that
+    # bypass _begin_episode still run; reset per episode there).
+    _clean_jumps = 0
+    _jump_paid = False
+
     # Potential-based floor shaping (run 29): the floor "poverty trap" —
     # honest play at the bottom nets negative expected reward because the
     # crossing to the x=143 ladder pays nothing and risks death, so the
@@ -922,6 +927,14 @@ class DonkeyKongEnv(gym.Env):
     G3_LEFT_X      = 48
     G3_LEFT_H_LO, G3_LEFT_H_HI = 56, 84
     G3_LEFT_COST   = 0.06
+    # Clean-jump bonus (user-approved 2026-07-19, farm-proofed): 0.3 when a
+    # live barrel passes beneath him mid-jump, once per arc, max 3/episode
+    # (ceiling 0.9 ≈ 5% of one honest climb — farming the cap earns less
+    # than one girder, and the height timeout already kills camped
+    # episodes). Teaches confident hurdling without reviving run-1 farming.
+    CLEAN_JUMP_BONUS = 0.3
+    CLEAN_JUMP_MAX_PER_EP = 3
+
     # Edge-jump tax (user call 2026-07-18, "increase the penalty"): a
     # one-shot cost for INITIATING a jump while within EDGE_JUMP_PX of an
     # open girder edge and moving toward the drop. Every bottom-up transits
@@ -1127,6 +1140,23 @@ class DonkeyKongEnv(gym.Env):
                 if (self.G3_LEFT_H_LO <= height <= self.G3_LEFT_H_HI
                         and s["mario_x"] < self.G3_LEFT_X):
                     r -= self.G3_LEFT_COST
+                # Clean-jump bonus (see constants above): mid-air, barrel
+                # passing beneath, latched once per arc.
+                if s.get("is_jumping", 0):
+                    if (not self._jump_paid
+                            and self._clean_jumps < self.CLEAN_JUMP_MAX_PER_EP):
+                        for _i in range(6):
+                            if s.get(f"barrel{_i}_st", 0) not in (1, 2):
+                                continue
+                            _bdx = abs(s.get(f"barrel{_i}_x", 0) - s["mario_x"])
+                            _bdy = s.get(f"barrel{_i}_y", 0) - s["mario_y"]
+                            if _bdx <= 8 and 6 <= _bdy <= 28:
+                                r += self.CLEAN_JUMP_BONUS
+                                self._jump_paid = True
+                                self._clean_jumps += 1
+                                break
+                else:
+                    self._jump_paid = False
                 # Edge-jump tax (see constants above): fires once, on the
                 # initiation frame, using the PRE-jump position.
                 if s.get("is_jumping", 0) and not p.get("is_jumping", 0):
@@ -1768,6 +1798,8 @@ class DonkeyKongEnv(gym.Env):
         self._x131_mount_paid = False        # one-shot x131 clean-mount flag
         self._start_h = max(0, self.BASE_Y - self._min_y)  # episode start height
         self._glitch_kill = False            # episode ended by the glitch guard
+        self._clean_jumps = 0                # clean-jump bonus payments this ep
+        self._jump_paid = False              # per-arc latch
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
         self._forced_actions = []            # approach replay queue (see reset)
