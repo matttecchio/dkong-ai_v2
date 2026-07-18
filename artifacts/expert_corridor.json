@@ -1,138 +1,144 @@
 [
-  {
-    "h_lo": 0,
-    "h_hi": 12,
-    "x_med": 91,
-    "x_lo": 22,
-    "x_hi": 234,
-    "n": 743
-  },
-  {
-    "h_lo": 12,
-    "h_hi": 24,
-    "x_med": 115,
-    "x_lo": 25,
-    "x_hi": 231,
-    "n": 296
-  },
-  {
-    "h_lo": 24,
-    "h_hi": 36,
-    "x_med": 143,
-    "x_lo": 96,
-    "x_hi": 207,
-    "n": 1419
-  },
-  {
-    "h_lo": 36,
-    "h_hi": 48,
-    "x_med": 89,
-    "x_lo": 50,
-    "x_hi": 199,
-    "n": 550
-  },
-  {
-    "h_lo": 48,
-    "h_hi": 60,
-    "x_med": 53,
-    "x_lo": 50,
-    "x_hi": 115,
-    "n": 199
-  },
-  {
-    "h_lo": 60,
-    "h_hi": 72,
-    "x_med": 96,
-    "x_lo": 51,
-    "x_hi": 133,
-    "n": 373
-  },
-  {
-    "h_lo": 72,
-    "h_hi": 84,
-    "x_med": 107,
-    "x_lo": 79,
-    "x_hi": 131,
-    "n": 262
-  },
-  {
-    "h_lo": 84,
-    "h_hi": 96,
-    "x_med": 131,
-    "x_lo": 131,
-    "x_hi": 131,
-    "n": 30
-  },
-  {
-    "h_lo": 96,
-    "h_hi": 108,
-    "x_med": 91,
-    "x_lo": 51,
-    "x_hi": 179,
-    "n": 420
-  },
-  {
-    "h_lo": 108,
-    "h_hi": 120,
-    "x_med": 67,
-    "x_lo": 51,
-    "x_hi": 172,
-    "n": 310
-  },
-  {
-    "h_lo": 120,
-    "h_hi": 132,
-    "x_med": 81,
-    "x_lo": 34,
-    "x_hi": 111,
-    "n": 1266
-  },
-  {
-    "h_lo": 132,
-    "h_hi": 144,
-    "x_med": 123,
-    "x_lo": 37,
-    "x_hi": 226,
-    "n": 890
-  },
-  {
-    "h_lo": 144,
-    "h_hi": 156,
-    "x_med": 203,
-    "x_lo": 86,
-    "x_hi": 203,
-    "n": 34
-  },
-  {
-    "h_lo": 156,
-    "h_hi": 168,
-    "x_med": 166,
-    "x_lo": 146,
-    "x_hi": 203,
-    "n": 134
-  },
-  {
-    "h_lo": 168,
-    "h_hi": 180,
-    "x_med": 147,
-    "x_lo": 147,
-    "x_hi": 165,
-    "n": 107
-  },
-  {
-    "h_lo": 180,
-    "h_hi": 192,
-    "x_med": 147,
-    "x_lo": 147,
-    "x_hi": 147,
-    "n": 30
-  },
-  {
-    "h_lo": 192,
-    "h_hi": 204,
-    "x_med": 147,
-    "x_lo": 147,
-    "x_hi": 147,
-    "n": 233
-  }
+ {
+  "h_lo": 0,
+  "h_hi": 12,
+  "x_med": 91,
+  "x_lo": 22,
+  "x_hi": 234,
+  "n": 743
+ },
+ {
+  "h_lo": 12,
+  "h_hi": 24,
+  "x_med": 115,
+  "x_lo": 25,
+  "x_hi": 231,
+  "n": 296
+ },
+ {
+  "h_lo": 24,
+  "h_hi": 36,
+  "x_med": 143,
+  "x_lo": 96,
+  "x_hi": 207,
+  "n": 1419
+ },
+ {
+  "h_lo": 36,
+  "h_hi": 48,
+  "x_med": 89,
+  "x_lo": 50,
+  "x_hi": 199,
+  "n": 550
+ },
+ {
+  "h_lo": 48,
+  "h_hi": 60,
+  "x_med": 53,
+  "x_lo": 50,
+  "x_hi": 115,
+  "n": 199
+ },
+ {
+  "h_lo": 60,
+  "h_hi": 72,
+  "x_med": 96,
+  "x_lo": 51,
+  "x_hi": 133,
+  "n": 373
+ },
+ {
+  "h_lo": 72,
+  "h_hi": 84,
+  "x_med": 107,
+  "x_lo": 79,
+  "x_hi": 131,
+  "n": 262
+ },
+ {
+  "h_lo": 84,
+  "h_hi": 96,
+  "x_med": 131,
+  "x_lo": 131,
+  "x_hi": 131,
+  "n": 30
+ },
+ {
+  "h_lo": 96,
+  "h_hi": 108,
+  "x_med": 91,
+  "x_lo": 51,
+  "x_hi": 179,
+  "n": 420
+ },
+ {
+  "h_lo": 108,
+  "h_hi": 120,
+  "x_med": 67,
+  "x_lo": 51,
+  "x_hi": 172,
+  "n": 310
+ },
+ {
+  "h_lo": 120,
+  "h_hi": 132,
+  "x_med": 81,
+  "x_lo": 34,
+  "x_hi": 111,
+  "n": 1266
+ },
+ {
+  "h_lo": 132,
+  "h_hi": 144,
+  "x_med": 123,
+  "x_lo": 37,
+  "x_hi": 226,
+  "n": 890
+ },
+ {
+  "h_lo": 144,
+  "h_hi": 156,
+  "x_med": 203,
+  "x_lo": 86,
+  "x_hi": 203,
+  "n": 34
+ },
+ {
+  "h_lo": 156,
+  "h_hi": 168,
+  "x_med": 166,
+  "x_lo": 146,
+  "x_hi": 203,
+  "n": 134
+ },
+ {
+  "h_lo": 168,
+  "h_hi": 180,
+  "x_med": 128,
+  "x_lo": 147,
+  "x_hi": 165,
+  "n": 107,
+  "x_med_demo": 147,
+  "note": "top-walk retarget 2026-07-18 (user-directed): demo frames here are ladder-climb samples, not walk guidance; target pulls the walk toward Pauline x110"
+ },
+ {
+  "h_lo": 180,
+  "h_hi": 192,
+  "x_med": 118,
+  "x_lo": 147,
+  "x_hi": 147,
+  "n": 30,
+  "x_med_demo": 147,
+  "note": "top-walk retarget 2026-07-18 (user-directed): demo frames here are ladder-climb samples, not walk guidance; target pulls the walk toward Pauline x110"
+ },
+ {
+  "h_lo": 192,
+  "h_hi": 204,
+  "x_med": 112,
+  "x_lo": 147,
+  "x_hi": 147,
+  "n": 233,
+  "x_med_demo": 147,
+  "note": "top-walk retarget 2026-07-18 (user-directed): demo frames here are ladder-climb samples, not walk guidance; target pulls the walk toward Pauline x110"
+ }
 ]

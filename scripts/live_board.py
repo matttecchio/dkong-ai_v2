@@ -213,8 +213,11 @@ class H(http.server.BaseHTTPRequestHandler):
             # The full ring stays in the ledger for forensics; pre-stamp
             # entries have no "run" key and age out of the view naturally.
             lab = TRK.label()
+            # cause 'c' entries are CLEAR teleports, not deaths — 160 of
+            # them were polluting the top band (user top-walk review).
             body = json.dumps([e for e in TRK.deaths
-                               if e.get("run") == lab][-2500:]).encode()
+                               if e.get("run") == lab
+                               and e.get("cause") != "c"][-2500:]).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
