@@ -871,6 +871,18 @@ class DonkeyKongEnv(gym.Env):
     G3_LEFT_X      = 48
     G3_LEFT_H_LO, G3_LEFT_H_HI = 56, 84
     G3_LEFT_COST   = 0.06
+    # Edge-jump tax (user call 2026-07-18, "increase the penalty"): a
+    # one-shot cost for INITIATING a jump while within EDGE_JUMP_PX of an
+    # open girder edge and moving toward the drop. Every bottom-up transits
+    # g2's right edge after the x203 climb; a barrel there triggered his
+    # generic "jump dodges barrels" lesson in the one spot it's fatal —
+    # 40/70 bottom-up fall deaths landed under that edge in one session.
+    # A fall costs the same -10 as the barrel hit, so panic-jumping was a
+    # coin flip; the tax makes edge-patience strictly dominate. Mid-girder
+    # jumps (the scoring skill) stay free.
+    EDGE_JUMP_PX  = 12
+    EDGE_JUMP_TAX = 2.0
+
     # x82 g3 broken-ladder stub rent (user call 2026-07-17): mounting stays
     # legal — the one legit use is a beat-long pause to steer-redirect a
     # barrel down another ladder — but HANGING on the dead-end stub was 31%
@@ -1063,6 +1075,18 @@ class DonkeyKongEnv(gym.Env):
                 if (self.G3_LEFT_H_LO <= height <= self.G3_LEFT_H_HI
                         and s["mario_x"] < self.G3_LEFT_X):
                     r -= self.G3_LEFT_COST
+                # Edge-jump tax (see constants above): fires once, on the
+                # initiation frame, using the PRE-jump position.
+                if s.get("is_jumping", 0) and not p.get("is_jumping", 0):
+                    _mx, _my = p["mario_x"], p["mario_y"]
+                    _dx = s["mario_x"] - _mx
+                    for (_ylo, _yhi, _xl, _xr, _land) in self.GIRDER_EDGES:
+                        if not (_ylo <= _my < _yhi):
+                            continue
+                        if (_dx > 0 and 0 <= _xr - _mx <= self.EDGE_JUMP_PX) or \
+                           (_dx < 0 and 0 <= _mx - _xl <= self.EDGE_JUMP_PX):
+                            r -= self.EDGE_JUMP_TAX
+                        break
                 # x82 stub rent (see constants above).
                 if (self.X82_RENT_H_LO <= height <= self.X82_RENT_H_HI
                         and self.X82_RENT_X_LO <= s["mario_x"] <= self.X82_RENT_X_HI

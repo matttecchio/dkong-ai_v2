@@ -448,3 +448,22 @@ def test_x82_stub_rent():
     on_stub  = r_at(170, 82)          # h70, mid-stub
     jumping  = r_at(170, 82, 1)       # same spot, jump arc
     assert jumping - on_stub >= 0.05, f"{jumping} vs {on_stub}"
+
+
+def test_edge_jump_tax():
+    """Initiating a jump toward an open girder edge costs the tax; the same
+    jump mid-girder is free (user rule: nothing acrobatic at the edge)."""
+    def r_jump(x0, x1, tax):
+        env = _pbrs_env()
+        env.EDGE_JUMP_TAX = tax     # isolate the tax from PBRS arc noise
+        p = _state(mario_y=200, mario_x=x0, is_jumping=0)   # 2nd-girder band
+        s = _state(mario_y=196, mario_x=x1, is_jumping=1)
+        env._prev = p
+        r, _ = env._reward(s)
+        return r
+    # right edge, rightward jump: exactly the tax
+    assert abs((r_jump(216, 219, 0.0) - r_jump(216, 219, 2.0)) - 2.0) < 1e-6
+    # left edge, leftward jump: covered too (user question 2026-07-18)
+    assert abs((r_jump(24, 21, 0.0) - r_jump(24, 21, 2.0)) - 2.0) < 1e-6
+    # mid-girder jump: tax setting is irrelevant (scoring skill untouched)
+    assert abs(r_jump(120, 123, 0.0) - r_jump(120, 123, 2.0)) < 1e-6
