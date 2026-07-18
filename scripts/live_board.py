@@ -416,7 +416,8 @@ async function poll(){
       e.tgt={x:px,y:py,h:s.h,col:s.t==='bottomup'?'#F2B33D':(s.c>=12?'#7BD88F':'#6FC3D6')};
       if(!e.cur||Math.hypot(px-e.cur.x,py-e.cur.y)>120){
         e.cur={x:px,y:py};e.tr.setAttribute('points','');}
-      const objs=(s.b||[]).map(p=>({p,href:BARREL,w:18,h:20,dy:24}))
+      const objs=(s.b||[]).map(p=>({p,href:BARREL,w:18,h:20,dy:24,
+          blue:p[2]===1}))
         .concat((s.fb||[]).map(p=>({p,href:FIRE,w:20,h:23,dy:30})));
       while(e.th.length<objs.length)e.th.push(el(sv,'image',{opacity:0}));
       while(e.thT.length<objs.length)e.thT.push(null);
@@ -424,6 +425,7 @@ async function poll(){
         if(i>=objs.length){t.setAttribute('opacity',0);e.thT[i]=null;return;}
         const o=objs[i], tx=ix(o.p[0]), ty=iy(o.p[1]);
         t.setAttribute('href',o.href);t.setAttribute('width',o.w);t.setAttribute('height',o.h);
+        t.setAttribute('style',o.blue?'filter:hue-rotate(175deg) saturate(2) brightness(1.15)':'');
         const prev=e.thT[i];
         e.thT[i]={x:tx,y:ty,w:o.w,h:o.h,dy:o.dy,
                   cx:prev&&Math.hypot(tx-prev.cx,ty-prev.cy)<80?prev.cx:tx,

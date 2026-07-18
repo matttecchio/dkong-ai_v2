@@ -1937,8 +1937,10 @@ class DonkeyKongEnv(gym.Env):
         try:
             if getattr(self, "_tap_fails", 0) >= 3:
                 raise OSError            # hot loop: stop retrying a dead tap path
-            _b = ";".join(f"{state.get(f'barrel{i}_x',0)}:{state.get(f'barrel{i}_y',0)}"
-                          for i in range(6) if state.get(f"barrel{i}_st", 0) in (1, 2))
+            _b = ";".join(
+                f"{state.get(f'barrel{i}_x',0)}:{state.get(f'barrel{i}_y',0)}"
+                f":{1 if state.get(f'barrel{i}_blue', 0) else 0}"
+                for i in range(6) if state.get(f"barrel{i}_st", 0) in (1, 2))
             _fb = ";".join(f"{state.get(f'fireball{i}_x',0)}:{state.get(f'fireball{i}_y',0)}"
                            for i in range(5) if state.get(f"fireball{i}_st", 0))
             _mg = 1.0 if self._lad53_column_clear(state) else -1.0
