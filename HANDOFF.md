@@ -539,7 +539,12 @@ that the new objective has been learned.
 | 30 | ★★★ STAGE B DEPLOYED (user-ordered early): RAM 75→84 (timer, facing, lad203×6, edge_dist fix, safe-climb margin), watch 60→62; CNN from 29m-final, heads fresh, levels reset | ~5h | 73 | rebuild burst: 49 gates in 80 min, rehearsal 0.85 | 0 | resume infra moved to run30 family |
 | 30b-30k | reward-doctrine week: waterfall geometry settled (x53 tops at h62; time-race gates), wait-spot chains, x147 gate, x131 doctrine, stub re-gates (x99/x116), G3 traverse/rents, bustart capture | ~2d | 74 | det battery 38.4 (= all-time baseline) | 0 | plateau at g3; tower cells stuck 0% |
 | 30l-30m | ★ SUICIDE-ECONOMICS fix: guard execution -10 undercut honest floor death (-15) → policy optimized INTO stub executions (wave 33→93% at LOW clip); repriced -20 (-25 at floor) + regression test | ~14h | 64 | wave collapsed to 1-3%; h40+ 5→13% | 0 | RULE: no terminal event may be cheaper than the death it replaces |
-| **31** | ★★★ obs 84→102 (barrel wind-up flags, fireball vx/vy, x131 margin, hammer countdown, swing-phase held slots); CNN transfer from run30_last@38.4, heads fresh, levels reset, lr 1e-4; + x82 stub rent, stop-before-smash tax, death-cause tap field, SIL buffer PERSISTENCE | live | — | chains re-hit L9-10 in hours (vs 2 days in run 30) | 0 | CURRENT. KL-based lr tripwire (>0.02 sustained → 5e-5); battery = first measuring stick |
+| **31** | ★★★ obs 84→102 (barrel wind-up flags, fireball vx/vy, x131 margin, hammer countdown, swing-phase held slots); CNN transfer from run30_last@38.4, heads fresh, levels reset, lr 1e-4; + x82 stub rent, stop-before-smash tax, death-cause tap field, SIL buffer PERSISTENCE | live | — | chains re-hit L9-10 in hours (vs 2 days in run 30) | 0 | CURRENT lineage; letters below |
+| 31a | ★★ PRO SIL SEED (user-directed, from demos/dkong.inp — NO new recording, vetoed): 13 pro board-clear tails → clear_bottomup + 13 pro floor heads → floor class + 13 own tower wins = 39 eps, replay-alongside at coef 0.05 (NOT run-5 BC init). seed_sil_from_inp.py; obs rebuilt channel-FIRST (VecTransposeImage) | — | 63 | h25+% 24→48 in hours | 0 | seed live; letter-reset discipline restored on dashboards |
+| 31b | KL tripwire fired (0.023-0.034 sustained post-seed) → lr 5e-5; then AMENDED: kl proved lr-insensitive = frontier-pushing + imitation pressure, absorption band 0.02-0.035 accepted while heights rise | — | 62 | mean 17→23, g3 touches return | 0 | hard trip armed: kl>0.04 x3 OR slope reversal |
+| 31c | HARD TRIP FIRED (kl 0.040-0.053 x8 + first slope dip, variance stretching) → lr 2.5e-5 + sil-coef 0.03; absorption stabilized, slope resumed ABOVE pre-trip peak | ~14h | 63 | mean 27+ (> mature run-30), h25+ 74%, g3 touches 9/slice peak | 0 | battery 33.0/34 det = 86% of baseline on day 2; wc_154 0% 4th straight |
+| 31d | WAIT-SPOT TRIPWIRE FIRED (clear-gap 27%, 0 wait-spot gates at deadline) → harvest MERGED: 39 probe-verified rungs prepended as easier levels (ch12/13 h46-58, ch14/15 h31-41 phase variety; 1 dropped on load-probe) + 203 approach attachments | — | — | — | 0 | backups .bak_20260718_1137 |
+| 31e-31f | edge-jump tax 2.0 (jump initiation ≤12px from any open girder edge toward the drop; 40/70 bottom-up falls landed under g2-right) + blue-barrel dashboard feed (RAM byte 0=BLUE — polarity inverted vs old docs, probe-verified) | live | — | — | 0 | CURRENT. RUN32 shelf: wild flag+difficulty pairing, occupancy channel, blue feature (all data already watched) |
 | 30b | ★ geometry corrections (user board.jpg + probes): x53 tops at GIRDER 3 h62 (two-stage theory retracted — h70-77 were jump arcs); verified stub envelopes x82/x116/x99 (the 28d "glitch rail" is a REAL broken ladder); WATERFALL_PASS was unreachable (h68 gate vs h62 top) → now h64 & x45-105 & low start | ~1h | 74 | — | 0 | stub warning pinned: legal span only, never shape into stub columns |
 | **30c** | **G3_TRAVERSE** (user pro line: climb → RIGHT → x131 middle ladder; corridor x_med 96→107→131 confirms) + g2 traverse band trimmed 65→52 (oscillation-pump prevention) | **active** | **75** | — | 0 | the pro line is now a continuous gradient floor→tower; run-31 wishlist: 6-second projected-occupancy channel (user's pro mental model) |
 
@@ -891,6 +896,17 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   re-run this experiment. Speed lever that DID land: SIL buffer
   persistence (<save>_sil.pkl, atomic 15-min saves, ram-dim validated,
   restored at launch) — restarts no longer dump the success memory.
+
+- **SIL SEEDING MUST BE CHANNEL-FIRST (2026-07-17):** SILCallback captures
+  obs_tensor AFTER VecTransposeImage — stored images are (C,H,W). Seeding
+  episodes in (H,W,C) silently poisons the replay; ALWAYS diff formats
+  against a training-captured episode (the 'clear' class always has some).
+
+- **BARREL TYPE BYTES: watched all along, polarity trap (2026-07-18):**
+  barrel{i}_crazy (+0x01) and barrel{i}_blue (+0x02) are in the 62-entry
+  watch — no bridge surgery needed to use them. BUT +0x02 reads 0 for
+  BLUE, nonzero for normal (fresh-board first barrels probe-verified).
+  RUN32 wiring must invert.
 
 - **LR TRIPWIRE IS KL-BASED NOW (2026-07-17):** clip_fraction >0.25
   sustained is NOT the collapse signature — high clip + LOW approx_kl
@@ -1447,6 +1463,11 @@ track barrel state across the ~3s traverse window.
 - `probe.py` — MAME field discovery. Use `--no-headless` for windowed mode.
 - `extract_bc.py` / `train_bc.py` — behavioral cloning pipeline (built run 5,
   did not improve over pure RL; kept for reference).
+- `seed_sil_from_inp.py` — pro-demo → SIL buffer seeding (run 31a): EXTRACT
+  replay → current-obs rebuild (channel-first!) → clear_bottomup/floor
+  classes; FIFO caps let the policy's own successes evict the pro's.
+- `harvest_successes.py` — success records → staged rungs/approaches;
+  merge is manual + load-probed (first merge: 31d).
 
 `scripts/`:
 - `bridge.lua` — MAME lock-step bridge. 47 WATCH_ADDRS. Supports EXTRACT mode
