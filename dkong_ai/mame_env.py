@@ -93,7 +93,11 @@ class DonkeyKongEnv(gym.Env):
         # checks yt-6 <= y <= yb+6); never widen a stub's y-span without
         # a fresh frozen-barrel probe, and never add reward shaping that
         # pays inside a stub column:
-        ( 82, 164, 176),  # g3 broken ladder, lower stub (h64→76)
+        # (82, 164, 176) g3 broken-ladder stub: RE-GATED 2026-07-19 (user:
+        # climbs it "much more than passing it by" despite the rent). The
+        # steer-redirect correction removed its only rationale — redirects
+        # read the held direction from ANYWHERE, no ladder needed. Same
+        # bait pattern as x99/x116; the guard re-executes climbs here.
         # (116, 192, 206) g2→g3 lower stub: RE-GATED 2026-07-16 (same
         # bait pattern as x99 — death ledger showed 8 deaths stacked at
         # x115 h50-58: mount, top out, strand, die. User-confirmed via
