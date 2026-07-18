@@ -548,7 +548,11 @@ that the new objective has been learned.
 | 31g | ★★ PRO ROUTE UNBLOCKED: east g5→top-girder ladder legalized (200,74,102 — TRIANGULATED from the x200/y88 guard execution; probes died 3x, tighten when one lands) + topg_x151 runway cell prepended to BOTH tower chains + corridor top-band REVERT (user ground truth: the two left top ladders are INVISIBLE-BARRIER DECOYS; the demo's x147 was right all along) | — | — | ★ FIRST TOWER GATES IN PROJECT HISTORY: chains 0/1 level 0→4 each within 2h (level-0 since run 30) | 0 | battery 33.0/34 det (86% of baseline, day 2 of rebuild) |
 | 31h | GREEN LIGHT shaping (user-approved): x53 column clear by the time-race rule → PBRS peak shifts UP the ladder (rail-only x53±3, y180-196, mount excluded — two anti-farm tests caught g3-surface wobble + off-rail tolerance before deploy) | ~8h | 63 | chains 61; x82 stub attempts 104/session → 18 (rent verdict) | 0 | review r18: margin features re-zeroed to the gates (20px optimism band closed) |
 | 31i | x82 stub RE-GATED (user watched him climb it "much more than passing by"; the steer-redirect correction — redirects read HELD DIRECTION from anywhere, even mid-jump — removed its last rationale) + r18 aligned margins live | ~2h | — | — | 0 | all three broken stubs now executed |
-| **31j** | ★★★ USER BOARD-MAP AUDIT (boardupdate.png): legalize x94 g4→g5 (ON THE ROUTE ARROWS yet guard-executed all along!), x201 g2→g3 right, x116 as FULL connector (the 07-16 "bait" was our stub envelope stranding him mid-ladder); document known-broken x107/x186 (split stubs, illegal by default) | live | — | — | 0 | CURRENT. Board: 9 legal / 2 executed stubs / 2 broken / 2 decoys; route has REDUNDANCY (two g2→g3, two g4→g5). Ladder-law map artifact: claude.ai/code/artifact/7cafae7e |
+| 31j | ★★ USER BOARD-MAP AUDIT (boardupdate.png): legalize x94, x201, x116 as FULL connector; document known-broken x107/x186 | — | — | — | 0 | route gains redundancy |
+| 31k-31n | SAFE-TO-CLIMB VISION: all nine ladders dim in the threat channel when their column fails the time-race (same gate as the pay); gate upgraded — FIREBALLS race, WILD barrels ±32px berth (crazy byte 1=wild, polarity probe-verified 1103:40); user caught the bright-cap rounding bug AND the 100≈128 palette collision on actual retina renders → three clean classes (255 safe / 128 broken / 60 unsafe); sprite inventory pixel-verified | — | — | — | 0 | mario_vision_v*.png renders on the user's Desktop |
+| 31o-31p | ★★★ THE CENSUS WALKS (user's idea + legs, threat-free logged sessions): all NINE envelopes measured from real climbs — g4→g5-left is x51 NOT x67 (empty-column envelope!), x131 17px lower (real mounts guard-exposed), 3 ladders stack at x203; stubs = exactly four (99/83/107/187; tilemap table had phantoms incl. the false grey at x200); x162 "blocker" was a probe artifact; decoy barrier EMPIRICALLY confirmed; stub proximity tax retired (taxed transit — caught by the PBRS loop test) | — | — | — | 0 | census.lua = reusable geometry tool; walk logs archived |
+| 31q | CALIBRATION PASS: x147 trimmed to 48-76 (user: no g5 link — top girder to Pauline only); LAD53_TOP_Y 160→178 (every x53 margin/gate ran 18px OVERCAUTIOUS since Stage B), rail 53→51, green-light zero at real base y202, PBRS_G2_H 38, x131 block re-anchored h67-99 | — | — | — | 0 | map artifact v3 census edition |
+| **31r-31s** | CLEAN-JUMP BONUS (user-approved, farm-proofed): 0.3/jump when a barrel passes beneath a DIRECTIONALLY-HELD arc (scan-box pro tip — vertical hops pay nothing), once per arc, cap 3/ep (ceiling 0.9 vs ~15-20/climb; height-timeout + death economics close the farm) | live | — | — | 0 | CURRENT. Vision-resolution question answered → fovea-patch on RUN32 shelf |
 | 30b | ★ geometry corrections (user board.jpg + probes): x53 tops at GIRDER 3 h62 (two-stage theory retracted — h70-77 were jump arcs); verified stub envelopes x82/x116/x99 (the 28d "glitch rail" is a REAL broken ladder); WATERFALL_PASS was unreachable (h68 gate vs h62 top) → now h64 & x45-105 & low start | ~1h | 74 | — | 0 | stub warning pinned: legal span only, never shape into stub columns |
 | **30c** | **G3_TRAVERSE** (user pro line: climb → RIGHT → x131 middle ladder; corridor x_med 96→107→131 confirms) + g2 traverse band trimmed 65→52 (oscillation-pump prevention) | **active** | **75** | — | 0 | the pro line is now a continuous gradient floor→tower; run-31 wishlist: 6-second projected-occupancy channel (user's pro mental model) |
 
@@ -916,14 +920,17 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   g5's rightward walk hits an unexplained lethal blocker at x162; FROZEN
   threats still kill on contact (scripted probes must jump them).
 
-- **LADDER LAW (post-audit 2026-07-19, the authoritative census):** LEGAL:
-  x203(211-236), x53(178-196), x116(162-206 FULL — the 07-16 stub-envelope
-  era stranded climbers and read as bait), x201(147-173), x131(118-158),
-  x67(85-125), x94(92-122), x147(48-100 finish tube), x200(74-102 east
-  entry). EXECUTED STUBS: x99, x82. KNOWN-BROKEN (no envelope, never
-  legalize): x107 g4/g5, x186 g3/g4-right. DECOYS (invisible barrier):
-  the Pauline pair. User-drawn spans (94/116/201) + triangulated (200)
-  are tighten-by-probe. Visual map artifact (updatable via url):
+- **LADDER LAW (CENSUS-MEASURED 2026-07-18, final):** every span from the
+  user's threat-free instrumented walks (census.lua, 30Hz logs). LEGAL:
+  (203,211,235) floor→g2; (51,178,202) g2g3-L; (115,174,206) g2g3-M;
+  (203,145,169) g2g3-R; (131,141,173) g3g4; (51,112,136) g4g5-L;
+  (91,110,138) g4g5-M; (147,48,76) TOP-GIRDER→Pauline ONLY (no g5 link,
+  user-confirmed); (203,79,103) east entry. STUBS (guard-executed):
+  (99,228,240), (83,164,176), (107,97,109), (187,132,144). DECOYS:
+  Pauline pair, barrier EMPIRICALLY confirmed. Method: threat-free MAME
+  + census.lua position log; parse = rail-pinned x + y extents. When
+  geometry is in question, ASK THE USER TO WALK IT — beats any probe.
+  Visual map (updatable via url):
   claude.ai/code/artifact/7cafae7e-b083-4642-a0b0-8dea5725753f
 
 - **STEER-REDIRECT NEEDS NO LADDER (user correction 2026-07-19):** the
