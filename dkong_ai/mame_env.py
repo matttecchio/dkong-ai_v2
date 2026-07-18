@@ -547,7 +547,11 @@ class DonkeyKongEnv(gym.Env):
             for _lx, _yt, _yb in self.COMPLETE_LADDERS:
                 if not self._ladder_gap_clear(state, _lx, _yt):
                     _cx = int(round(_lx * _sx))
-                    for _ly in range(int(_yt * _sy), min(83, int(_yb * _sy)) + 1):
+                    # round() to MATCH _build_ladder_map exactly — trunc left
+                    # 1-row bright caps on dimmed ladders (user spotted the
+                    # partial-white bars on the vision render, 2026-07-20)
+                    for _ly in range(int(round(_yt * _sy)),
+                                     min(83, int(round(_yb * _sy))) + 1):
                         for _dx in (-1, 0, 1):
                             _c = max(0, min(83, _cx + _dx))
                             if threat[_ly, _c, 0] == 255:
