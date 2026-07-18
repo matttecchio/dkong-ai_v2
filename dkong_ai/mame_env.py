@@ -98,10 +98,12 @@ class DonkeyKongEnv(gym.Env):
         # steer-redirect correction removed its only rationale — redirects
         # read the held direction from ANYWHERE, no ladder needed. Same
         # bait pattern as x99/x116; the guard re-executes climbs here.
-        # (116, 192, 206) g2→g3 lower stub: RE-GATED 2026-07-16 (same
-        # bait pattern as x99 — death ledger showed 8 deaths stacked at
-        # x115 h50-58: mount, top out, strand, die. User-confirmed via
-        # the death map. x82 stays legal (on-route, 1 death).
+        (116, 162, 206),  # g2→g3 at mid-board: FULL CONNECTOR (user map
+                          # 2026-07-19, "should no longer be gated"). History:
+                          # its LOWER-STUB envelope (192-206) was re-gated
+                          # 07-16 after bait deaths — the stub STRANDED him
+                          # mid-ladder; as a full ladder it's a route option.
+                          # Span girder-derived; tighten by probe.
         # (99, 228, 240) floor stub: REMOVED same day it was added (user
         # order, 2026-07-15 eve): the stub is a dead end, and legalizing
         # it made its 12px pay height milestones — every bottom start was
@@ -110,6 +112,13 @@ class DonkeyKongEnv(gym.Env):
         (131, 118, 158),  # 3rd → 4th girder, right-ish
         ( 67,  85, 125),  # 4th → 5th girder, left
         (147,  48, 100),  # top section to Pauline
+        ( 94,  92, 122),  # g4 → g5, mid-left (user map 2026-07-19: was on
+                          # the route arrows but NEVER legalized — the guard
+                          # executed the pro line here). Span from the route
+                          # + forensics (h118-148); tighten by probe.
+        (201, 147, 173),  # g2→g3 band, RIGHT side (user map 2026-07-19:
+                          # "perfectly playable"). Span from the user's
+                          # drawing; tighten by probe.
         (200,  74, 102),  # g5 -> top girder, EAST (the pro route's entry;
                           # USER-AUTHORIZED 2026-07-18 "you can unblock that
                           # one"). Span TRIANGULATED, not frame-probed: a
@@ -123,6 +132,9 @@ class DonkeyKongEnv(gym.Env):
     # guard kills (see the guard in _reward). Legal play never accumulates
     # any: complete-ladder climbing is envelope-exempt, jump arcs are
     # is_jumping-gated, and girder walking moves x. 6px ≈ two ratchet pulls.
+    # KNOWN-BROKEN ladders with NO envelope (correctly illegal by default;
+    # user map 2026-07-19): ~x107 between g4/g5 and ~x186 between g3/g4 —
+    # both split top/bottom stubs. Never legalize, never shape toward them.
     GLITCH_PX_MAX = 6
 
     # Sticky cause of the most recent episode end, written into the live tap
