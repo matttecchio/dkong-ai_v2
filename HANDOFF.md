@@ -1298,7 +1298,46 @@ No equivalent `lad143` for the first ladder (x=143). Adding it would give an exp
 
 ## 14. Recommended next steps (for Fable / new session)
 
-Phase 2 (backward walk-back) is run 27ad, active. In priority order:
+STATE AS OF 2026-07-19 EVE: run 31h (102 features), all systems live:
+pro-seeded persistent SIL (39 eps), wait-spot runway (clear-gap 24→44%),
+tower runway + legalized pro route (first tower gates EVER: chains 0/1 at
+level 4), green-light shaping, edge-jump tax, aligned climb margins
+(r18 — ACTIVATES AT NEXT RESTART: bounce as 31i after the next battery).
+Zero honest bottom-up clears. Battery is MANUAL (~09:30 daily, no cron;
+`--rom-dir ./roms` required). Letter discipline: every deliberate
+restart writes a fresh letter to logs/run_label (dashboard resets key on
+it); crash-resumes keep the letter.
+
+FORWARD PRIORITIES:
+
+1. **First-clear watch stays the singular goal** (verify bottomup +
+   cleared=1 + glitch_kill=0 → LOUD + memory + film via bustart). The
+   pincer: tower chains walking DOWN (watch levels[0..1] — they cascade
+   when unstuck), floor/wait-spot chains walking UP (levels[12..15],
+   still 0 — the 31d runway should gate first). wc_154 battery cell
+   flipping nonzero = the tower work paying.
+2. **KL-based lr tripwire** (NOT clip): drop when approx_kl >0.02
+   sustained is corroborated (falling heights) or >0.04 x3 consecutive;
+   absorption band 0.02-0.035 accepted while heights rise. History: two
+   tripwire fires + one evidence-based amendment (kl was lr-insensitive).
+   Current dials: lr 2.5e-5, sil-coef 0.03; re-raise when kl <0.01
+   sustained.
+3. **Run-32 shelf (docs/RUN32.md)** on hard wall or post-first-clear:
+   occupancy channel (user's 6s rule — note steer-redirect means barrel
+   branching is partly player-controlled), wild flag + difficulty
+   pairing, blue flag as feature (byte 0=BLUE!). All type bytes already
+   watched — wiring only.
+4. **Film-first doctrine unchanged** — one user viewing beats thousands
+   of rollouts (proven: x53 geometry, stub baits, decoy ladders, wait
+   doctrine). The user's board knowledge is ground truth; when a probe
+   contradicts the user, the PROBE's interpretation is usually wrong
+   (corridor-retarget humiliation, 2026-07-18).
+5. **User boundaries (permanent)**: never propose gameplay recording
+   (last resort, vetoed); no pace/lifespan metrics (timer-milking is pro
+   play); never widen stub envelopes unprobed; never legalize the
+   Pauline-pair decoy ladders; no farm without wired link + async design.
+
+Phase-2 era notes below (run 27ad context) kept for archaeology:
 
 1. **FILM IT FIRST.** The single highest-value diagnostic is now proven
    twice: record the policy failing from the stuck state (aviwrite +
