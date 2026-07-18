@@ -1173,8 +1173,12 @@ class DonkeyKongEnv(gym.Env):
                 # stub costs the same rent. Small enough that a 1-2s
                 # dodge-mount stays worth it vs a death; large enough that
                 # ritual re-climbing (the h131/h163 walls) stops being free.
+                # RETIRED 2026-07-18: once BROKEN_STUBS became the four
+                # census-measured stubs, this proximity rent taxed plain
+                # TRANSIT past x99 (floor) and x107 (g5 walk) — the guard's
+                # -25 execution already owns stub climbing. Empty list.
                 else:
-                    for sx_, yt_, yb_ in self.BROKEN_STUBS:
+                    for sx_, yt_, yb_ in ():
                         if (abs(s["mario_x"] - sx_) <= self.STUB_X_TOL
                                 and yt_ - self.STUB_Y_PAD <= s["mario_y"]
                                     <= yb_ + self.STUB_Y_PAD):
