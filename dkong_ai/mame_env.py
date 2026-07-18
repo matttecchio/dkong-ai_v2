@@ -106,6 +106,13 @@ class DonkeyKongEnv(gym.Env):
         (131, 118, 158),  # 3rd → 4th girder, right-ish
         ( 67,  85, 125),  # 4th → 5th girder, left
         (147,  48, 100),  # top section to Pauline
+        (200,  74, 102),  # g5 -> top girder, EAST (the pro route's entry;
+                          # USER-AUTHORIZED 2026-07-18 "you can unblock that
+                          # one"). Span TRIANGULATED, not frame-probed: a
+                          # guard execution at x200/y88 proves mid-ladder
+                          # climbing there; top girder ~y76 at x200, g5 base
+                          # ~y100 (+margins). Tighten when a probe lands —
+                          # scripted probes died 3x before locating the base.
     ]
 
     # Max cumulative off-ladder climb pixels per episode before the glitch
