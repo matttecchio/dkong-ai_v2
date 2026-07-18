@@ -161,6 +161,16 @@ class DonkeyKongEnv(gym.Env):
     # and descents are unaffected.
     PBRS_G2_H = 44            # x53 ladder base; CLIMB_BONUS owns the climb
     PBRS_G2_SPAN = 160        # covers the walk back to the ladder-203 arrival
+    # GREEN LIGHT (user-approved 2026-07-19): with the x53 column CLEAR by
+    # the time-race rule, the potential peak SHIFTS UP THE LADDER — the wait
+    # spot stops being a comfy local maximum the moment the window opens.
+    # Climbing a clear column is literally uphill in reward-space (+1 prog
+    # per px, ~0.08/step at 2px climb); a barrel closing the window
+    # mid-climb collapses the extra (the sting of being mid-ladder under
+    # threat, exactly the doctrine). State-function-only: the gap test reads
+    # barrel positions from s, so PBRS policy-invariance is preserved.
+    GREEN_LIGHT_X_TOL = 3     # ON the rail (climb pins x=53; wider caught jump arcs beside it)
+    GREEN_LIGHT_PX_MAX = 16   # ladder bottom y196 -> y180 (mount excluded)
     # Wait spot RIGHT of the ladder base, not the base itself (user film
     # review 2026-07-14): left of the ladder is a death pocket (girder-3
     # edge-fall barrels land and reverse there), and the correct play is
@@ -246,6 +256,15 @@ class DonkeyKongEnv(gym.Env):
                                 self.PBRS_G2_SPAN))
         else:                                 # saturated above the ladder base
             prog = 128 + self.PBRS_G2_SPAN
+            if (abs(s["mario_x"] - 53) <= self.GREEN_LIGHT_X_TOL
+                    and s["mario_y"] >= 180
+                    and self._lad53_column_clear(s)):
+                # y>=180: ladder only, never g3's surface — walking across
+                # the ladder top must not wobble phi (anti-farm tests).
+                # The mount step (y<180) drops the extra; CLEAN_MOUNT_BONUS
+                # (+2.0) dwarfs that sting.
+                prog += min(max(0, 196 - s["mario_y"]),
+                            self.GREEN_LIGHT_PX_MAX)   # green light: climb!
         return self.PBRS_COEF * prog
 
     # _p_curric is a class-level default (like P_NO_BARRELS). Override it by

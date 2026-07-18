@@ -467,3 +467,24 @@ def test_edge_jump_tax():
     assert abs((r_jump(24, 21, 0.0) - r_jump(24, 21, 2.0)) - 2.0) < 1e-6
     # mid-girder jump: tax setting is irrelevant (scoring skill untouched)
     assert abs(r_jump(120, 123, 0.0) - r_jump(120, 123, 2.0)) < 1e-6
+
+
+def test_green_light_shifts_peak_up_ladder():
+    """With the x53 column clear, potential rises with climb progress above
+    the wait-spot peak; with a threat in the column, the ladder holds the
+    old flat saturation (waiting stays optimal)."""
+    env = _pbrs_env()
+    def phi(y, threat):
+        s = _state(mario_y=y, mario_x=53)
+        if threat:
+            s["barrel0_st"] = 1
+            s["barrel0_x"] = 53
+            s["barrel0_y"] = 150   # above Mario, in-column
+        return env._phi(s)
+    # clear column: climbing pays in potential
+    assert phi(184, False) > phi(192, False) > phi(196, False)
+    # blocked column: flat (no pull up the ladder)
+    assert abs(phi(184, True) - phi(196, True)) < 1e-9
+    # green peak exceeds the wait-spot value
+    s_wait = _state(mario_y=202, mario_x=59)
+    assert phi(180, False) > env._phi(s_wait)
