@@ -15,7 +15,7 @@ obs bump (new feature dim = new run number; letters = restarts).
   the biggest remaining perception gap. Wild flag above feeds this
   (wild = vertical projection, not girder-following).
 - **Blue-barrel flag as a feature** (+6 dims, also already watched,
-  +0x02): blue barrels preferentially take ladders and become fireballs
+  +0x02 — NOTE polarity: byte 0 = BLUE, verified 2026-07-18): blue barrels preferentially take ladders and become fireballs
   at the oil can — pro players track them individually. Dashboard shows
   them (blue tint) since 2026-07-18; policy can't see the flag yet.
 - Frameskip-2 experiment: POST-FIRST-CLEAR only (doubles sample cost;

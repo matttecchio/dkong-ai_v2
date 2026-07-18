@@ -31,7 +31,10 @@ ADDR = {
     "score_100k":   0x7781,
     # Barrel object array: 6 slots at 0x6700, stride 0x20.
     # Per slot: +0x00=status (0=inactive,1=rolling,2=deploying), +0x01=crazy
-    # (wild barrel bouncing vertically down the board), +0x02=blue (rolls into
+    # (wild barrel bouncing vertically down the board), +0x02: 0=BLUE,
+    # nonzero=normal — POLARITY INVERTED vs the obvious reading; verified
+    # 2026-07-18 by probing fresh-board first barrels (always blue, byte 0;
+    # fleet-wide 95% read 1). +0x02 original doc claim "=blue (rolls into
     # the oil drum -> fireball), +0x03=x, +0x05=y.
     # Confirmed from Don Hodges 2008 Z80 disassembly; same coord system as mario_y.
     "barrel0_st": 0x6700, "barrel0_x": 0x6703, "barrel0_y": 0x6705,

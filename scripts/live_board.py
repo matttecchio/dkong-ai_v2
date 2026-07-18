@@ -417,7 +417,7 @@ async function poll(){
       if(!e.cur||Math.hypot(px-e.cur.x,py-e.cur.y)>120){
         e.cur={x:px,y:py};e.tr.setAttribute('points','');}
       const objs=(s.b||[]).map(p=>({p,href:BARREL,w:18,h:20,dy:24,
-          blue:p[2]===1}))
+          blue:p[2]===0}))   // RAM byte polarity: 0 = BLUE (probe-verified 2026-07-18)
         .concat((s.fb||[]).map(p=>({p,href:FIRE,w:20,h:23,dy:30})));
       while(e.th.length<objs.length)e.th.push(el(sv,'image',{opacity:0}));
       while(e.thT.length<objs.length)e.thT.push(null);
