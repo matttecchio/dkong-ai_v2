@@ -18,6 +18,10 @@ obs bump (new feature dim = new run number; letters = restarts).
   +0x02 — NOTE polarity: byte 0 = BLUE, verified 2026-07-18): blue barrels preferentially take ladders and become fireballs
   at the oil can — pro players track them individually. Dashboard shows
   them (blue tint) since 2026-07-18; policy can't see the flag yet.
+- **Per-ladder margin panel** (+9 dims): the numeric upgrade of the
+  2026-07-19 safety SHADING (all nine legal ladders dim in the threat
+  channel when their column fails the time-race — vision-only, shipped
+  in run 31k). Scalars give magnitude, not just the binary shade.
 - Frameskip-2 experiment: POST-FIRST-CLEAR only (doubles sample cost;
   sharpens jump timing). Not an obs change; separate decision.
 

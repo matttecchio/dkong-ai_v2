@@ -517,3 +517,29 @@ def test_x200_east_ladder_climb_is_legal():
     env._prev = p
     env._reward(s)
     assert not env._glitch_kill, "guard fired on the legal east ladder"
+
+
+def test_ladder_safety_shading():
+    """Legal ladders dim in the threat channel when their column fails the
+    time-race gate; bright when clear (user: 'needs to know when it's safe
+    to climb vs not' — all nine ladders, not just x53/x131)."""
+    import numpy as np
+    env = _pbrs_env()
+    env._geom = {"w": 224, "h": 256}
+    env._ladder_map = env._build_ladder_map()
+    env._prev = None
+    pix = bytes(224 * 256 * 4)
+    clear_s = _state(mario_y=230, mario_x=100)
+    obs_clear = env._preprocess(pix, clear_s)
+    blocked_s = _state(mario_y=230, mario_x=100)
+    blocked_s["barrel0_st"] = 1
+    blocked_s["barrel0_x"] = 116          # sits on the x116 column
+    blocked_s["barrel0_y"] = 170          # above, within reach window
+    obs_blk = env._preprocess(pix, blocked_s)
+    sx, sy = 84.0/256.0, 84.0/224.0
+    cx = int(round(116 * sx))
+    ly = int(184 * sy)                    # mid-x116-ladder row
+    band_clear = obs_clear["image"][ly, cx-1:cx+2, 1]
+    band_blk = obs_blk["image"][ly, cx-1:cx+2, 1]
+    assert band_clear.max() == 255, f"expected bright ladder, {band_clear}"
+    assert band_blk.max() == 100, f"expected dimmed ladder, {band_blk}"

@@ -520,6 +520,21 @@ class DonkeyKongEnv(gym.Env):
         # fixed structure (where ladders are) and live threats simultaneously.
         threat = self._ladder_map.copy()
         if state:
+            # SAFE-TO-CLIMB shading (user directive 2026-07-19: "Mario
+            # definitely needs to know when it's safe to climb vs not").
+            # Every legal ladder's pixels DIM to 100 while its column fails
+            # the time-race gate — the same test that prices the x53/x131
+            # climbs, now VISIBLE on all nine ladders. Bright = safe,
+            # dim = a barrel wins the race. Image shape unchanged.
+            _sx, _sy = 84.0 / 256.0, 84.0 / 224.0
+            for _lx, _yt, _yb in self.COMPLETE_LADDERS:
+                if not self._ladder_gap_clear(state, _lx, _yt):
+                    _cx = int(round(_lx * _sx))
+                    for _ly in range(int(_yt * _sy), min(83, int(_yb * _sy)) + 1):
+                        for _dx in (-1, 0, 1):
+                            _c = max(0, min(83, _cx + _dx))
+                            if threat[_ly, _c, 0] == 255:
+                                threat[_ly, _c, 0] = 100
             sx, sy = 84.0 / 256.0, 84.0 / 224.0
             for i in range(6):
                 st = state.get(f"barrel{i}_st", 0)
