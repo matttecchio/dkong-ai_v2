@@ -86,9 +86,10 @@ class DonkeyKongEnv(gym.Env):
         (131, 141, 173),  # g3 → g4                     (3 climbs)
         ( 51, 112, 136),  # g4 → g5, left (was "x67"!)  (3 climbs)
         ( 91, 110, 138),  # g4 → g5, mid  (was "x94")   (2 climbs)
-        (147,  48, 100),  # g5 → top → Pauline level: census climbed 48-76
-                          # (top section); 76-100 verified by probe + every
-                          # training clear — keep the full tube
+        (147,  48, 100),  # top girder → Pauline level: census measured
+                          # 48-74. NO logged climb has ever touched 76-100 —
+                          # the "g5 connection" may be phantom (user asked;
+                          # harmless to keep: no rail = nothing to climb)
         (203,  79, 103),  # g5 → top girder, east entry (3 climbs)
     ]
 
@@ -977,13 +978,14 @@ class DonkeyKongEnv(gym.Env):
     # Mario ritual-climbing untaxed mid-board stubs instead of traversing to
     # the complete ladder — the floor-stub disease, one flight up).
     BROKEN_STUBS = (
-        ( 64, 144, 152),  # 4th→3rd gap at x≈64
-        (104,  56,  72),  # top area stub at x≈104
-        (120, 160, 184),  # 3rd→2nd partial at x≈120
-        (144, 104, 120),  # 5th→4th gap at x≈144
-        (160, 112, 136),  # through 4th girder at x≈160
-        (168, 176, 192),  # 3rd→2nd partial at x≈168
-        (200, 120, 152),  # through 4th girder at x≈200
+        # CENSUS-MEASURED 2026-07-18 (user's stub walk): the four REAL
+        # broken-ladder stubs, replacing the 7-entry tilemap-derived table
+        # (3+ of its entries were phantom — incl. the x200 one that drew
+        # the false grey over the right g2→g3 ladder). Guard-illegal all.
+        ( 99, 228, 240),  # floor stub
+        ( 83, 164, 176),  # g3 stub
+        (107,  97, 109),  # g4/g5 broken (user map blue #1)
+        (187, 132, 144),  # g3/g4 broken right (user map blue #2)
     )
     STUB_X_TOL = 7        # |mario_x - stub_x| within which the tax applies
     STUB_Y_PAD = 6        # stub y-span padding (mount/dismount frames)
