@@ -22,6 +22,13 @@ obs bump (new feature dim = new run number; letters = restarts).
   2026-07-19 safety SHADING (all nine legal ladders dim in the threat
   channel when their column fails the time-race — vision-only, shipped
   in run 31k). Scalars give magnitude, not just the binary shade.
+- **Vision resolution** (user question 2026-07-19): 84x84 is ~2.7 game-px
+  per cell — coarse at hurdling range. BUT precise distances already
+  arrive via the RAM features; the image is context. If vision precision
+  proves limiting post-first-clear, prefer (a) a high-res FOVEA patch
+  around Mario (native-res 32x32 crop as an extra channel — pro focus,
+  cheap) over (b) global 112x112 (~1.8x CNN cost) or 168x168 (4x, and
+  the loop is model-latency-bound). New CNN geometry = new lineage.
 - Frameskip-2 experiment: POST-FIRST-CLEAR only (doubles sample cost;
   sharpens jump timing). Not an obs change; separate decision.
 
