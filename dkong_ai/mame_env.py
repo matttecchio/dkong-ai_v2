@@ -1143,7 +1143,12 @@ class DonkeyKongEnv(gym.Env):
                 # Clean-jump bonus (see constants above): mid-air, barrel
                 # passing beneath, latched once per arc.
                 if s.get("is_jumping", 0):
+                    # Direction must be HELD during the arc (x drifts): the
+                    # game's scoring scan box only extends on directional
+                    # jumps (user pro tip 2026-07-19) — pay the form that
+                    # earns real points, not lazy vertical hops.
                     if (not self._jump_paid
+                            and s["mario_x"] != p["mario_x"]
                             and self._clean_jumps < self.CLEAN_JUMP_MAX_PER_EP):
                         for _i in range(6):
                             if s.get(f"barrel{_i}_st", 0) not in (1, 2):

@@ -569,7 +569,7 @@ def test_clean_jump_bonus_paid_capped_unfarmable():
     env._clean_jumps = 0
     env._jump_paid = False
     def leap(with_barrel):
-        s = _state(mario_y=190, mario_x=100, is_jumping=1)
+        s = _state(mario_y=190, mario_x=102, is_jumping=1)   # x drifts: held dir
         p = _state(mario_y=196, mario_x=100, is_jumping=0)
         if with_barrel:
             s["barrel0_st"] = 1
@@ -589,3 +589,16 @@ def test_clean_jump_bonus_paid_capped_unfarmable():
     leap(True); leap(True)
     fourth = leap(True)
     assert fourth - base < 0.05, f"cap failed: {fourth} vs {base}"
+
+
+def test_clean_jump_requires_held_direction():
+    """A vertical hop over a barrel pays nothing — the scan box only
+    extends on directional jumps (user pro tip)."""
+    env = _pbrs_env()
+    env._clean_jumps = 0; env._jump_paid = False
+    s = _state(mario_y=190, mario_x=100, is_jumping=1)   # no x drift
+    p = _state(mario_y=196, mario_x=100, is_jumping=0)
+    s["barrel0_st"] = 1; s["barrel0_x"] = 102; s["barrel0_y"] = 205
+    env._prev = p
+    env._reward(s)
+    assert env._clean_jumps == 0, "vertical hop must not pay"
