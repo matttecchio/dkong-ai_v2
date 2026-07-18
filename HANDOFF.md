@@ -544,7 +544,9 @@ that the new objective has been learned.
 | 31b | KL tripwire fired (0.023-0.034 sustained post-seed) → lr 5e-5; then AMENDED: kl proved lr-insensitive = frontier-pushing + imitation pressure, absorption band 0.02-0.035 accepted while heights rise | — | 62 | mean 17→23, g3 touches return | 0 | hard trip armed: kl>0.04 x3 OR slope reversal |
 | 31c | HARD TRIP FIRED (kl 0.040-0.053 x8 + first slope dip, variance stretching) → lr 2.5e-5 + sil-coef 0.03; absorption stabilized, slope resumed ABOVE pre-trip peak | ~14h | 63 | mean 27+ (> mature run-30), h25+ 74%, g3 touches 9/slice peak | 0 | battery 33.0/34 det = 86% of baseline on day 2; wc_154 0% 4th straight |
 | 31d | WAIT-SPOT TRIPWIRE FIRED (clear-gap 27%, 0 wait-spot gates at deadline) → harvest MERGED: 39 probe-verified rungs prepended as easier levels (ch12/13 h46-58, ch14/15 h31-41 phase variety; 1 dropped on load-probe) + 203 approach attachments | — | — | — | 0 | backups .bak_20260718_1137 |
-| 31e-31f | edge-jump tax 2.0 (jump initiation ≤12px from any open girder edge toward the drop; 40/70 bottom-up falls landed under g2-right) + blue-barrel dashboard feed (RAM byte 0=BLUE — polarity inverted vs old docs, probe-verified) | live | — | — | 0 | CURRENT. RUN32 shelf: wild flag+difficulty pairing, occupancy channel, blue feature (all data already watched) |
+| 31e-31f | edge-jump tax 2.0 (jump initiation ≤12px from any open girder edge toward the drop; 40/70 bottom-up falls landed under g2-right) + blue-barrel dashboard feed (RAM byte 0=BLUE — polarity inverted vs old docs, probe-verified) | — | — | wait-spot flood verdict: clear-gap 24→44% | 0 | RUN32 shelf: wild flag+difficulty pairing, occupancy channel, blue feature (all data already watched) |
+| 31g | ★★ PRO ROUTE UNBLOCKED: east g5→top-girder ladder legalized (200,74,102 — TRIANGULATED from the x200/y88 guard execution; probes died 3x, tighten when one lands) + topg_x151 runway cell prepended to BOTH tower chains + corridor top-band REVERT (user ground truth: the two left top ladders are INVISIBLE-BARRIER DECOYS; the demo's x147 was right all along) | — | — | ★ FIRST TOWER GATES IN PROJECT HISTORY: chains 0/1 level 0→4 each within 2h (level-0 since run 30) | 0 | battery 33.0/34 det (86% of baseline, day 2 of rebuild) |
+| 31h | GREEN LIGHT shaping (user-approved): x53 column clear by the time-race rule → PBRS peak shifts UP the ladder (rail-only x53±3, y180-196, mount excluded — two anti-farm tests caught g3-surface wobble + off-rail tolerance before deploy) | live | 63 | chains 61+; x82 stub attempts 104/session → 18 (rent verdict) | 0 | CURRENT. Watch: green-light effect on clear-gap; tower gates → wc_154 battery |
 | 30b | ★ geometry corrections (user board.jpg + probes): x53 tops at GIRDER 3 h62 (two-stage theory retracted — h70-77 were jump arcs); verified stub envelopes x82/x116/x99 (the 28d "glitch rail" is a REAL broken ladder); WATERFALL_PASS was unreachable (h68 gate vs h62 top) → now h64 & x45-105 & low start | ~1h | 74 | — | 0 | stub warning pinned: legal span only, never shape into stub columns |
 | **30c** | **G3_TRAVERSE** (user pro line: climb → RIGHT → x131 middle ladder; corridor x_med 96→107→131 confirms) + g2 traverse band trimmed 65→52 (oscillation-pump prevention) | **active** | **75** | — | 0 | the pro line is now a continuous gradient floor→tower; run-31 wishlist: 6-second projected-occupancy channel (user's pro mental model) |
 
@@ -901,6 +903,23 @@ A true .inp is impossible for stitched winners (playback replays inputs only).
   obs_tensor AFTER VecTransposeImage — stored images are (C,H,W). Seeding
   episodes in (H,W,C) silently poisons the replay; ALWAYS diff formats
   against a training-captured episode (the 'clear' class always has some).
+
+- **TOP-SECTION ANATOMY (probed + user ground truth, 2026-07-18/19):**
+  clears fire at the x147 tube's top via the STEP-OFF onto Pauline's
+  platform (pure UP plateaus at y48); the x147 ladder is a sealed tube
+  from g5 (no mid-dismount); the right top girder spans x150-227 sloping
+  down eastward (wcf_001 stands at its left tip); the two ladders left
+  of Pauline are INVISIBLE-BARRIER DECOYS — never legalize, never route
+  toward them (a corridor retarget toward them was reverted same-day);
+  g5's rightward walk hits an unexplained lethal blocker at x162; FROZEN
+  threats still kill on contact (scripted probes must jump them).
+
+- **STEER-REDIRECT NEEDS NO LADDER (user correction 2026-07-19):** the
+  barrel's ladder-descent steer reads the HELD DIRECTION at the junction
+  moment — Mario can be anywhere, even mid-jump. Invalidates the old
+  rationale for x82's legal lower stub (kept anyway, user's call;
+  residual attempts ~entropy floor). Occupancy-channel note: barrel
+  branching is partly under the PLAYER'S control.
 
 - **BARREL TYPE BYTES: watched all along, polarity trap (2026-07-18):**
   barrel{i}_crazy (+0x01) and barrel{i}_blue (+0x02) are in the 62-entry
