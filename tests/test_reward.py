@@ -543,3 +543,20 @@ def test_ladder_safety_shading():
     band_blk = obs_blk["image"][ly, cx-1:cx+2, 1]
     assert band_clear.max() == 255, f"expected bright ladder, {band_clear}"
     assert band_blk.max() == 100, f"expected dimmed ladder, {band_blk}"
+
+
+def test_gate_sees_fireballs_and_wild_barrels():
+    """The safety race counts fireballs (same race) and wild barrels
+    (+/-32px berth, no race — they bounce, user doctrine)."""
+    env = _pbrs_env()
+    base = _state(mario_y=196, mario_x=131)
+    assert env._ladder_gap_clear(base, 131, 118)
+    fb = dict(base); fb["fireball0_st"] = 1
+    fb["fireball0_x"] = 131 + 30; fb["fireball0_y"] = 150
+    assert not env._ladder_gap_clear(fb, 131, 118), "fireball in-race missed"
+    wild = dict(base); wild["barrel0_st"] = 1; wild["barrel0_crazy"] = 1
+    wild["barrel0_x"] = 131 - 28; wild["barrel0_y"] = 150
+    assert not env._ladder_gap_clear(wild, 131, 118), "wild in berth missed"
+    tame = dict(wild); tame["barrel0_crazy"] = 0
+    assert env._ladder_gap_clear(tame, 131, 118), \
+        "normal barrel left of the column should not block"

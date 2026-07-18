@@ -201,8 +201,12 @@ class DonkeyKongEnv(gym.Env):
 
     def _ladder_gap_clear(self, s, lx, top_y):
         """Generalized time-race gate (user doctrine, generalized
-        2026-07-16): True when no barrel above Mario can reach ladder lx's
-        top before he does. Same distance-race form as the x53 gate."""
+        2026-07-16; upgraded 2026-07-19): True when no threat above Mario
+        can reach ladder lx's top before he does. Barrels race by girder
+        distance; WILD barrels (crazy byte==1, polarity probe-verified
+        1103:40) bounce vertically and defy the race — any wild above
+        within +/-32px of the column is a threat; fireballs run the same
+        race as barrels (they climb ladders too)."""
         my = s.get("mario_y") or 240
         remaining = max(0, my - top_y)
         for i in range(6):
@@ -211,7 +215,20 @@ class DonkeyKongEnv(gym.Env):
             by = s.get(f"barrel{i}_y", 240)
             if not (top_y - 35 <= by < my):
                 continue
-            if lx - 18 <= s.get(f"barrel{i}_x", 0) <= lx + remaining + self.GAP_MARGIN_PX:
+            bx = s.get(f"barrel{i}_x", 0)
+            if s.get(f"barrel{i}_crazy", 0) == 1:
+                if abs(bx - lx) <= 32:
+                    return False
+                continue
+            if lx - 18 <= bx <= lx + remaining + self.GAP_MARGIN_PX:
+                return False
+        for i in range(5):
+            if not s.get(f"fireball{i}_st", 0):
+                continue
+            fy = s.get(f"fireball{i}_y", 240)
+            if not (top_y - 35 <= fy < my):
+                continue
+            if lx - 18 <= s.get(f"fireball{i}_x", 0) <= lx + remaining + self.GAP_MARGIN_PX:
                 return False
         return True
 
