@@ -114,31 +114,31 @@
  {
   "h_lo": 168,
   "h_hi": 180,
-  "x_med": 128,
+  "x_med": 147,
   "x_lo": 147,
   "x_hi": 165,
   "n": 107,
   "x_med_demo": 147,
-  "note": "top-walk retarget 2026-07-18 (user-directed): demo frames here are ladder-climb samples, not walk guidance; target pulls the walk toward Pauline x110"
+  "note": "2026-07-18 retarget REVERTED same day: user ground truth \u2014 the two left top ladders (Pauline pair) are behind an invisible barrier, unusable; the ONLY climbable finish is the right-of-middle ladder (x147), exactly where the demo pointed. The demo was right; the 'sampling bias' theory was wrong."
  },
  {
   "h_lo": 180,
   "h_hi": 192,
-  "x_med": 118,
+  "x_med": 147,
   "x_lo": 147,
   "x_hi": 147,
   "n": 30,
   "x_med_demo": 147,
-  "note": "top-walk retarget 2026-07-18 (user-directed): demo frames here are ladder-climb samples, not walk guidance; target pulls the walk toward Pauline x110"
+  "note": "2026-07-18 retarget REVERTED same day: user ground truth \u2014 the two left top ladders (Pauline pair) are behind an invisible barrier, unusable; the ONLY climbable finish is the right-of-middle ladder (x147), exactly where the demo pointed. The demo was right; the 'sampling bias' theory was wrong."
  },
  {
   "h_lo": 192,
   "h_hi": 204,
-  "x_med": 112,
+  "x_med": 147,
   "x_lo": 147,
   "x_hi": 147,
   "n": 233,
   "x_med_demo": 147,
-  "note": "top-walk retarget 2026-07-18 (user-directed): demo frames here are ladder-climb samples, not walk guidance; target pulls the walk toward Pauline x110"
+  "note": "2026-07-18 retarget REVERTED same day: user ground truth \u2014 the two left top ladders (Pauline pair) are behind an invisible barrier, unusable; the ONLY climbable finish is the right-of-middle ladder (x147), exactly where the demo pointed. The demo was right; the 'sampling bias' theory was wrong."
  }
 ]
