@@ -111,6 +111,7 @@ class DonkeyKongEnv(gym.Env):
     # bypass _begin_episode still run; reset per episode there).
     _clean_jumps = 0
     _jump_paid = False
+    _on_floor_stub = False
 
     # Potential-based floor shaping (run 29): the floor "poverty trap" —
     # honest play at the bottom nets negative expected reward because the
@@ -1191,6 +1192,18 @@ class DonkeyKongEnv(gym.Env):
                            (_dx < 0 and 0 <= _mx - _xl <= self.EDGE_JUMP_PX):
                             r -= self.EDGE_JUMP_TAX
                         break
+                # Floor-stub lift PENALTY (user 2026-07-19: "punish the
+                # bottom level stub climb massively, it's a dead end that
+                # kills too much of our learning"): -5.0 the moment he
+                # lifts onto x99, re-charged per re-entry (latched while
+                # on it). Not terminal — but death-adjacent economics for
+                # a single flirt; the -25 guard still owns real climbs.
+                _on99 = (abs(s["mario_x"] - 99) <= 4
+                         and 224 <= s["mario_y"] <= 234
+                         and not s.get("is_jumping", 0))
+                if _on99 and not self._on_floor_stub:
+                    r -= 5.0
+                self._on_floor_stub = _on99
                 # On-stub rent (user caught sub-execution flirting deaths
                 # at x99): charged only while LIFTED on a stub column —
                 # y at least 6px above the stub base — so girder transit
@@ -1832,6 +1845,7 @@ class DonkeyKongEnv(gym.Env):
         self._glitch_kill = False            # episode ended by the glitch guard
         self._clean_jumps = 0                # clean-jump bonus payments this ep
         self._jump_paid = False              # per-arc latch
+        self._on_floor_stub = False          # x99 lift-penalty latch
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
         self._forced_actions = []            # approach replay queue (see reset)

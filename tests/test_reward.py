@@ -637,3 +637,21 @@ def test_on_stub_rent_climbing_only():
     on_stub = r_at(230)     # lifted into the stub column
     on_floor = r_at(238)    # standing beneath it
     assert on_floor - on_stub >= 0.08, f"{on_floor} vs {on_stub}"
+
+
+def test_floor_stub_lift_penalty_massive_once_per_entry():
+    """Lifting onto x99 costs -5 immediately (user: punish massively),
+    latched while on it, re-charged on re-entry; floor walk-past free."""
+    env = _pbrs_env()
+    env._on_floor_stub = False
+    def step(y):
+        env._prev = _state(mario_y=238, mario_x=99)
+        r, _ = env._reward(_state(mario_y=y, mario_x=99))
+        return r
+    lift = step(230)
+    stay = step(230)          # latched: no second -5 (rent only)
+    assert lift <= -4.5, f"lift should be massive: {lift}"
+    assert stay - lift >= 4.0, f"latch failed: {stay} vs {lift}"
+    env._on_floor_stub = False
+    walk = step(238)          # walking beneath: free of the penalty
+    assert walk - lift >= 4.0, f"floor transit punished: {walk}"
