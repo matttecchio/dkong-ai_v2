@@ -555,6 +555,20 @@ that the new objective has been learned.
 | 31r-31s | CLEAN-JUMP BONUS (user-approved, farm-proofed): 0.3/jump when a barrel passes beneath a DIRECTIONALLY-HELD arc (scan-box pro tip — vertical hops pay nothing), once per arc, cap 3/ep | — | 67 | battery 38.0/39 = BASELINE RECOVERED (+5 in a day); ★ FIRST TOWER-CELL BATTERY CRACK (wc_153 12% after 7 days of tower zeros); clear-gap 53-57% at volume post-calibration | 0 | fovea-patch analysis on RUN32 shelf |
 | 31t-31u | WATERFALL PACKAGE: green light extended to ALL climb ladders (per-ladder conditional potential, census spans); dashboard ladder forensics re-anchored to census (was watching the empty pre-census x67 column); G2-left pocket rent 0.06→0.10 ASYMMETRIC (user: "the waterfall is the killer" / "don't punish him for moving right") — staying/drifting-left charged, escape free + PBRS-paid | — | — | ladder-zone deaths = 36% of all (g2-left anatomy: ⅔ barrels at the base, ⅓ falls at the left edge) | 0 | watch: g2-left blue dots, x51 death share |
 | **31v-31w** | STUB ERADICATION (user spotted blue-dot flirting deaths up x99 — sub-execution half-climbs that guard%% structurally can't see): stub shade 128→40 (dead stubs were drawn BRIGHTER than unsafe ladders — perceptually outranking them); on-stub rent 0.10 lifted-only; MASSIVE -5.0 per-entry lift penalty on x99/x83/x107 (user: "punish massively — a dead end that kills too much of our learning"). Price ladder: looks-dead → 0.10/step → -5/entry → -25 execution. Girder/floor transit beneath stays free (transit-tax lesson) | live | — | — | 0 | CURRENT. x187 excluded (unnamed); LESSON: guard%%, cause-split, and map dots each see failures the others miss |
+
+**CLIMB-SUCCESS MANDATE (user, 2026-07-19 — the standing focus):** "the
+goal should be to see climbs become more successful... 100% successful
+climbs (except where fireballs or wild barrels get him)." Instrument:
+the dashboard climb-outcome tracker — per census ladder: started /
+completed / died / abandoned + mid-climb reversal (dither) counts;
+sidebar row "ladder climb success"; /metrics `climbs` + `climb_ok_pct`.
+Diagnostic tree (pre-decided responses): high DIED = safety window too
+short → widen GAP_MARGIN_PX; high ABANDON/dither = commitment failure →
+strengthen green-light gradient and/or an abandon-tax (dismount-on-
+green costs); MOUNT deaths = the waterfall package's domain, tracked
+separately. Report success%% raw AND with the fireball/wild exemptions
+(cause-split provides them). Prior: abandon+dither expected to
+dominate; the tracker outranks the prior.
 | 30b | ★ geometry corrections (user board.jpg + probes): x53 tops at GIRDER 3 h62 (two-stage theory retracted — h70-77 were jump arcs); verified stub envelopes x82/x116/x99 (the 28d "glitch rail" is a REAL broken ladder); WATERFALL_PASS was unreachable (h68 gate vs h62 top) → now h64 & x45-105 & low start | ~1h | 74 | — | 0 | stub warning pinned: legal span only, never shape into stub columns |
 | **30c** | **G3_TRAVERSE** (user pro line: climb → RIGHT → x131 middle ladder; corridor x_med 96→107→131 confirms) + g2 traverse band trimmed 65→52 (oscillation-pump prevention) | **active** | **75** | — | 0 | the pro line is now a continuous gradient floor→tower; run-31 wishlist: 6-second projected-occupancy channel (user's pro mental model) |
 
