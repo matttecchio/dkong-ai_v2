@@ -661,3 +661,25 @@ def test_floor_stub_lift_penalty_massive_once_per_entry():
         env._prev = _state(mario_y=sy + 12, mario_x=sx)
         r, _ = env._reward(_state(mario_y=sy, mario_x=sx))
         assert r <= -4.0, f"x{sx} lift should be massive: {r}"
+
+
+def test_reach_ratio_and_red_mount_tax():
+    """The race uses barrel speed ~2.5x climb speed (a barrel 60px out at
+    a 24px climb is now a threat), and mounting on red costs -1.5."""
+    env = _pbrs_env()
+    s = _state(mario_y=196, mario_x=131)
+    s["barrel0_st"] = 1
+    s["barrel0_x"] = 131 + 100          # inside 2.5x reach (137+20), outside 1x
+    s["barrel0_y"] = 150
+    assert not env._ladder_gap_clear(s, 131, 141), "2.5x reach missed"
+    env2 = _pbrs_env()
+    env2._red_mount_latch = None
+    p = _state(mario_y=200, mario_x=51)
+    m = _state(mario_y=196, mario_x=51)   # mounting x51
+    m["barrel0_st"] = 1; m["barrel0_x"] = 80; m["barrel0_y"] = 170  # red
+    env2._prev = p
+    r_red, _ = env2._reward(m)
+    env3 = _pbrs_env(); env3._red_mount_latch = None
+    env3._prev = p
+    r_green, _ = env3._reward(_state(mario_y=196, mario_x=51))
+    assert r_green - r_red >= 1.2, f"red mount should cost: {r_green} vs {r_red}"

@@ -112,6 +112,7 @@ class DonkeyKongEnv(gym.Env):
     _clean_jumps = 0
     _jump_paid = False
     _on_floor_stub = None
+    _red_mount_latch = None
 
     # Potential-based floor shaping (run 29): the floor "poverty trap" —
     # honest play at the bottom nets negative expected reward because the
@@ -175,6 +176,11 @@ class DonkeyKongEnv(gym.Env):
                               # y178 (girder-3 surface at the rail). Was 160
                               # — every margin/gate ran 18px overcautious.
     GAP_MARGIN_PX = 20        # safety pad on the time-race (below)
+    # Barrels cover ~5px per decision-step vs Mario's ~2px climb — the
+    # original 1:1 distance race under-reached by ~2.5x, so "green"
+    # climbs died to barrels just outside the window at mount (climb
+    # tracker 2026-07-19: x51 7% success despite 61% green mounts).
+    BARREL_REACH_RATIO = 2.5
 
     def _ladder_gap_clear(self, s, lx, top_y):
         """Generalized time-race gate (user doctrine, generalized
@@ -197,7 +203,8 @@ class DonkeyKongEnv(gym.Env):
                 if abs(bx - lx) <= 32:
                     return False
                 continue
-            if lx - 18 <= bx <= lx + remaining + self.GAP_MARGIN_PX:
+            if (lx - 18 <= bx <= lx + remaining * self.BARREL_REACH_RATIO
+                    + self.GAP_MARGIN_PX):
                 return False
         for i in range(5):
             if not s.get(f"fireball{i}_st", 0):
@@ -205,7 +212,9 @@ class DonkeyKongEnv(gym.Env):
             fy = s.get(f"fireball{i}_y", 240)
             if not (top_y - 35 <= fy < my):
                 continue
-            if lx - 18 <= s.get(f"fireball{i}_x", 0) <= lx + remaining + self.GAP_MARGIN_PX:
+            if (lx - 18 <= s.get(f"fireball{i}_x", 0)
+                    <= lx + remaining * self.BARREL_REACH_RATIO
+                    + self.GAP_MARGIN_PX):
                 return False
         return True
 
@@ -230,8 +239,8 @@ class DonkeyKongEnv(gym.Env):
             return 1.0
         import numpy as _np
         # aligned with _ladder_gap_clear's reach window (review r18)
-        return float(_np.clip((nearest - remaining - self.GAP_MARGIN_PX)
-                              / 64.0, -1, 1))
+        return float(_np.clip((nearest - remaining * self.BARREL_REACH_RATIO
+                               - self.GAP_MARGIN_PX) / 64.0, -1, 1))
 
     def _lad53_column_clear(self, s):
         """User pro line (2026-07-14): a climb is safe iff the time to walk
@@ -244,7 +253,8 @@ class DonkeyKongEnv(gym.Env):
         no longer block payment."""
         my = s.get("mario_y") or 240
         remaining = max(0, my - self.LAD53_TOP_Y)
-        reach_x = self.LAD53_X + remaining + self.GAP_MARGIN_PX
+        reach_x = (self.LAD53_X + remaining * self.BARREL_REACH_RATIO
+                   + self.GAP_MARGIN_PX)
         for i in range(6):
             if s.get(f"barrel{i}_st", 0) not in (1, 2):
                 continue
@@ -772,7 +782,8 @@ class DonkeyKongEnv(gym.Env):
         # blocks within remaining+GAP_MARGIN_PX, so the margin subtracts the
         # same pad — feature > 0 now means exactly "the gate would pay".
         margin = 1.0 if nearest == 999.0 else float(
-            np.clip((nearest - remaining - self.GAP_MARGIN_PX) / 64.0, -1, 1))
+            np.clip((nearest - remaining * self.BARREL_REACH_RATIO
+                     - self.GAP_MARGIN_PX) / 64.0, -1, 1))
         feats.append(margin)
         # run-31: x131 climb margin (the next contested ladder) + hammer
         # time remaining (duration measured 201-237 exchanges; 201 floor —
@@ -1192,6 +1203,24 @@ class DonkeyKongEnv(gym.Env):
                            (_dx < 0 and 0 <= _mx - _xl <= self.EDGE_JUMP_PX):
                             r -= self.EDGE_JUMP_TAX
                         break
+                # RED-MOUNT TAX (climb mandate 2026-07-19): starting a
+                # climb while the column's gate is RED costs -1.5 one-shot.
+                # 39% of mounts ignored the light at zero cost — "commit
+                # only on green" is now priced, not suggested.
+                _mounted = None
+                if not s.get("is_jumping", 0):
+                    for _gr, _gt, _gb in self.GREEN_LADDERS:
+                        if (abs(s["mario_x"] - _gr) <= 3
+                                and _gt + 4 <= s["mario_y"] <= _gb
+                                and p["mario_y"] > s["mario_y"]):
+                            _mounted = (_gr, _gt)
+                            break
+                if _mounted and self._red_mount_latch != _mounted:
+                    if not self._ladder_gap_clear(s, _mounted[0], _mounted[1]):
+                        r -= 1.5
+                    self._red_mount_latch = _mounted
+                elif not _mounted:
+                    self._red_mount_latch = None
                 # Stub lift PENALTY (user 2026-07-19: "punish the bottom
                 # level stub climb massively... also x83 and x107"): -5.0
                 # the moment he lifts onto a listed stub, re-charged per
@@ -1852,6 +1881,7 @@ class DonkeyKongEnv(gym.Env):
         self._clean_jumps = 0                # clean-jump bonus payments this ep
         self._jump_paid = False              # per-arc latch
         self._on_floor_stub = None           # stub lift-penalty latch (stub x)
+        self._red_mount_latch = None         # red-mount tax latch (ladder id)
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
         self._forced_actions = []            # approach replay queue (see reset)
