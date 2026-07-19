@@ -683,3 +683,36 @@ def test_reach_ratio_and_red_mount_tax():
     env3._prev = p
     r_green, _ = env3._reward(_state(mario_y=196, mario_x=51))
     assert r_green - r_red >= 1.2, f"red mount should cost: {r_green} vs {r_red}"
+
+
+def test_deep_edge_rent_escalates_and_escape_free():
+    """Retreat pricing turns uphill near the open ends (g2 AND g3):
+    deep zone costs 3x the pocket; stepping right is free."""
+    def move(y, px, sx):
+        env = _pbrs_env()
+        env._prev = _state(mario_y=y, mario_x=px)
+        r, _ = env._reward(_state(mario_y=y, mario_x=sx))
+        return r
+    # g2: deep stay vs pocket stay vs escape
+    g2_deep = move(205, 24, 24)
+    g2_pocket = move(205, 38, 38)
+    g2_escape = move(205, 24, 27)
+    assert g2_pocket - g2_deep >= 0.15, f"{g2_pocket} vs {g2_deep}"
+    assert g2_escape > g2_deep, f"escape should beat deep stay"
+    # g3: same shape (y ~172 = g3 surface band)
+    g3_deep = move(172, 24, 24)
+    g3_escape = move(172, 24, 27)
+    assert g3_escape > g3_deep, f"g3 escape should beat staying deep"
+
+
+def test_gate_sees_base_lane_sweep():
+    """A barrel at Mario's own height near the column reddens the gate —
+    green-mount deaths were all base sweeps the top-race missed."""
+    env = _pbrs_env()
+    s = _state(mario_y=202, mario_x=51)
+    assert env._lad53_column_clear(s)
+    s["barrel0_st"] = 1
+    s["barrel0_x"] = 51 + 38
+    s["barrel0_y"] = 204           # same girder lane, closing
+    assert not env._lad53_column_clear(s), "base sweep missed"
+    assert not env._ladder_gap_clear(s, 51, 178), "generalized gate missed it"

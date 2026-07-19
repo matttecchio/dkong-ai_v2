@@ -196,9 +196,15 @@ class DonkeyKongEnv(gym.Env):
             if s.get(f"barrel{i}_st", 0) not in (1, 2):
                 continue
             by = s.get(f"barrel{i}_y", 240)
+            bx = s.get(f"barrel{i}_x", 0)
+            # BASE-LANE sweep (climb traces 2026-07-20: every green-mount
+            # death was at the first rungs — girder-surface traffic the
+            # top-race never modeled). Before the above-only filter, which
+            # excluded same-height barrels.
+            if abs(by - my) <= 10 and abs(bx - lx) <= 45:
+                return False
             if not (top_y - 35 <= by < my):
                 continue
-            bx = s.get(f"barrel{i}_x", 0)
             if s.get(f"barrel{i}_crazy", 0) == 1:
                 if abs(bx - lx) <= 32:
                     return False
@@ -210,6 +216,9 @@ class DonkeyKongEnv(gym.Env):
             if not s.get(f"fireball{i}_st", 0):
                 continue
             fy = s.get(f"fireball{i}_y", 240)
+            if (abs(fy - my) <= 10
+                    and abs(s.get(f"fireball{i}_x", 0) - lx) <= 45):
+                return False                  # base-lane fireball
             if not (top_y - 35 <= fy < my):
                 continue
             if (lx - 18 <= s.get(f"fireball{i}_x", 0)
@@ -259,9 +268,14 @@ class DonkeyKongEnv(gym.Env):
             if s.get(f"barrel{i}_st", 0) not in (1, 2):
                 continue
             by = s.get(f"barrel{i}_y", 240)
+            bx = s.get(f"barrel{i}_x", 0)
+            if abs(by - my) <= 10 and abs(bx - self.LAD53_X) <= 45:
+                return False                  # base-lane sweep (traces
+                                              # 2026-07-20: green-mount
+                                              # deaths were all base hits)
             if not (130 <= by < my):          # only threats above Mario but
                 continue                      # near girder 3 or already falling
-            if self.CLIMB_X_LO - 8 <= s.get(f"barrel{i}_x", 0) <= reach_x:
+            if self.CLIMB_X_LO - 8 <= bx <= reach_x:
                 return False
         return True
 
@@ -944,6 +958,12 @@ class DonkeyKongEnv(gym.Env):
     # them ~0.12/step toward the wait spot). Charged only when he stays
     # or drifts deeper left under the waterfall.
     G2_POCKET_COST = 0.10
+    # DEEP-ZONE escalation (user 2026-07-20: the retreat gradient itself
+    # must turn uphill before the kill box / the open end): dwell data
+    # showed his favorite wait spot was x30 — the g3-waterfall landing
+    # zone — with 35% of left-strip deaths being WALKS off the open end.
+    EDGE_DEEP_X    = 28
+    EDGE_DEEP_COST = 0.30
     # Right-edge sliver past the x203 ladder top on girder 2: a dead end
     # Mario was jumping off (user, live board 2026-07-15).
     G2_RIGHT_X     = 210
@@ -1161,14 +1181,20 @@ class DonkeyKongEnv(gym.Env):
                 if (self.G2_POCKET_H_LO <= height <= self.G2_POCKET_H_HI
                         and s["mario_x"] < self.G2_POCKET_X
                         and s["mario_x"] <= p["mario_x"]):
-                    r -= self.G2_POCKET_COST      # escape (x increasing) is free
-                    # + PBRS pays the escape direction
+                    r -= (self.EDGE_DEEP_COST
+                          if s["mario_x"] < self.EDGE_DEEP_X
+                          else self.G2_POCKET_COST)   # escape right = free
                 if (self.G2_RIGHT_H_LO <= height <= self.G2_RIGHT_H_HI
                         and s["mario_x"] > self.G2_RIGHT_X):
                     r -= self.G2_RIGHT_COST
                 if (self.G3_LEFT_H_LO <= height <= self.G3_LEFT_H_HI
-                        and s["mario_x"] < self.G3_LEFT_X):
-                    r -= self.G3_LEFT_COST
+                        and s["mario_x"] < self.G3_LEFT_X
+                        and s["mario_x"] <= p["mario_x"]):
+                    # asymmetric like the g2 pocket (user 2026-07-20:
+                    # "punish the retreat off the edge on girder three")
+                    r -= (self.EDGE_DEEP_COST
+                          if s["mario_x"] < self.EDGE_DEEP_X
+                          else self.G3_LEFT_COST)     # escape right = free
                 # Clean-jump bonus (see constants above): mid-air, barrel
                 # passing beneath, latched once per arc.
                 if s.get("is_jumping", 0):
