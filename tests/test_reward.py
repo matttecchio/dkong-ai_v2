@@ -483,8 +483,9 @@ def test_green_light_shifts_peak_up_ladder():
         return env._phi(s)
     # clear column: climbing pays in potential
     assert phi(184, False) > phi(192, False) > phi(196, False)
-    # blocked column: flat (no pull up the ladder)
-    assert abs(phi(184, True) - phi(196, True)) < 1e-9
+    # blocked column: flat BELOW the midpoint only (commitment hysteresis
+    # keeps the pull above it — see test_green_light_commitment_hysteresis)
+    assert abs(phi(192, True) - phi(196, True)) < 1e-9
     # green peak exceeds the wait-spot value
     s_wait = _state(mario_y=202, mario_x=59)
     assert phi(180, False) > env._phi(s_wait)
