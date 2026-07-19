@@ -181,6 +181,12 @@ class DonkeyKongEnv(gym.Env):
     # climbs died to barrels just outside the window at mount (climb
     # tracker 2026-07-19: x51 7% success despite 61% green mounts).
     BARREL_REACH_RATIO = 2.5
+    # Per-ladder base-lane width (2026-07-20 tune): the finish ladder's
+    # "base lane" is the spawn girder itself — at ±45 it read red almost
+    # always and tower abandons tripled (296/2h) while its deaths sat at
+    # 5.5%. Short climb + DK's throw rhythm = ±24 there. Default 45.
+    BASE_LANE_REACH = 45
+    BASE_LANE_OVERRIDES = {147: 24}
 
     def _ladder_gap_clear(self, s, lx, top_y):
         """Generalized time-race gate (user doctrine, generalized
@@ -201,7 +207,8 @@ class DonkeyKongEnv(gym.Env):
             # death was at the first rungs — girder-surface traffic the
             # top-race never modeled). Before the above-only filter, which
             # excluded same-height barrels.
-            if abs(by - my) <= 10 and abs(bx - lx) <= 45:
+            if (abs(by - my) <= 10 and abs(bx - lx)
+                    <= self.BASE_LANE_OVERRIDES.get(lx, self.BASE_LANE_REACH)):
                 return False
             if not (top_y - 35 <= by < my):
                 continue
@@ -217,7 +224,8 @@ class DonkeyKongEnv(gym.Env):
                 continue
             fy = s.get(f"fireball{i}_y", 240)
             if (abs(fy - my) <= 10
-                    and abs(s.get(f"fireball{i}_x", 0) - lx) <= 45):
+                    and abs(s.get(f"fireball{i}_x", 0) - lx)
+                    <= self.BASE_LANE_OVERRIDES.get(lx, self.BASE_LANE_REACH)):
                 return False                  # base-lane fireball
             if not (top_y - 35 <= fy < my):
                 continue
