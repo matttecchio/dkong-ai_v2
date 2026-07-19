@@ -154,8 +154,14 @@ class DonkeyKongEnv(gym.Env):
     # mid-climb collapses the extra (the sting of being mid-ladder under
     # threat, exactly the doctrine). State-function-only: the gap test reads
     # barrel positions from s, so PBRS policy-invariance is preserved.
-    GREEN_LIGHT_X_TOL = 3     # ON the rail (census rail 51; wider caught jump arcs)
-    GREEN_LIGHT_PX_MAX = 22   # ladder bottom y202 -> y180 (census span; mount excluded)
+    GREEN_LIGHT_X_TOL = 3     # ON the rail (census rails; wider caught jump arcs)
+    # Green light EXTENDED to every climb ladder (user: "do it", 2026-07-19)
+    # — was x51-only. Each entry (rail, y_top, y_base) from the census;
+    # floor ladder excluded (its own floor-stage shaping owns that climb).
+    GREEN_LADDERS = (
+        ( 51, 178, 202), (115, 174, 206), (203, 145, 169), (131, 141, 173),
+        ( 51, 112, 136), ( 91, 110, 138), (147,  48,  76), (203,  79, 103),
+    )
     # Wait spot RIGHT of the ladder base, not the base itself (user film
     # review 2026-07-14): left of the ladder is a death pocket (girder-3
     # edge-fall barrels land and reverse there), and the correct play is
@@ -261,15 +267,16 @@ class DonkeyKongEnv(gym.Env):
                                 self.PBRS_G2_SPAN))
         else:                                 # saturated above the ladder base
             prog = 128 + self.PBRS_G2_SPAN
-            if (abs(s["mario_x"] - self.LAD53_X) <= self.GREEN_LIGHT_X_TOL
-                    and s["mario_y"] >= 180
-                    and self._lad53_column_clear(s)):
-                # y>=180: ladder only, never g3's surface — walking across
-                # the ladder top must not wobble phi (anti-farm tests).
-                # The mount step (y<180) drops the extra; CLEAN_MOUNT_BONUS
-                # (+2.0) dwarfs that sting.
-                prog += min(max(0, 202 - s["mario_y"]),
-                            self.GREEN_LIGHT_PX_MAX)   # green light: climb!
+            for _gr, _gt, _gb in self.GREEN_LADDERS:
+                if (abs(s["mario_x"] - _gr) <= self.GREEN_LIGHT_X_TOL
+                        and s["mario_y"] >= _gt + 2
+                        and s["mario_y"] <= _gb + 4
+                        and self._ladder_gap_clear(s, _gr, _gt)):
+                    # y >= top+2: ladder only, never the upper girder —
+                    # crossing a ladder top must not wobble phi (anti-farm
+                    # tests). Mount drop is the known small sting.
+                    prog += min(max(0, _gb - s["mario_y"]), _gb - _gt - 2)
+                    break
         return self.PBRS_COEF * prog
 
     # _p_curric is a class-level default (like P_NO_BARRELS). Override it by

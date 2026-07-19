@@ -66,13 +66,14 @@ def metrics():
     }
     from collections import Counter
     # ladder forensics: deaths within a ladder column, split by phase
-    LADS = [(203, 4, 29), (53, 44, 62), (131, 82, 122),
-            (94, 118, 148), (67, 115, 155), (147, 140, 192)]
+    LADS = [("x203f", 203, 5, 29), ("x51", 51, 38, 62), ("x115", 115, 34, 66),
+            ("x203m", 203, 71, 95), ("x131", 131, 67, 99), ("x51u", 51, 104, 128),
+            ("x91", 91, 102, 130), ("x147", 147, 164, 192), ("x203e", 203, 137, 161)]
     lad = {}
-    for lx, base, top in LADS:
+    for name, lx, base, top in LADS:
         near = [e for e in TRK.deaths
                 if abs(e["x"] - lx) <= 10 and base - 6 <= e["h"] <= top + 6]
-        lad[f"x{lx}"] = {
+        lad[name] = {
             "mount": sum(1 for e in near if e["h"] < base + 7),
             "mid": sum(1 for e in near if base + 7 <= e["h"] <= top - 7),
             "top": sum(1 for e in near if e["h"] > top - 7)}

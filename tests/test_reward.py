@@ -488,6 +488,10 @@ def test_green_light_shifts_peak_up_ladder():
     # green peak exceeds the wait-spot value
     s_wait = _state(mario_y=202, mario_x=59)
     assert phi(180, False) > env._phi(s_wait)
+    # extension: the mid crossing (x115) gets the same pull when clear
+    s115 = _state(mario_y=190, mario_x=115)
+    s115_hi = _state(mario_y=182, mario_x=115)
+    assert env._phi(s115_hi) > env._phi(s115)
 
 
 def test_margin_feature_agrees_with_gate():
