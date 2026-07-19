@@ -1,5 +1,73 @@
 # Donkey Kong RL — Handoff / Complete Project State
 
+---
+# §0 START HERE — HANDOVER SNAPSHOT (2026-07-20, written for a successor model)
+
+**State:** Run 31y live (102-feature obs lineage "run31"; letters = same-brain
+restarts, currently a→y). Det battery 38.0/39 ≈ all-time baseline (38.4/40).
+ZERO honest bottom-up clears ever — that is THE goal. The census-measured
+board, safety vision, and honest climb gates are all newer than the brain's
+habits; absorption is ongoing at lr 2.5e-5, sil-coef 0.03.
+
+**Health check recipe (hourly cron text is STALE — ignore its run-29 talk):**
+trainer PID logs/run_current.pid; expect 16 local mames (`pgrep -c mame`);
+label logs/run_label. Metrics: `curl -s localhost:8600/metrics` → LEAD WITH
+`climbs`/`climb_ok_pct` (the user's standing mandate: 100% climb success
+except fireballs/wilds). Monitor CSVs logs/episodes/dk_*.monitor.csv
+(bottomup rows: max_height, cleared, glitch_kill — reset each restart).
+KL from logs/run31.log `approx_kl`: band 0.02-0.035 OK while heights rise;
+>0.04 x3 consecutive OR slope reversal → lr 2.5e-5→1.25e-5 + sil-coef down.
+Battery: MANUAL daily ~09:30: `.venv/bin/python -m dkong_ai.eval_battery
+--rom-dir ./roms` (~35 min, port 5100, background).
+
+**Deploy discipline:** every deliberate restart = new letter written to
+logs/run_label (dashboard counters+death map key on it). Bounce procedure —
+RUN COMMANDS SEPARATELY (long && chains flake in this harness): kill -9
+trainer PID; pkill -9 -f dkong_ai.train; pkill -9 mame; then
+`./scripts/current_launch.sh artifacts/ppo_dkong_run31_last.zip
+logs/run31.log` (prints PID → logs/run_current.pid), write the new letter.
+SIL buffer persists (artifacts/ppo_dkong_run31_sil.pkl, 39 seeded episodes
+incl. the PRO demo plays — verify "[sil] restored 39" in the log).
+Env-code changes need a bounce; dashboard changes only need
+`scripts/live_board.py` restarted (port 8600; kill by pattern, fuser -k
+8600/tcp if Address-in-use).
+
+**The climb mandate (user's standing focus):** dashboard climb tracker
+per-ladder started/ok/died/abandoned/revs. Latest: x51 13-16% (was 7%),
+x115 ~4%, x203-floor/x147 85-87%. Fixes already live: BARREL_REACH_RATIO
+2.5 (1:1 race was wrong), RED-MOUNT TAX -1.5, BASE-LANE sweep in every
+gate (green-mount deaths were all first-rung kills by same-height traffic
+— the top-race missed them), crossing practice cells at x115/x203m bases
+(chains 14/15). EXPECT: green-mount deaths ~vanish; red-mount % (commits_
+clear_pct complement) should fall as the tax absorbs. If x51 stays teens
+with green-mounts safe → raise the tax; if green deaths persist → raise
+the ratio. The user wants decisions grounded in the tracker.
+
+**First-clear pincer:** tower chains 0/1 at level 4 (first gates ever,
+2026-07-18); floor/wait chains 12-15 still ZERO gates = the stalled front.
+levels: artifacts/backward_dense14/levels.json. First honest clear
+(bottomup + cleared=1 + glitch_kill=0 in a monitor CSV) = LOUD, memory,
+film via the preserved bustart .sta, then run-32 consolidation talk.
+
+**The user:** world-class DK player; their board claims are GROUND TRUTH
+(census-measured envelopes came from THEIR walks — when geometry is in
+question, ask them to walk it in a census.lua session; beats any probe).
+Film-first doctrine: show them, don't infer. HARD boundaries: never
+propose gameplay recording (vetoed; the pro .inp demos/dkong.inp already
+seeds SIL), no pace/lifespan metrics, never legalize the Pauline decoy
+pair, never widen stub spans unprobed, no farm without wired link+async.
+Their dashboards: localhost:8600 (blue dots = bottom-up deaths); ladder
+map artifact claude.ai/code/artifact/7cafae7e-b083-4642-a0b0-8dea5725753f
+(update via url param from any session).
+
+**Tools:** census.lua (threat-free instrumented play), scratchpad mint
+scripts (frozen threat-aware walks; frozen sprites STILL KILL — jump
+them), x51_tracer pattern (WRITE INCREMENTALLY — one trace was nearly
+lost writing only at exit). Run-32 shelf: docs/RUN32.md (occupancy
+channel first; wild/blue flags are already-watched wiring; fovea patch).
+---
+
+
 **Single source of truth.** Read this before changing anything — several mechanisms
 are non-obvious and easy to regress. Pairs with `README.md` (quick reference).
 
@@ -554,6 +622,8 @@ that the new objective has been learned.
 | 31q | CALIBRATION PASS: x147 trimmed to 48-76 (user: no g5 link — top girder to Pauline only); LAD53_TOP_Y 160→178 (every x53 margin/gate ran 18px OVERCAUTIOUS since Stage B), rail 53→51, green-light zero at real base y202, PBRS_G2_H 38, x131 block re-anchored h67-99 | — | — | — | 0 | map artifact v3 census edition |
 | 31r-31s | CLEAN-JUMP BONUS (user-approved, farm-proofed): 0.3/jump when a barrel passes beneath a DIRECTIONALLY-HELD arc (scan-box pro tip — vertical hops pay nothing), once per arc, cap 3/ep | — | 67 | battery 38.0/39 = BASELINE RECOVERED (+5 in a day); ★ FIRST TOWER-CELL BATTERY CRACK (wc_153 12% after 7 days of tower zeros); clear-gap 53-57% at volume post-calibration | 0 | fovea-patch analysis on RUN32 shelf |
 | 31t-31u | WATERFALL PACKAGE: green light extended to ALL climb ladders (per-ladder conditional potential, census spans); dashboard ladder forensics re-anchored to census (was watching the empty pre-census x67 column); G2-left pocket rent 0.06→0.10 ASYMMETRIC (user: "the waterfall is the killer" / "don't punish him for moving right") — staying/drifting-left charged, escape free + PBRS-paid | — | — | ladder-zone deaths = 36% of all (g2-left anatomy: ⅔ barrels at the base, ⅓ falls at the left edge) | 0 | watch: g2-left blue dots, x51 death share |
+| 31x | CLIMB-MANDATE FIXES: BARREL_REACH_RATIO 2.5 (barrels ~5px/step vs 2px climb — the 1:1 race gave fake greens; x51 7%→13-16% within hours) + RED-MOUNT TAX -1.5 (39% of mounts ignored the light free) | — | — | x51 green availability 29%, x115 27%, x203m 74% (the unused easy door) | 0 | tracker per letter |
+| **31y** | ★★ BASE-LANE DISCOVERY (climb traces: 33 green mounts, ZERO topped, ALL deaths at the first rungs — same-height girder traffic the top-race never modeled) → base-lane clear (±45px both ways) required in every gate; escalating asymmetric edge rents (deep x<28 = 0.30, g2 + g3-left; dwell data: his favorite wait spot was x30 = the waterfall landing zone, 35% of left-strip deaths = WALKS off the open end); 5+5 crossing practice cells → chains 14/15 | live | — | — | 0 | CURRENT. green-mount deaths should ~vanish (except fb/wild) |
 | **31v-31w** | STUB ERADICATION (user spotted blue-dot flirting deaths up x99 — sub-execution half-climbs that guard%% structurally can't see): stub shade 128→40 (dead stubs were drawn BRIGHTER than unsafe ladders — perceptually outranking them); on-stub rent 0.10 lifted-only; MASSIVE -5.0 per-entry lift penalty on x99/x83/x107 (user: "punish massively — a dead end that kills too much of our learning"). Price ladder: looks-dead → 0.10/step → -5/entry → -25 execution. Girder/floor transit beneath stays free (transit-tax lesson) | live | — | — | 0 | CURRENT. x187 excluded (unnamed); LESSON: guard%%, cause-split, and map dots each see failures the others miss |
 
 **CLIMB-SUCCESS MANDATE (user, 2026-07-19 — the standing focus):** "the
