@@ -923,7 +923,12 @@ class DonkeyKongEnv(gym.Env):
     # Death zone (edge-fall barrel landings), no destination beyond it.
     G2_POCKET_X    = 46
     G2_POCKET_H_LO, G2_POCKET_H_HI = 28, 44
-    G2_POCKET_COST = 0.06
+    # 0.06 -> 0.10 + ASYMMETRIC (user 2026-07-19: "dies WAY too much on
+    # g2-left... the waterfall is the killer"; don't punish escaping —
+    # rightward steps ride free, and the PBRS g2 gradient already PAYS
+    # them ~0.12/step toward the wait spot). Charged only when he stays
+    # or drifts deeper left under the waterfall.
+    G2_POCKET_COST = 0.10
     # Right-edge sliver past the x203 ladder top on girder 2: a dead end
     # Mario was jumping off (user, live board 2026-07-15).
     G2_RIGHT_X     = 210
@@ -1139,8 +1144,10 @@ class DonkeyKongEnv(gym.Env):
                 # absolutely necessary". Small rent so transit is cheap
                 # but waiting there is not.
                 if (self.G2_POCKET_H_LO <= height <= self.G2_POCKET_H_HI
-                        and s["mario_x"] < self.G2_POCKET_X):
-                    r -= self.G2_POCKET_COST
+                        and s["mario_x"] < self.G2_POCKET_X
+                        and s["mario_x"] <= p["mario_x"]):
+                    r -= self.G2_POCKET_COST      # escape (x increasing) is free
+                    # + PBRS pays the escape direction
                 if (self.G2_RIGHT_H_LO <= height <= self.G2_RIGHT_H_HI
                         and s["mario_x"] > self.G2_RIGHT_X):
                     r -= self.G2_RIGHT_COST

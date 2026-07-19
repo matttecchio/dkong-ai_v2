@@ -606,3 +606,21 @@ def test_clean_jump_requires_held_direction():
     env._prev = p
     env._reward(s)
     assert env._clean_jumps == 0, "vertical hop must not pay"
+
+
+def test_g2_pocket_rent_asymmetric():
+    """Staying in the left pocket costs rent; stepping RIGHT (escaping
+    toward the ladder) is free — and PBRS pays the escape (user rule)."""
+    env = _pbrs_env()
+    def move(px, sx):
+        e = _pbrs_env()
+        p = _state(mario_y=205, mario_x=px)
+        s = _state(mario_y=205, mario_x=sx)
+        e._prev = p
+        r, _ = e._reward(s)
+        return r
+    stay = move(30, 30)
+    left = move(32, 30)
+    right = move(30, 33)
+    assert right > stay, f"escape should beat staying: {right} vs {stay}"
+    assert right > left, f"escape should beat drifting left: {right} vs {left}"
