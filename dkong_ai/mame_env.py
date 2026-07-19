@@ -609,7 +609,10 @@ class DonkeyKongEnv(gym.Env):
         """Static 84×84 channel marking ladder positions.
 
         Complete ladders (spanning a full girder gap) → intensity 255.
-        Broken stubs (short segments that can't be climbed) → intensity 128.
+        Broken stubs (short segments that can't be climbed) → intensity 40
+        (DIMMEST on the board, below unsafe-60: a dead stub must never read
+        brighter than a dangerous real ladder — user caught bottom-up
+        flirting deaths at x99, 2026-07-19).
         Broken stubs are included so the CNN knows barrel-steering targets:
         a barrel rolling over a broken stub falls through harmlessly.
 
@@ -637,7 +640,7 @@ class DonkeyKongEnv(gym.Env):
                 # Don't overwrite complete-ladder pixels already drawn at 255
                 for row in range(y_top, y_bot + 1):
                     if m[row, col] == 0:
-                        m[row, col] = 128
+                        m[row, col] = 40
         return m[..., None]  # (84, 84, 1)
 
     # RAM feature layout (75 values, all in [-1, 1]):
@@ -1187,6 +1190,16 @@ class DonkeyKongEnv(gym.Env):
                         if (_dx > 0 and 0 <= _xr - _mx <= self.EDGE_JUMP_PX) or \
                            (_dx < 0 and 0 <= _mx - _xl <= self.EDGE_JUMP_PX):
                             r -= self.EDGE_JUMP_TAX
+                        break
+                # On-stub rent (user caught sub-execution flirting deaths
+                # at x99): charged only while LIFTED on a stub column —
+                # y at least 6px above the stub base — so girder transit
+                # beneath is free (the retired proximity-tax lesson).
+                for _stx, _styt, _styb in self.BROKEN_STUBS:
+                    if (abs(s["mario_x"] - _stx) <= 4
+                            and _styt - 4 <= s["mario_y"] <= _styb - 6
+                            and not s.get("is_jumping", 0)):
+                        r -= 0.10
                         break
                 # x82 stub rent (see constants above).
                 if (self.X82_RENT_H_LO <= height <= self.X82_RENT_H_HI

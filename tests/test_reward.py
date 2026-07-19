@@ -624,3 +624,16 @@ def test_g2_pocket_rent_asymmetric():
     right = move(30, 33)
     assert right > stay, f"escape should beat staying: {right} vs {stay}"
     assert right > left, f"escape should beat drifting left: {right} vs {left}"
+
+
+def test_on_stub_rent_climbing_only():
+    """Lifted on the x99 stub costs rent; walking the floor beneath it is
+    free (the transit-tax regression must not return)."""
+    def r_at(y):
+        env = _pbrs_env()
+        env._prev = _state(mario_y=y, mario_x=99)
+        r, _ = env._reward(_state(mario_y=y, mario_x=99))
+        return r
+    on_stub = r_at(230)     # lifted into the stub column
+    on_floor = r_at(238)    # standing beneath it
+    assert on_floor - on_stub >= 0.08, f"{on_floor} vs {on_stub}"
