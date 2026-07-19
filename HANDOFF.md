@@ -3,7 +3,18 @@
 ---
 # §0 START HERE — HANDOVER SNAPSHOT (2026-07-20, written for a successor model)
 
-**State:** Run 31y live (102-feature obs lineage "run31"; letters = same-brain
+**State (updated 2026-07-20, 2nd handover write):** Run 31z live — THE
+SETTLING LETTER: all known calibrations are done (base-lane per-ladder
+widths were the last); the standing commitment to the user is NO MORE
+BOUNCES — let absorption run and judge the mandate stack on an
+uninterrupted day. Latest tune: BASE_LANE_OVERRIDES={147:24} (finish
+ladder's base = spawn girder; ±45 kept it permanently red, abandons
+tripled while deaths sat 5.5%). x99 stub deaths = extinction tail
+(composition flipped from barrel-flirts to guard executions, dwell
+0.2%; restarts re-warm the habit — hence the settle). x51 green-mounts
+27-29% (greens are rare-but-TRUE now); expect slow climb-out as the
+red-mount tax absorbs. Prior snapshot below still valid otherwise.
+Original: Run 31y live (102-feature obs lineage "run31"; letters = same-brain
 restarts, currently a→y). Det battery 38.0/39 ≈ all-time baseline (38.4/40).
 ZERO honest bottom-up clears ever — that is THE goal. The census-measured
 board, safety vision, and honest climb gates are all newer than the brain's
@@ -623,6 +634,7 @@ that the new objective has been learned.
 | 31r-31s | CLEAN-JUMP BONUS (user-approved, farm-proofed): 0.3/jump when a barrel passes beneath a DIRECTIONALLY-HELD arc (scan-box pro tip — vertical hops pay nothing), once per arc, cap 3/ep | — | 67 | battery 38.0/39 = BASELINE RECOVERED (+5 in a day); ★ FIRST TOWER-CELL BATTERY CRACK (wc_153 12% after 7 days of tower zeros); clear-gap 53-57% at volume post-calibration | 0 | fovea-patch analysis on RUN32 shelf |
 | 31t-31u | WATERFALL PACKAGE: green light extended to ALL climb ladders (per-ladder conditional potential, census spans); dashboard ladder forensics re-anchored to census (was watching the empty pre-census x67 column); G2-left pocket rent 0.06→0.10 ASYMMETRIC (user: "the waterfall is the killer" / "don't punish him for moving right") — staying/drifting-left charged, escape free + PBRS-paid | — | — | ladder-zone deaths = 36% of all (g2-left anatomy: ⅔ barrels at the base, ⅓ falls at the left edge) | 0 | watch: g2-left blue dots, x51 death share |
 | 31x | CLIMB-MANDATE FIXES: BARREL_REACH_RATIO 2.5 (barrels ~5px/step vs 2px climb — the 1:1 race gave fake greens; x51 7%→13-16% within hours) + RED-MOUNT TAX -1.5 (39% of mounts ignored the light free) | — | — | x51 green availability 29%, x115 27%, x203m 74% (the unused easy door) | 0 | tracker per letter |
+| 31z | Per-ladder base-lane width (147→±24: its base is the SPAWN girder; ±45 = permanent red, tower abandons 296/2h at only 5.5% deaths) | live | — | — | 0 | CURRENT — SETTLING LETTER, no more bounces; judge the mandate stack after an uninterrupted day |
 | **31y** | ★★ BASE-LANE DISCOVERY (climb traces: 33 green mounts, ZERO topped, ALL deaths at the first rungs — same-height girder traffic the top-race never modeled) → base-lane clear (±45px both ways) required in every gate; escalating asymmetric edge rents (deep x<28 = 0.30, g2 + g3-left; dwell data: his favorite wait spot was x30 = the waterfall landing zone, 35% of left-strip deaths = WALKS off the open end); 5+5 crossing practice cells → chains 14/15 | live | — | — | 0 | CURRENT. green-mount deaths should ~vanish (except fb/wild) |
 | **31v-31w** | STUB ERADICATION (user spotted blue-dot flirting deaths up x99 — sub-execution half-climbs that guard%% structurally can't see): stub shade 128→40 (dead stubs were drawn BRIGHTER than unsafe ladders — perceptually outranking them); on-stub rent 0.10 lifted-only; MASSIVE -5.0 per-entry lift penalty on x99/x83/x107 (user: "punish massively — a dead end that kills too much of our learning"). Price ladder: looks-dead → 0.10/step → -5/entry → -25 execution. Girder/floor transit beneath stays free (transit-tax lesson) | live | — | — | 0 | CURRENT. x187 excluded (unnamed); LESSON: guard%%, cause-split, and map dots each see failures the others miss |
 
