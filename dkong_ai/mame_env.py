@@ -301,10 +301,19 @@ class DonkeyKongEnv(gym.Env):
         else:                                 # saturated above the ladder base
             prog = 128 + self.PBRS_G2_SPAN
             for _gr, _gt, _gb in self.GREEN_LADDERS:
+                _mid = (_gt + _gb) // 2
                 if (abs(s["mario_x"] - _gr) <= self.GREEN_LIGHT_X_TOL
                         and s["mario_y"] >= _gt + 2
                         and s["mario_y"] <= _gb + 4
-                        and self._ladder_gap_clear(s, _gr, _gt)):
+                        and (s["mario_y"] <= _mid
+                             or self._ladder_gap_clear(s, _gr, _gt))):
+                    # COMMITMENT HYSTERESIS (user analysis 2026-07-20: "if
+                    # he had time when he got on, he doesn't suddenly lose
+                    # it halfway"): above the midpoint the gradient holds to
+                    # the top regardless of the light — near the top the
+                    # base-lane check morphs into an exit-sweep check and
+                    # was yanking the carpet two rungs from done. Below the
+                    # midpoint, red still means retreat.
                     # y >= top+2: ladder only, never the upper girder —
                     # crossing a ladder top must not wobble phi (anti-farm
                     # tests). Mount drop is the known small sting.

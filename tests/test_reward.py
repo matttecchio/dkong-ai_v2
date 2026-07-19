@@ -716,3 +716,20 @@ def test_gate_sees_base_lane_sweep():
     s["barrel0_y"] = 204           # same girder lane, closing
     assert not env._lad53_column_clear(s), "base sweep missed"
     assert not env._ladder_gap_clear(s, 51, 178), "generalized gate missed it"
+
+
+def test_green_light_commitment_hysteresis():
+    """Above the midpoint the climb gradient holds even when the light is
+    red (finish, don't retreat); below the midpoint red kills the pull."""
+    env = _pbrs_env()
+    def phi(y, blocked):
+        s = _state(mario_y=y, mario_x=51)
+        if blocked:
+            s["barrel0_st"] = 1
+            s["barrel0_x"] = 60
+            s["barrel0_y"] = 150     # top-race threat: gate red
+        return env._phi(s)
+    # below midpoint (y=198 > mid 190): red removes the pull
+    assert phi(196, True) == phi(199, True)
+    # above midpoint (y=184 < mid): gradient persists despite red
+    assert phi(182, True) > phi(186, True)
