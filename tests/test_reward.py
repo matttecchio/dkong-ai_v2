@@ -643,7 +643,7 @@ def test_floor_stub_lift_penalty_massive_once_per_entry():
     """Lifting onto x99 costs -5 immediately (user: punish massively),
     latched while on it, re-charged on re-entry; floor walk-past free."""
     env = _pbrs_env()
-    env._on_floor_stub = False
+    env._on_floor_stub = None
     def step(y):
         env._prev = _state(mario_y=238, mario_x=99)
         r, _ = env._reward(_state(mario_y=y, mario_x=99))
@@ -652,6 +652,12 @@ def test_floor_stub_lift_penalty_massive_once_per_entry():
     stay = step(230)          # latched: no second -5 (rent only)
     assert lift <= -4.5, f"lift should be massive: {lift}"
     assert stay - lift >= 4.0, f"latch failed: {stay} vs {lift}"
-    env._on_floor_stub = False
+    env._on_floor_stub = None
     walk = step(238)          # walking beneath: free of the penalty
     assert walk - lift >= 4.0, f"floor transit punished: {walk}"
+    # extension: x83 and x107 lifts are equally massive (user order)
+    for sx, sy in ((83, 165), (107, 98)):
+        env._on_floor_stub = None
+        env._prev = _state(mario_y=sy + 12, mario_x=sx)
+        r, _ = env._reward(_state(mario_y=sy, mario_x=sx))
+        assert r <= -4.0, f"x{sx} lift should be massive: {r}"

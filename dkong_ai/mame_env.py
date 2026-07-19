@@ -111,7 +111,7 @@ class DonkeyKongEnv(gym.Env):
     # bypass _begin_episode still run; reset per episode there).
     _clean_jumps = 0
     _jump_paid = False
-    _on_floor_stub = False
+    _on_floor_stub = None
 
     # Potential-based floor shaping (run 29): the floor "poverty trap" —
     # honest play at the bottom nets negative expected reward because the
@@ -1192,18 +1192,24 @@ class DonkeyKongEnv(gym.Env):
                            (_dx < 0 and 0 <= _mx - _xl <= self.EDGE_JUMP_PX):
                             r -= self.EDGE_JUMP_TAX
                         break
-                # Floor-stub lift PENALTY (user 2026-07-19: "punish the
-                # bottom level stub climb massively, it's a dead end that
-                # kills too much of our learning"): -5.0 the moment he
-                # lifts onto x99, re-charged per re-entry (latched while
-                # on it). Not terminal — but death-adjacent economics for
-                # a single flirt; the -25 guard still owns real climbs.
-                _on99 = (abs(s["mario_x"] - 99) <= 4
-                         and 224 <= s["mario_y"] <= 234
-                         and not s.get("is_jumping", 0))
-                if _on99 and not self._on_floor_stub:
+                # Stub lift PENALTY (user 2026-07-19: "punish the bottom
+                # level stub climb massively... also x83 and x107"): -5.0
+                # the moment he lifts onto a listed stub, re-charged per
+                # re-entry (latched while on). Not terminal — but
+                # death-adjacent economics for a single flirt; the -25
+                # guard still owns sustained climbs. Zones = census spans,
+                # lifted-only (girder/floor beneath stays free).
+                _on_stub = None
+                if not s.get("is_jumping", 0):
+                    for _px, _pyt, _pyb in ((99, 224, 234), (83, 160, 170),
+                                            (107, 93, 103)):
+                        if (abs(s["mario_x"] - _px) <= 4
+                                and _pyt <= s["mario_y"] <= _pyb):
+                            _on_stub = _px
+                            break
+                if _on_stub is not None and self._on_floor_stub != _on_stub:
                     r -= 5.0
-                self._on_floor_stub = _on99
+                self._on_floor_stub = _on_stub
                 # On-stub rent (user caught sub-execution flirting deaths
                 # at x99): charged only while LIFTED on a stub column —
                 # y at least 6px above the stub base — so girder transit
@@ -1845,7 +1851,7 @@ class DonkeyKongEnv(gym.Env):
         self._glitch_kill = False            # episode ended by the glitch guard
         self._clean_jumps = 0                # clean-jump bonus payments this ep
         self._jump_paid = False              # per-arc latch
-        self._on_floor_stub = False          # x99 lift-penalty latch
+        self._on_floor_stub = None           # stub lift-penalty latch (stub x)
         self._burnin_left = 0                # LSTM spawn burn-in (set in reset)
         self._burnin_drawn = 0               # this episode's drawn burn-in length
         self._forced_actions = []            # approach replay queue (see reset)
