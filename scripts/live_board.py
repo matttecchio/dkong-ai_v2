@@ -80,6 +80,13 @@ def metrics():
     d["ladders"] = lad
     legs = Counter(e["leg"] for e in TRK.deaths)
     d["legs"] = [[name, legs.get(name, 0)] for name, _ in LEGS]
+    _tot = {"start":0,"ok":0,"died":0,"abandon":0}
+    for v in TRK.cl.values():
+        for k in _tot: _tot[k] += v[k]
+    _fin = _tot["ok"] + _tot["died"] + _tot["abandon"]
+    d["climbs"] = {n: dict(v) for n, v in TRK.cl.items() if v["start"]}
+    d["climb_ok_pct"] = round(100 * _tot["ok"] / max(_fin, 1))
+    d["climb_total"] = _fin
     d.update({"hammer_pickups": TRK.stats["pickups"],
               "expiry_deaths": TRK.stats["expiry_deaths"],
               "d_barrel": TRK.stats["deaths_barrel"],
@@ -120,6 +127,17 @@ class Tracker:
                       "deaths_barrel": 0, "deaths_fireball": 0, "deaths_self": 0,
                       "commits": 0, "commits_clear": 0, "commit_survive": 0}
         self.climb = {}         # port -> (mount_t, gap_was_clear)
+        # Climb-outcome machine (user mandate 2026-07-19: "the goal should
+        # be to see climbs become more successful... 100%% except fireballs
+        # or wild barrels"): per census ladder, started/ok/died/abandoned
+        # + mid-climb reversals (dither detector).
+        self.CLIMB_LADS = (("x203f",203,211,235),("x51",51,178,202),
+            ("x115",115,174,206),("x203m",203,145,169),("x131",131,141,173),
+            ("x51u",51,112,136),("x91",91,110,138),("x147",147,48,76),
+            ("x203e",203,79,103))
+        self.cl_state = {}      # port -> [name, rail, top, base, min_y, last_y, revs]
+        self.cl = {n: {"start":0,"ok":0,"died":0,"abandon":0,"revs":0}
+                   for n,_,_,_ in self.CLIMB_LADS}
         try:
             with open("/dev/shm/dk_analytics.json") as _af:
                 d = json.load(_af)
@@ -146,6 +164,9 @@ class Tracker:
                 if self._label:  # run letter changed -> new session counters
                     self.stats = {k: 0 for k in self.stats}
                     self.climb.clear()
+                    self.cl_state.clear()
+                    for v in self.cl.values():
+                        for k in v: v[k] = 0
                 self._label = lab
         return self._label
 
@@ -175,6 +196,34 @@ class Tracker:
             elif port in self.climb and h >= 64:
                 self.stats["commit_survive"] += 1
                 del self.climb[port]
+            # ---- climb-outcome machine ----
+            st_c = self.cl_state.get(port)
+            teleported = abs(x - px) + abs(y - py) > 45
+            if st_c:
+                name, rail, top, base, min_y, last_y, revs = st_c
+                if teleported:
+                    self.cl[name]["died"] += 1
+                    self.cl[name]["revs"] += revs
+                    self.cl_state.pop(port, None)
+                elif y <= top + 4:
+                    self.cl[name]["ok"] += 1
+                    self.cl[name]["revs"] += revs
+                    self.cl_state.pop(port, None)
+                elif abs(x - rail) > 3 or y >= base + 4:
+                    self.cl[name]["abandon"] += 1
+                    self.cl[name]["revs"] += revs
+                    self.cl_state.pop(port, None)
+                else:
+                    if y > last_y and last_y <= min_y:
+                        revs += 1          # was ascending, turned downward
+                    st_c[4] = min(min_y, y); st_c[5] = y; st_c[6] = revs
+            elif not teleported:
+                for name, rail, top, base in self.CLIMB_LADS:
+                    if (abs(x - rail) <= 2 and top + 6 <= y <= base - 2
+                            and py - y >= 2 and abs(px - rail) <= 2):
+                        self.cl[name]["start"] += 1
+                        self.cl_state[port] = [name, rail, top, base, y, y, 0]
+                        break
             # episode end: position teleport
             if abs(x - px) + abs(y - py) > 45:
                 # cause is STICKY env truth written at the done step, so
@@ -487,6 +536,7 @@ async function mpoll(){
       ['hammer pickups', m.hammer_pickups, false],
       ['deaths at hammer expiry', m.expiry_deaths, false],
       ['deaths bar/fball/self', (m.d_barrel||0)+'/'+(m.d_fireball||0)+'/'+(m.d_self||0), false],
+      ['ladder climb success', (m.climb_ok_pct||0)+'% of '+(m.climb_total||0), (m.climb_ok_pct||0)>=80],
       ['guard kills', m.guard_kills, false]];
     document.getElementById('mtable').innerHTML=rows.map(r=>
       '<tr><td style="color:#8B85A3;padding-right:12px">'+r[0]+'</td><td style="text-align:right;'+
